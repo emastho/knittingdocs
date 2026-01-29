@@ -1,0 +1,158 @@
+---
+title: Benchmarks
+description: Run the official benchmark suite.
+---
+
+import latencyLine from "../../assets/benchmark/global/latency_line.png";
+import ipcCombined from "../../assets/benchmark/global/ipc_combined.png";
+import bunTypesCount1 from "../../assets/benchmark/runtime/bun/bun_types_types_count1.png";
+import bunTypesCount100 from "../../assets/benchmark/runtime/bun/bun_types_types_count100.png";
+import bunIpc from "../../assets/benchmark/runtime/bun/bun_ipc.png";
+import denoTypesCount1 from "../../assets/benchmark/runtime/deno/deno_types_types_count1.png";
+import denoTypesCount100 from "../../assets/benchmark/runtime/deno/deno_types_types_count100.png";
+import denoIpc from "../../assets/benchmark/runtime/deno/deno_ipc.png";
+import nodeTypesCount1 from "../../assets/benchmark/runtime/node/node_types_types_count1.png";
+import nodeTypesCount100 from "../../assets/benchmark/runtime/node/node_types_types_count100.png";
+import nodeIpc from "../../assets/benchmark/runtime/node/node_ipc.png";
+
+Knitting includes benchmarks under `bench/` to compare Node, Deno, and Bun.
+
+## Run the suite
+
+```bash
+./run.sh
+```
+
+Results are written into `results/`.
+
+## JSON output
+
+```bash
+./run.sh --json
+```
+
+JSON output is useful for plotting scripts under `graphs/`.
+
+## Charts
+
+Charts live under `src/assets/benchmark/` with `global/` for cross-runtime metrics and `runtime/` for runtime-specific plots.
+
+### Global
+
+#### Latency
+
+<img
+  src={latencyLine.src}
+  width={latencyLine.width}
+  height={latencyLine.height}
+  alt="Latency line chart"
+  loading="lazy"
+/>
+
+#### IPC (combined)
+
+<img
+  src={ipcCombined.src}
+  width={ipcCombined.width}
+  height={ipcCombined.height}
+  alt="IPC benchmark combined chart"
+  loading="lazy"
+/>
+
+### Runtime
+
+#### Bun
+
+##### IPC
+
+<img
+  src={bunIpc.src}
+  width={bunIpc.width}
+  height={bunIpc.height}
+  alt="Bun IPC benchmark"
+  loading="lazy"
+/>
+
+##### Types (count 1)
+
+<img
+  src={bunTypesCount1.src}
+  width={bunTypesCount1.width}
+  height={bunTypesCount1.height}
+  alt="Bun types benchmark, count 1"
+  loading="lazy"
+/>
+
+##### Types (count 100)
+
+<img
+  src={bunTypesCount100.src}
+  width={bunTypesCount100.width}
+  height={bunTypesCount100.height}
+  alt="Bun types benchmark, count 100"
+  loading="lazy"
+/>
+
+#### Deno
+
+##### IPC
+
+<img
+  src={denoIpc.src}
+  width={denoIpc.width}
+  height={denoIpc.height}
+  alt="Deno IPC benchmark"
+  loading="lazy"
+/>
+
+##### Types (count 1)
+
+<img
+  src={denoTypesCount1.src}
+  width={denoTypesCount1.width}
+  height={denoTypesCount1.height}
+  alt="Deno types benchmark, count 1"
+  loading="lazy"
+/>
+
+##### Types (count 100)
+
+<img
+  src={denoTypesCount100.src}
+  width={denoTypesCount100.width}
+  height={denoTypesCount100.height}
+  alt="Deno types benchmark, count 100"
+  loading="lazy"
+/>
+
+#### Node
+
+##### IPC
+
+<img
+  src={nodeIpc.src}
+  width={nodeIpc.width}
+  height={nodeIpc.height}
+  alt="Node IPC benchmark"
+  loading="lazy"
+/>
+
+##### Types (count 1)
+
+<img
+  src={nodeTypesCount1.src}
+  width={nodeTypesCount1.width}
+  height={nodeTypesCount1.height}
+  alt="Node types benchmark, count 1"
+  loading="lazy"
+/>
+
+##### Types (count 100)
+
+<img
+  src={nodeTypesCount100.src}
+  width={nodeTypesCount100.width}
+  height={nodeTypesCount100.height}
+  alt="Node types benchmark, count 100"
+  loading="lazy"
+/>

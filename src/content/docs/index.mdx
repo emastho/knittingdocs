@@ -1,34 +1,62 @@
 ---
-title: "what does it do"
-description: description for google
+title: "Knitting"
+description: "A real IPC for Node.js, Deno, and Bun."
 template: splash
 hero:
-  tagline: "how does it do it"
-  image:
-    file: ../../assets/houston.webp
+  tagline: "Real nanosecond responses for JavaScript."
   actions:
     - text: Quick Start
-      link: /guides/example/
-    - text: See the benchmarks
-      link: /benchmarks
+      link: /guides/quick-start/
+    - text: Benchmarks
+      link: /benchmarks/
       variant: minimal
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-## Next steps
+Knitting is a IPC protocol for Node.js, Deno, and Bun. Define tasks
+once, then call them from the main thread with a small, typed API.
+
+
 
 <CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-		Edit `src/content/docs/index.mdx` to see this page change.
-	</Card>
-	<Card title="Add new content" icon="add-document">
-		Add Markdown or MDX files to `src/content/docs` to create new pages.
-	</Card>
-	<Card title="Configure your site" icon="setting">
-		Edit your `sidebar` and other config in `astro.config.mjs`.
-	</Card>
-	<Card title="Read the docs" icon="open-book">
-		Learn more in [the Starlight Docs](https://starlight.astro.build/).
-	</Card>
+  <Card title="Multi threading in 10 lines" icon="rocket">
+    ```ts
+    import { isMain, task } from "@vixeny/knitting";
+
+    export const world = task({
+      f: (args: string) => args + " world",
+    }).createPool({
+      threads: 2,
+    });
+
+    if (isMain) world.call("hello")
+      .then(console.log).finally(world.shutdown);
+    ```
+  </Card>
+  <Card title="Start here" icon="rocket">
+    Read the quick start and spin up your first pool.
+  </Card>
+
+  <Card title="Understand tasks" icon="list">
+    Learn how `task()` captures functions and inputs.
+  </Card>
+  <Card title="Reference" icon="open-book">
+    See the full API and supported payload types.
+  </Card>
+  <Card title="Examples" icon="code">
+    Copy runnable patterns for batching, inliner, and timeouts.
+  </Card>
+  <Card title="Supported payloads" icon="list">
+    See what types you can send across the shared-memory transport.
+  </Card>
+  <Card title="Runtime tuning" icon="sliders">
+    Adjust spin and backoff settings for latency or throughput.
+  </Card>
+  <Card title="Benchmarks" icon="gauge">
+    Run the official benchmark suite across runtimes.
+  </Card>
+  <Card title="License" icon="key">
+    Review the modified MIT license and no-derivatives clause.
+  </Card>
 </CardGrid>
