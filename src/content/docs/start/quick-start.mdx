@@ -4,26 +4,171 @@ description: Run your first tasks with a worker pool.
 sidebar:
   order: 3
 ---
+import { Steps } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode, getCodeTitle } from '../../../lib/code-snippets';
+import { getCode } from '../../../lib/code-snippets';
 import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { FileTree } from '@astrojs/starlight/components';
 
 export const hello = getCode('hello_world.ts');
 export const two = getCode('multi_thread.ts');
 export const inline = getCode('inline.ts');
 export const multi = getCode('inline_multiple.ts');
 
-# Introduction
+## Introduction
+
+In a few minutes you’ll have your first tasks running in parallel.  
+If you already know what workers are, think of Knitting as: 
+*“workers, but with a function-call API and much lower overhead.”*
+
+### Quick definitions
+
+A few words we’ll use a lot:
+
+- **Task**: an exported function wrapped with `task({ f })`. Tasks live at module scope so workers can load them consistently.
+- **`call.*()`**: runs a task on the pool and returns a `Promise` with the result.
+- **`isMain`**: a safe boolean that’s `true` only on the host (main thread). Use it to avoid running “host code” inside workers.
+- **`createPool()`**: creates the worker pool and returns helpers like `call`, `send`, and `shutdown`.
+- **Thread pool**: the set of workers available to execute tasks.
+- **Inlining / inliner**: optionally includes the host as an extra “lane”, so some work can run locally instead of always going to workers.
+- **Host ↔ Worker**: the host is the process that creates the pool; workers are the spawned threads.
+
+### Examples
+
+Now that we share the vocabulary, the snippets should feel a lot less spooky!
 
 <Tabs>
   <TabItem label="1 Thread"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
-  <TabItem label="2 Threads"><Code code={two} lang="ts" title={"multi_thread.ts"}  /></TabItem>
-  <TabItem label="Host + 2 Threads"><Code code={inline} lang="ts" title={"inline.ts"}  /></TabItem>
-  <TabItem label="Multi task"><Code code={multi} lang="ts" title={"inline_multiple.ts"} /></TabItem>
+  <TabItem label="2 Threads"><Code code={two} lang="ts" title={"multi_thread.ts"} /></TabItem>
+  <TabItem label="Host + 2 Threads"><Code code={inline} lang="ts" title={"inline.ts"} /></TabItem>
+  <TabItem label="Multiple tasks"><Code code={multi} lang="ts" title={"inline_multiple.ts"} /></TabItem>
 </Tabs>
 
-# Work Flow
+## Workflow
 
-# Rules
+<Steps>
 
-# Best practices
+1. Import Knitting:
+
+   ```ts
+   import { isMain, task, createPool } from "@vixeny/knitting";
+    ```
+
+2. Define your tasks:
+
+   ```ts
+   import { task } from "@vixeny/knitting";
+
+   export const hello = task({
+     f: () => "hello ",
+   });
+
+   export const world = task({
+     f: (args: string) => args + "world!",
+   });
+   ```
+
+3. Create a pool:
+
+   ```ts
+   import { task, createPool } from "@vixeny/knitting";
+
+   export const hello = task({
+     f: () => "hello ",
+   });
+
+   export const world = task({
+     f: (args: string) => args + "world!",
+   });
+
+   const { call, shutdown } = createPool({
+     threads: 1, // default
+   })({
+     hello,
+     world,
+   });
+   ```
+
+   Or create it from a single task:
+
+   ```ts
+   import { task } from "@vixeny/knitting";
+
+   export const world = task({
+     f: (args: string) => args + "world",
+   }).createPool();
+   ```
+
+4. Only run host code on the host (`isMain`), then call tasks:
+
+   ```ts
+   import { isMain, task, createPool } from "@vixeny/knitting";
+
+   export const hello = task({
+     f: () => "hello ",
+   });
+
+   export const world = task({
+     f: (args: string) => args + "world!",
+   });
+
+   const { call, shutdown } = createPool({ threads: 1 })({
+     hello,
+     world,
+   });
+
+   if (isMain) {
+     Promise.all(
+       Array.from({ length: 5 }, () => call.world(call.hello())),
+     )
+       .then(console.log)
+       .finally(shutdown);
+   }
+   ```
+
+   Or the “single task pool” version:
+
+   ```ts
+   import { isMain, task } from "@vixeny/knitting";
+
+   export const world = task({
+     f: (args: string) => args + "world",
+   }).createPool();
+
+   if (isMain) {
+     world.call("hello ")
+       .then(console.log)
+       .finally(world.shutdown);
+   }
+   ```
+
+5. Shut down when you’re done 🙂
+
+   Workers don’t magically disappear. Call `shutdown()` to clean up and let the process exit.
+
+</Steps>
+
+## Best practices
+
+Make it once, keep it tidy.
+
+### Keep tasks in their own module(s)
+
+It keeps your app code clean and helps workers load only what they need.
+
+<FileTree>
+
+* package.json
+* deno.json
+* src
+
+  * knitting
+
+    * database.ts
+    * img_parsing.ts
+    * jwt.ts
+  * app/
+  * pages/
+
+</FileTree>
+

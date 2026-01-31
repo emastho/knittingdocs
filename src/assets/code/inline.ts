@@ -1,6 +1,6 @@
 import { isMain, task } from "@vixeny/knitting";
 
-export const world = task({
+export const { call } = task({
   f: (args: string) => args + " world",
 }).createPool({
   threads: 2,

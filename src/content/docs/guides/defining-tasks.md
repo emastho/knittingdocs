@@ -2,7 +2,7 @@
 title: Defining tasks
 description: Wrap functions with task() and export them.
 sidebar:
-  order: 4
+  order: 1
 ---
 
 `task({ f, href?, timeout? })` wraps a function so workers can discover and run
@@ -58,3 +58,18 @@ export const maybeSlow = task<string, string>({
   f: async (value) => value,
 });
 ```
+
+Available fields:
+
+- `time` (number, ms) required.
+- `default` resolves with the provided value on timeout.
+- `maybe: true` resolves with `undefined` on timeout.
+- `error` rejects with the provided error on timeout.
+
+If none of `default`, `maybe`, or `error` are set, the call rejects with
+`Error("Task timeout")`.
+
+## Note
+
+Timeouts race the task result; the underlying work may still complete even if
+its promise resolves or rejects early.
