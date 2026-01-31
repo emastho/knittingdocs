@@ -5,8 +5,8 @@ sidebar:
   order: 10
 ---
 
-You can tune idle behavior and backoff with `worker.timers` and
-`dispatcher` options.
+You can tune idle behavior and backoff with `worker.timers` and `dispatcher`
+options.
 
 ## Worker timers
 

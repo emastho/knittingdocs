@@ -8,7 +8,7 @@ sidebar:
 Timeouts are defined on a task and apply per call.
 
 ```ts
-task({ timeout: 100, f })
+task({ timeout: 100, f });
 ```
 
 Supported forms:

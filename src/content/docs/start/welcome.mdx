@@ -1,0 +1,119 @@
+---
+title: Welcome
+description: What knitting is and how it works.
+sidebar:
+  order: 1
+---
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode, getCodeTitle } from '../../../lib/code-snippets';
+import nodeBench from '../../../assets/benchmark/md/node_test.md?raw';
+import nodeIpc from '../../../assets/benchmark/runtime/node/node_ipc.png';
+export const hello = getCode('hello_world.ts');
+
+
+Welcome! We are happy to see you around, hope you are in for the fun and enjoy our introduction,
+because this is for you, for all of those that wanted to make `JS multicore `vialable and competitive with real giants like `Rust` and `Go`.
+
+Lets dive in!
+
+## Why Knitting Exists
+
+JavaScript can do lots of things at once, but it can’t run CPU work in parallel on a single thread. That’s why **Workers** exist.
+
+But in real production apps, they’re still weirdly rare. Not because parallelism isn’t useful, but because the “default solution” drifted elsewhere: 
+
+* Promises made I/O concurrency painless.
+
+And when servers got hot it was often simpler to **scale out** (spawn another process/container) and communicate over `HTTP/WebSockets`.
+
+That works, but it has a cost: 
+
+* More `memory`.
+* More `moving pieces`.
+* More `latency`.
+* A whole extra layer of communication that has `nothing to do with your actual business logic`.
+
+Workers __*should*__ be the middle ground, yet the typical workflow is friction-heavy (pain):
+
+* `Create` a separate worker entry module
+* `Build` an event protocol on both sides
+* `Implement` routing and error handling
+* `Wrap` everything in promises
+* `Track` request IDs (and ordering, if you care about FIFO)
+* Then discover the overhead still makes lots of small tasks `not worth` offloading
+
+So you end up doing all that work just to get “some improvement”, only for IPC overhead to eat most of the win for anything that isn’t huge.
+
+> The problem isn’t compute. The problem is the *cost of reaching the compute*.
+
+Well, with **Knitting** you can do that `in 10 lines`:
+
+<Code code={hello} lang="ts" title={"hello_world.ts"} />
+
+**Knitting exists to make “parallelize this” practical again**: 
+
+- `Define` tasks once.
+- `Spin` up a pool.
+- `Call` them like functions.
+
+
+<Tabs>
+  <TabItem label="Graph">
+  <img
+  src={nodeIpc.src}
+  width={nodeIpc.width}
+  height={nodeIpc.height}
+  alt="Node IPC benchmark"
+  loading="lazy"
+/>
+  </TabItem>
+  <TabItem label="Data"><Code code={nodeBench} lang="md" title={"node_test.md"} /></TabItem>
+</Tabs>
+
+
+
+
+## What Knitting Is
+
+Knitting is an IPC (Interprocess Communication Communication) protocol built for JS that keeps things simple.
+
+But if you prefer fancy buzz words we can say:
+
+> Knitting is a full-duplex shared-memory IPC transport built from two independent 32-slot shared mailboxes (request + response), using bitset slot ownership and futex-style wakeups with optional spin-pause.
+
+### Core Design Ideas
+
+
+* **Tasks, not messages:**
+You export tasks (functions), and the pool executes them, instead of building your app around low-level message protocols.
+* **Policy is configurable:**
+Routing strategy, batching limits, stall backoff, timeouts, inline execution and more to your dispose.
+* **Workers don’t cook the CPU:**
+Spin briefly, then park and wake up when needed.
+
+
+
+## Why It’s Fast (and When That Matters)
+
+Knitting keeps the management cost of parallelism low.
+The speedups don’t come from magic, they come from removing friction:
+
+* `Low IPC overhead:` shared-memory mailboxes avoid serialization and message hops.
+* `Batch-friendly execution:` work is encoded, dispatched, and resolved through a pipelined flow.
+* `Sleep instead of spin:` workers park and wake only when there’s work.
+* `Event-loop friendly:` runtimes are designed to cooperate with the event loop — no blocking, no forced `await`, predictable execution.
+* `Pressure-responsive:` higher load improves throughput instead of stalling.
+
+
+This matters most when the cost of reaching the compute is comparable to the compute itself.
+
+## What Knitting Is Good For
+
+Knitting shines in workloads that mix CPU pressure with burstiness:
+
+* `Math and simulation:` numeric kernels, Monte Carlo, physics-style loops.
+* `Data transforms:` parsing, compression steps, tokenization, feature extraction.
+* `Media pipelines:` image operations, hashing, encoding.
+* `Web servers with CPU spikes:` keep the main thread responsive under load.
+* `High-frequency background jobs:` lots of small tasks where batching pays off.

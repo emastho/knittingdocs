@@ -5,8 +5,8 @@ sidebar:
   order: 8
 ---
 
-The `inliner` option adds a main-thread execution lane. This can reduce
-latency for small tasks or when you want to keep one lane local.
+The `inliner` option adds a main-thread execution lane. This can reduce latency
+for small tasks or when you want to keep one lane local.
 
 ```ts
 const pool = createPool({

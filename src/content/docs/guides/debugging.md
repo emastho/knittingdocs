@@ -21,7 +21,8 @@ const pool = createPool({
 
 Available flags:
 
-- `extras`: enable extra warnings (for example, calling `createPool` in a worker).
+- `extras`: enable extra warnings (for example, calling `createPool` in a
+  worker).
 - `logMain`: log main dispatcher events.
 - `logHref`: log the worker entry module URL.
 - `logImportedUrl`: log task module URLs detected by the worker.

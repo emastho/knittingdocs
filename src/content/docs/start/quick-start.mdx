@@ -1,0 +1,29 @@
+---
+title: Quick Start
+description: Run your first tasks with a worker pool.
+sidebar:
+  order: 3
+---
+import { Code } from '@astrojs/starlight/components';
+import { getCode, getCodeTitle } from '../../../lib/code-snippets';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+export const hello = getCode('hello_world.ts');
+export const two = getCode('multi_thread.ts');
+export const inline = getCode('inline.ts');
+export const multi = getCode('inline_multiple.ts');
+
+# Introduction
+
+<Tabs>
+  <TabItem label="1 Thread"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
+  <TabItem label="2 Threads"><Code code={two} lang="ts" title={"multi_thread.ts"}  /></TabItem>
+  <TabItem label="Host + 2 Threads"><Code code={inline} lang="ts" title={"inline.ts"}  /></TabItem>
+  <TabItem label="Multi task"><Code code={multi} lang="ts" title={"inline_multiple.ts"} /></TabItem>
+</Tabs>
+
+# Work Flow
+
+# Rules
+
+# Best practices
