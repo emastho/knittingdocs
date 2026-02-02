@@ -14,8 +14,10 @@ export const hello = getCode('hello_world.ts');
 
 Welcome! We’re happy to see you here.
 
-This project is for anyone who has wanted JavaScript to scale across cores without giving up on simplicity,
- and to make multicore JS viable in spaces traditionally dominated by Rust and Go.
+This project is for anyone who has wanted JavaScript 
+to scale across cores without giving up on simplicity, 
+and who has wanted to make `multi-core JavaScript` viable 
+in spaces traditionally dominated by Rust and Go.
 
 Let’s dive in.
 
@@ -36,7 +38,7 @@ That approach works, but it comes with a cost:
 - more `latency`,
 - and an entire communication layer that has nothing to do with your `actual logic`.
 
-Workers `should` be the middle ground, yet the typical workflow is friction-heavy (pain):
+Workers `should` be the middle ground, yet the typical workflow is friction-heavy (painful):
 
 - `create` a separate worker entry module,
 - `build` an event protocol on both sides,
@@ -62,7 +64,7 @@ Knitting exists to make `“parallelize this”` practical again:
 The result is a worker workflow that just works, and can be **4x to 200x faster** than message-based IPC approaches for small-to-medium, high-frequency tasks.
 
 <Tabs>
-  <TabItem label="Graph">
+  <TabItem label="V8">
     <img
       src={nodeIpc.src}
       width={nodeIpc.width}
@@ -138,12 +140,19 @@ Being explicit about this matters.
 **Not a replacement for `postMessage`**  
 Knitting does not aim to replace `postMessage`. `postMessage` is excellent for general-purpose messaging. Knitting focuses on task execution with low overhead.
 
+Also, we still need to implement:
+* Barries
+* Cross-thread values
+* Signals
+
+There is still a lot to do, and that is okay!
 
 **No browser / Web Worker support (intentionally)**  
-Knitting does not currently target browser Web Workers. This is not because it’s technically difficult — with the current architecture, a web version would be fairly straightforward.
+Knitting does not currently targets browser Web Workers. This is not because it’s technically difficult — with the current architecture, a web version would be fairly straightforward.
 
-The real reason is security. Shared memory in the browser comes with strict constraints, and speculative execution attacks have shown these risks are real (`Yes, you specter`).
- Until we know that is safe to do so, Knitting stays server-side by design.
+The real reason is security. Shared memory in the browser comes with strict constraints, 
+and speculative execution attacks have shown these risks are real (`Yes, you Spectre`).
+ Until we know that it’s safe to do so, Knitting stays server-side by design (for the moment).
 
 **No edge runtimes (for now)**  
 We currently targets Node.js, Deno, and Bun. Edge runtimes and cloud workers have different isolation models, limited or absent shared memory, and different module lifecycles.
@@ -151,12 +160,15 @@ We currently targets Node.js, Deno, and Bun. Edge runtimes and cloud workers hav
  Supporting them properly would require careful design, not a quick port.
 
 **Remote imports are treated with caution**  
-Relies on loading task modules consistently across workers. Importing code directly from the network introduces security risks, reproducibility issues, and unclear trust boundaries.
+Knitting relies on loading task modules consistently across workers. Importing code directly from the network introduces security risks, reproducibility issues, and unclear trust boundaries.
 
  If remote imports are ever supported, they will likely appear first in `Deno`, be opt-in, and come with explicit safety constraints.
 
 **Not a distributed system**  
 Knitting is not a cluster manager, a job queue, or a distributed execution framework. It operates within a single runtime instance, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.
+
+Theoretically, because we use a shared array, we could have real IPC with other languages, 
+but that’s a far-off dream. There’s too much work to do.
 
 ---
 
