@@ -29,7 +29,7 @@ const pool = createPool({
       pauseNanoseconds: 200,
     },
   },
-  dispatcher: {
+  host: {
     stallFreeLoops: 64,
     maxBackoffMs: 5,
   },

@@ -24,20 +24,6 @@ export default defineConfig({
           autogenerate: { directory: "guides"}
         },
         {
-          label: "Reference",
-          collapsed: true,
-          items: [
-            { label: "API", slug: "reference/api" },
-            {
-              label: "createPool Options",
-              slug: "reference/create-pool-options",
-              
-            },
-            { label: "Task Timeouts", slug: "reference/task-timeouts" },
-            { label: "Supported Payloads", slug: "reference/payloads" },
-          ],
-        },
-        {
           label: "Examples",
           collapsed: true,
           autogenerate: { directory: "examples" },

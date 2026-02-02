@@ -6,117 +6,161 @@ sidebar:
 ---
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode, getCodeTitle } from '../../../lib/code-snippets';
+import { getCode } from '../../../lib/code-snippets';
 import nodeBench from '../../../assets/benchmark/md/node_test.md?raw';
 import nodeIpc from '../../../assets/benchmark/runtime/node/node_ipc.png';
+
 export const hello = getCode('hello_world.ts');
 
+Welcome! We’re happy to see you here.
 
-Welcome! We are happy to see you around, hope you are in for the fun and enjoy our introduction,
-because this is for you, for all of those that wanted to make `JS multicore `vialable and competitive with real giants like `Rust` and `Go`.
+This project is for anyone who has wanted JavaScript to scale across cores without giving up on simplicity,
+ and to make multicore JS viable in spaces traditionally dominated by Rust and Go.
 
-Lets dive in!
+Let’s dive in.
+
+---
 
 ## Why Knitting Exists
 
-JavaScript can do lots of things at once, but it can’t run CPU work in parallel on a single thread. That’s why **Workers** exist.
+JavaScript can do many things at once, but it can’t run CPU work in parallel on a single thread. That’s why **Workers** exist.
 
-But in real production apps, they’re still weirdly rare. Not because parallelism isn’t useful, but because the “default solution” drifted elsewhere: 
+In general application code, though, workers are still surprisingly rare. Not because parallelism isn’t useful, but because the default solutions drifted elsewhere.
 
-* Promises made I/O concurrency painless.
+Promises made I/O concurrency painless. And when servers got hot, it often felt easier to scale out — spawn another process or container and communicate over HTTP or WebSockets.
 
-And when servers got hot it was often simpler to **scale out** (spawn another process/container) and communicate over `HTTP/WebSockets`.
+That approach works, but it comes with a cost:
 
-That works, but it has a cost: 
+- more `memory`,
+- more `moving pieces`,
+- more `latency`,
+- and an entire communication layer that has nothing to do with your `actual logic`.
 
-* More `memory`.
-* More `moving pieces`.
-* More `latency`.
-* A whole extra layer of communication that has `nothing to do with your actual business logic`.
+Workers `should` be the middle ground, yet the typical workflow is friction-heavy (pain):
 
-Workers __*should*__ be the middle ground, yet the typical workflow is friction-heavy (pain):
+- `create` a separate worker entry module,
+- `build` an event protocol on both sides,
+- `implement` routing and error handling,
+- `wrap` everything in promises,
+- `track` request IDs (and ordering, if FIFO matters),
+- then discover that IPC overhead makes many small tasks `not worth` offloading.
 
-* `Create` a separate worker entry module
-* `Build` an event protocol on both sides
-* `Implement` routing and error handling
-* `Wrap` everything in promises
-* `Track` request IDs (and ordering, if you care about FIFO)
-* Then discover the overhead still makes lots of small tasks `not worth` offloading
+None of this is conceptually hard. It’s just a lot of machinery for something that should feel like calling a function.
 
-So you end up doing all that work just to get “some improvement”, only for IPC overhead to eat most of the win for anything that isn’t huge.
+> The problem isn’t compute. The problem is the cost of reaching the compute.
 
-> The problem isn’t compute. The problem is the *cost of reaching the compute*.
-
-Well, with **Knitting** you can do that `in 10 lines`:
+With **Knitting**, you can do that `in about ten lines`:
 
 <Code code={hello} lang="ts" title={"hello_world.ts"} />
 
-**Knitting exists to make “parallelize this” practical again**: 
+Knitting exists to make `“parallelize this”` practical again:
 
-- `Define` tasks once.
-- `Spin` up a pool.
-- `Call` them like functions.
+- `define` tasks once,
+- `spin up` a pool,
+- `call` them like functions.
 
-
-The result is a worker workflow that `“just works”`, and can be **4x to 200x faster** than 
-message-based IPC approaches depending on the workload.
+The result is a worker workflow that just works, and can be **4x to 200x faster** than message-based IPC approaches for small-to-medium, high-frequency tasks.
 
 <Tabs>
   <TabItem label="Graph">
-  <img
-  src={nodeIpc.src}
-  width={nodeIpc.width}
-  height={nodeIpc.height}
-  alt="Node IPC benchmark"
-  loading="lazy"
-/>
+    <img
+      src={nodeIpc.src}
+      width={nodeIpc.width}
+      height={nodeIpc.height}
+      alt="Node IPC benchmark"
+      loading="lazy"
+    />
   </TabItem>
-  <TabItem label="Data"><Code code={nodeBench} lang="md" title={"node_test.md"} /></TabItem>
+  <TabItem label="Data">
+    <Code code={nodeBench} lang="md" title={"node_test.md"} />
+  </TabItem>
 </Tabs>
 
-
-
+---
 
 ## What Knitting Is
 
-Knitting is an IPC (Interprocess Communication Communication) protocol built for JS that keeps things simple.
+Knitting is a shared-memory IPC transport for JavaScript runtimes that keeps things simple.
 
-But if you prefer fancy buzz words we can say:
+If you prefer the long version:
 
-> Knitting is a full-duplex shared-memory IPC transport built from two independent 32-slot shared mailboxes (request + response), using bitset slot ownership and futex-style wakeups with optional spin-pause.
+> Knitting is a full-duplex shared-memory IPC transport built from two independent 32-slot shared mailboxes (request and response), using bitset slot ownership and futex-style wakeups with optional spin-pause.
+
+At a higher level, the design rests on a few core ideas.
 
 ### Core Design Ideas
 
+**Tasks, not messages**  
+You export tasks as functions, and the pool executes them. You don’t build your application around low-level message protocols.
 
-* **Tasks, not messages:**
-You export tasks (functions), and the pool executes them, instead of building your app around low-level message protocols.
-* **Policy is configurable:**
-Routing strategy, batching limits, stall backoff, timeouts, inline execution and more to your dispose.
-* **Workers don’t cook the CPU:**
-Spin briefly, then park and wake up when needed.
+**Configurable policy**  
+Routing strategy, batching limits, stall backoff, timeouts, and inline execution are explicit choices, not hidden behavior.
 
+**Workers don’t cook the CPU**  
+Workers spin briefly when needed, then park and wake up only when there’s work to do.
 
+---
 
 ## Why It’s Fast (and When That Matters)
 
-Knitting keeps the management cost of parallelism low.
-The speedups don’t come from magic, they come from removing friction:
+Knitting keeps the management cost of parallelism low. The speedups don’t come from magic — they come from removing friction:
 
-* `Low IPC overhead:` shared-memory mailboxes avoid serialization and message hops.
-* `Batch-friendly execution:` work is encoded, dispatched, and resolved through a pipelined flow.
-* `Sleep instead of spin:` workers park and wake only when there’s work.
-* `Event-loop friendly:` runtimes are designed to cooperate with the event loop — no blocking, no forced `await`, predictable execution.
-* `Pressure-responsive:` higher load improves throughput instead of stalling.
-
+- **Low IPC overhead:** shared-memory mailboxes avoid serialization and message hops.
+- **Batch-friendly execution:** work is encoded, dispatched, and resolved through a pipelined flow.
+- **Sleep instead of spin:** workers park and wake only when there’s work.
+- **Event-loop friendly:** runtimes cooperate with the event loop, no blocking, no forced `await`, always predictable.
+- **Pressure-responsive:** higher load improves throughput instead of stalling.
 
 This matters most when the cost of reaching the compute is comparable to the compute itself.
+
+> Knitting doesn’t try to make slow code fast, it tries to make parallel code cheap enough to be worth writing.
+
+---
 
 ## What Knitting Is Good For
 
 Knitting shines in workloads that mix CPU pressure with burstiness:
 
-* `Math and simulation:` numeric kernels, Monte Carlo, physics-style loops.
-* `Data transforms:` parsing, compression steps, tokenization, feature extraction.
-* `Media pipelines:` image operations, hashing, encoding.
-* `Web servers with CPU spikes:` keep the main thread responsive under load.
-* `High-frequency background jobs:` lots of small tasks where batching pays off.
+- **Math and simulation:** numeric kernels, Monte Carlo runs, physics-style loops.
+- **Data transforms:** parsing, compression steps, tokenization, feature extraction.
+- **Media pipelines:** image operations, hashing, encoding.
+- **Web servers with CPU spikes:** keeping the main thread responsive under load.
+- **High-frequency background jobs:** lots of small tasks where batching pays off.
+
+---
+
+## Design Boundaries & Non-Goals
+
+Knitting is `opinionated` by design. It solves a very specific problem well, and it intentionally does not try to be everything.
+
+Being explicit about this matters.
+
+**Not a replacement for `postMessage`**  
+Knitting does not aim to replace `postMessage`. `postMessage` is excellent for general-purpose messaging. Knitting focuses on task execution with low overhead.
+
+
+**No browser / Web Worker support (intentionally)**  
+Knitting does not currently target browser Web Workers. This is not because it’s technically difficult — with the current architecture, a web version would be fairly straightforward.
+
+The real reason is security. Shared memory in the browser comes with strict constraints, and speculative execution attacks have shown these risks are real (`Yes, you specter`).
+ Until we know that is safe to do so, Knitting stays server-side by design.
+
+**No edge runtimes (for now)**  
+We currently targets Node.js, Deno, and Bun. Edge runtimes and cloud workers have different isolation models, limited or absent shared memory, and different module lifecycles.
+
+ Supporting them properly would require careful design, not a quick port.
+
+**Remote imports are treated with caution**  
+Relies on loading task modules consistently across workers. Importing code directly from the network introduces security risks, reproducibility issues, and unclear trust boundaries.
+
+ If remote imports are ever supported, they will likely appear first in `Deno`, be opt-in, and come with explicit safety constraints.
+
+**Not a distributed system**  
+Knitting is not a cluster manager, a job queue, or a distributed execution framework. It operates within a single runtime instance, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.
+
+---
+
+## Thanks
+
+Thanks for reading this far.  
+It’s always a little sad to reach the end, but now the fun part starts.

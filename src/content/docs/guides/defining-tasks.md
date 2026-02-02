@@ -5,16 +5,33 @@ sidebar:
   order: 1
 ---
 
-`task({ f, href?, timeout? })` wraps a function so workers can discover and run
+Task wraps a function so workers can discover and run
 it. Tasks should be defined at module scope and exported.
+
+```ts
+type Task = {
+  f: (uknown) => uknown,
+  createPool?: (options: CreatePool) => SingleTaskPool,
+  timeout?: number | {
+    time: number;
+    maybe?: true;
+    default?: unknown;
+    error?: unknown;
+  }
+}
+
+```
 
 ## Guidelines
 
 - Define tasks at module scope (no conditional exports).
 - Export tasks from the module where they are defined.
 - Prefer a single argument; use a tuple or object for multiple values.
+- Better to be on it's own file
 
-## Simple task
+### Simple task
+
+Tasks are basically a fix point where the worker can import them with all the context of the file
 
 ```ts
 import { task } from "@vixeny/knitting";
@@ -24,7 +41,17 @@ export const hello = task({
 });
 ```
 
-## Task with arguments
+### Task with arguments
+
+Return type can be infer by used but the arguments has to be typed.
+
+```ts
+export const add = task({
+  f: async ([a, b] : [number, number]) => a + b,
+});
+```
+
+Or:
 
 ```ts
 export const add = task<[number, number], number>({
@@ -32,7 +59,38 @@ export const add = task<[number, number], number>({
 });
 ```
 
-## Single-task pool
+### Promises and resolution
+
+Something important about Knitting behaivour is that it will wait for a promise until this one resolves,
+no mattering the level of nesting:
+
+```js
+import { isMain, task } from "@vixeny/knitting";
+
+export const world = task({
+  f: (str: string ) => str + "world",
+}).createPool();
+
+const promise = Promise.resolve("hello")
+
+if (isMain) {
+  world.call(promise)
+    .then(console.log)
+    .finally(world.shutdown)
+}
+
+```
+
+:::caution
+If this where to be rejected, the rejection will be passed to the promise.
+:::
+
+
+## Optionals
+
+You can easily modify the behaivour adding options to a task.
+
+### Single-task pool
 
 ```ts
 import { isMain, task } from "@vixeny/knitting";
@@ -50,7 +108,7 @@ if (isMain) {
 }
 ```
 
-## Optional timeout
+### Timeout
 
 ```ts
 export const maybeSlow = task<string, string>({
@@ -69,7 +127,9 @@ Available fields:
 If none of `default`, `maybe`, or `error` are set, the call rejects with
 `Error("Task timeout")`.
 
-## Note
+:::note
 
 Timeouts race the task result; the underlying work may still complete even if
 its promise resolves or rejects early.
+
+:::

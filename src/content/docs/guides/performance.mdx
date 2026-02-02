@@ -1,0 +1,328 @@
+---
+title: Performance
+description: Tips about performance and good practices.
+sidebar:
+  order: 17
+---
+
+import { Badge } from '@astrojs/starlight/components';
+
+## Quick legend
+
+Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be **2–4× faster** than `postMessage` (depending on payload and workload).
+
+- <Badge text="Best" variant="note" />: near “header-only” cost, best path
+- <Badge text="Fast" variant="success" />: still very cheap per call
+- <Badge text="Good" variant="tip" />: fine for real workloads
+- <Badge text="Meh" variant="caution" />: watch frequency
+- <Badge text="Slow" variant="danger" />: avoid in hot loops, consider alternatives
+
+### Rating thresholds (easy to tweak later)
+
+These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runtime, edit these numbers and re-label rows as needed.
+
+**For a single call (1 value):**
+- Best: ≤ 1 µs
+- Fast: ≤ 2 µs
+- Good: ≤ 4 µs
+- Meh: ≤ 9 µs
+- Slow: > 9 µs
+
+**For a batch (100 values):**
+- Best: ≤ 50 µs
+- Fast: ≤ 100 µs
+- Good: ≤ 200 µs
+- Meh: ≤ 450 µs
+- Slow: > 450 µs
+
+---
+
+## Benchmark environment
+
+- 
+
+---
+
+## Mental model (what makes things fast)
+
+**1) Header-only / “no payload”**  
+Values fit into the call header: tiny encode/decode cost. Best for primitives and sentinel values.
+
+**2) Static payload**  
+Reuses part of the Header plus a small buffer.
+
+**3) Dynamic payload (allocator path)**  
+Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in hot loops.
+
+
+
+---
+
+## Single call categories (1 value)
+
+<table>
+  <thead>
+    <tr>
+      <th>Case</th>
+      <th>Batch</th>
+      <th>Tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Primitives: <code>boolean</code>, <code>undefined</code>, <code>null</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Numbers: <code>number</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Time/IDs: <code>Date</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Strings: small <code>string</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Symbols: <code>Symbol.for</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td>BigInt: small <code>bigint</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>BigInt: large <code>bigint</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td>Binary: typed arrays</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td>Binary: typed arrays</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td>Views: <code>DataView</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+    <tr>
+      <td>Structured: <code>JSON object</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+    <tr>
+      <td>Structured: <code>JSON array</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+    </tr>
+    <tr>
+      <td>Collections: <code>Set</code>, <code>Map</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+    </tr>
+    <tr>
+      <td>Errors: <code>Error</code></td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## Batch categories (100 values)
+
+Batching amortizes overhead or if you are doing repeated calls.
+
+<table>
+  <thead>
+    <tr>
+      <th>Case</th>
+      <th>Batch</th>
+      <th>Tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Primitives: <code>boolean</code>, <code>undefined</code>, <code>null</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Numbers: <code>number</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Strings: small <code>string</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>BigInt: small <code>bigint</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>BigInt: large <code>bigint</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td>Binary: typed arrays </td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+    <tr>
+      <td>Structured: <code>JSON object</code>, <code>JSON array</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+    </tr>
+    <tr>
+      <td>Collections: <code>Map</code>, <code>Set</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Slow" variant="danger" /></td>
+    </tr>
+    <tr>
+      <td>Errors: <code>Error</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Slow" variant="danger" /></td>
+    </tr>
+    <tr>
+      <td>Time/IDs: <code>Date</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td>Symbols: <code>Symbol.for</code></td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## Static vs Dynamic (allocator path)
+
+Static payloads reuse a cached representation. Dynamic payloads pay allocation/bookkeeping cost per call.
+
+<table>
+  <thead>
+    <tr>
+      <th>Case</th>
+      <th>Batch</th>
+      <th>Tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>string</code>: static</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td><code>string</code>: dynamic</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>json</code>: static</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>json</code>: dynamic</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+    <tr>
+      <td><code>Uint8Array</code>: static</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td><code>Uint8Array</code>: dynamic</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>Symbol</code>: static</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>Symbol</code>: dynamic</td>
+      <td><code>(1)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+
+    <tr>
+      <td><code>string</code>: static</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td><code>string</code>: dynamic</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Good" variant="tip" /></td>
+    </tr>
+    <tr>
+      <td><code>json</code>: static</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>json</code>: dynamic</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+    </tr>
+    <tr>
+      <td><code>Uint8Array</code>: static</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Best" variant="note" /></td>
+    </tr>
+    <tr>
+      <td><code>Uint8Array</code>: dynamic</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Slow" variant="danger" /></td>
+    </tr>
+    <tr>
+      <td><code>Symbol</code>: static</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Fast" variant="success" /></td>
+    </tr>
+    <tr>
+      <td><code>Symbol</code>: dynamic</td>
+      <td><code>(100)</code></td>
+      <td><Badge text="Meh" variant="caution" /></td>
+
+    </tr>
+  </tbody>
+</table>
+
+
+---
+
+## Practical advice (the short version)
+
+- If you’re calling tasks **a lot**, prefer:
+  - primitives,
+  - typed arrays,
+  - or static payloads where repetition exists.
+- If you’re moving collections (<code>Map</code>, <code>Set</code>) or heavy structured data, batch aggressively.
+- If performance is borderline, push more work per call (fewer round trips).
