@@ -2,7 +2,7 @@
 title: Performance
 description: Tips about performance and good practices.
 sidebar:
-  order: 17
+  order: 6
 ---
 
 import { Badge } from '@astrojs/starlight/components';
@@ -14,7 +14,7 @@ Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be 
 - <Badge text="Best" variant="note" />: near “header-only” cost, best path
 - <Badge text="Fast" variant="success" />: still very cheap per call
 - <Badge text="Good" variant="tip" />: fine for real workloads
-- <Badge text="Meh" variant="caution" />: watch frequency
+- <Badge text="Fair" variant="caution" />: watch frequency
 - <Badge text="Slow" variant="danger" />: avoid in hot loops, consider alternatives
 
 ### Rating thresholds (easy to tweak later)
@@ -25,31 +25,34 @@ These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runt
 - Best: ≤ 1 µs
 - Fast: ≤ 2 µs
 - Good: ≤ 4 µs
-- Meh: ≤ 9 µs
+- Fair: ≤ 9 µs
 - Slow: > 9 µs
 
 **For a batch (100 values):**
 - Best: ≤ 50 µs
 - Fast: ≤ 100 µs
 - Good: ≤ 200 µs
-- Meh: ≤ 450 µs
+- Fair: ≤ 450 µs
 - Slow: > 450 µs
 
 ---
 
 ## Benchmark environment
 
-- 
+- clk: ~3.86 GHz
+- cpu: Apple M3 Ultra
+- runtime: node 24.12.0 (arm64-darwin)
+
 
 ---
 
 ## Mental model (what makes things fast)
 
 **1) Header-only / “no payload”**  
-Values fit into the call header: tiny encode/decode cost. Best for primitives and sentinel values.
+Values fit into the call header: tiny encode/decode cost.
 
 **2) Static payload**  
-Reuses part of the Header plus a small buffer.
+Reuses part of the Header plus a small buffer, only for small playloads.
 
 **3) Dynamic payload (allocator path)**  
 Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in hot loops.
@@ -105,12 +108,12 @@ Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in 
       <td><Badge text="Fast" variant="success" /></td>
     </tr>
     <tr>
-      <td>Binary: typed arrays</td>
+      <td>Binary: Typed Arrays</td>
       <td><code>(1)</code></td>
       <td><Badge text="Fast" variant="success" /></td>
     </tr>
     <tr>
-      <td>Binary: typed arrays</td>
+      <td>Binary: Typed Arrays</td>
       <td><code>(1)</code></td>
       <td><Badge text="Best" variant="note" /></td>
     </tr>
@@ -132,12 +135,12 @@ Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in 
     <tr>
       <td>Collections: <code>Set</code>, <code>Map</code></td>
       <td><code>(1)</code></td>
-      <td><Badge text="Meh" variant="caution" /></td>
+      <td><Badge text="Fair" variant="caution" /></td>
     </tr>
     <tr>
       <td>Errors: <code>Error</code></td>
       <td><code>(1)</code></td>
-      <td><Badge text="Meh" variant="caution" /></td>
+      <td><Badge text="Fair" variant="caution" /></td>
     </tr>
   </tbody>
 </table>
@@ -183,7 +186,7 @@ Batching amortizes overhead or if you are doing repeated calls.
       <td><Badge text="Fast" variant="success" /></td>
     </tr>
     <tr>
-      <td>Binary: typed arrays </td>
+      <td>Binary: Typed Arrays </td>
       <td><code>(100)</code></td>
       <td><Badge text="Fast" variant="success" /></td>
     </tr>
@@ -251,12 +254,12 @@ Static payloads reuse the header plus a small bufer of 48 bytes. Dynamic payload
       <td><Badge text="Good" variant="tip" /></td>
     </tr>
     <tr>
-      <td><code>Uint8Array</code>: static</td>
+      <td><code>Typed Arrays</code>: static</td>
       <td><code>(1)</code></td>
       <td><Badge text="Best" variant="note" /></td>
     </tr>
     <tr>
-      <td><code>Uint8Array</code>: dynamic</td>
+      <td><code>Typed Arrays</code>: dynamic</td>
       <td><code>(1)</code></td>
       <td><Badge text="Fast" variant="success" /></td>
     </tr>
@@ -289,17 +292,17 @@ Static payloads reuse the header plus a small bufer of 48 bytes. Dynamic payload
     <tr>
       <td><code>json</code>: dynamic</td>
       <td><code>(100)</code></td>
-      <td><Badge text="Meh" variant="caution" /></td>
+      <td><Badge text="Fair" variant="caution" /></td>
     </tr>
     <tr>
-      <td><code>Uint8Array</code>: static</td>
+      <td><code>Typed Arrays</code>: static</td>
       <td><code>(100)</code></td>
       <td><Badge text="Best" variant="note" /></td>
     </tr>
     <tr>
-      <td><code>Uint8Array</code>: dynamic</td>
+      <td><code>Typed Arrays</code>: dynamic</td>
       <td><code>(100)</code></td>
-      <td><Badge text="Fast" variant="success" /></td>
+      <td><Badge text="Best" variant="success" /></td>
     </tr>
     <tr>
       <td><code>Symbol</code>: static</td>
@@ -309,7 +312,7 @@ Static payloads reuse the header plus a small bufer of 48 bytes. Dynamic payload
     <tr>
       <td><code>Symbol</code>: dynamic</td>
       <td><code>(100)</code></td>
-      <td><Badge text="Meh" variant="caution" /></td>
+      <td><Badge text="Fair" variant="caution" /></td>
 
     </tr>
   </tbody>

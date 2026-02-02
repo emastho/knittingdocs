@@ -110,6 +110,14 @@ if (isMain) {
 
 ### Timeout
 
+Supported forms:
+
+- `number` (ms). Non-negative values reject with `Error("Task timeout")`.
+- `{ time: number, default: value }` resolves with the provided value.
+- `{ time: number, maybe: true }` resolves with `undefined`.
+- `{ time: number, error: value }` rejects with the provided error.
+
+If `time` is negative or missing, timeouts are ignored.
 ```ts
 export const maybeSlow = task<string, string>({
   timeout: { time: 50, default: "timeout" },
@@ -117,15 +125,6 @@ export const maybeSlow = task<string, string>({
 });
 ```
 
-Available fields:
-
-- `time` (number, ms) required.
-- `default` resolves with the provided value on timeout.
-- `maybe: true` resolves with `undefined` on timeout.
-- `error` rejects with the provided error on timeout.
-
-If none of `default`, `maybe`, or `error` are set, the call rejects with
-`Error("Task timeout")`.
 
 :::note
 

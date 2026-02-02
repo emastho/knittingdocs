@@ -1,0 +1,167 @@
+---
+title: Creating pools
+description: Spin up workers and call tasks.
+sidebar:
+  order: 2
+---
+
+`createPool(options)(tasks)` starts worker threads and returns helpers:
+
+- `call.<task>(args)` enqueue a task and return a promise.
+- `fastCall.<task>(args)` like `call`, but optimized for tight loops.
+- `send()` kick the dispatcher loop (useful after enqueueing a batch).
+- `shutdown()` stop all workers.
+
+`call.*()` always returns a promise. Inputs may also be promises; they are
+resolved on the host before dispatch (rejections propagate to the caller).
+
+:::note
+`createPool(...)` can only be called from the main thread. Use `isMain` to guard
+entrypoints that create pools.
+:::
+
+## Options
+
+```ts
+createPool({
+  threads?: number,
+  inliner?: {
+    position?: "first" | "last",
+    batchSize?: number,
+  },
+  balancer?: {
+    strategy: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
+  } | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
+  worker?: {
+    resolveAfterFinishingAll?: true,
+    timers?: {
+      spinMicroseconds?: number,
+      parkMs?: number,
+      pauseNanoseconds?: number,
+    },
+  },
+  host?: {
+    stallFreeLoops?: number,
+    maxBackoffMs?: number,
+  },
+  debug?: {
+    extras?: boolean,
+    logMain?: boolean,
+    logHref?: boolean,
+    logImportedUrl?: boolean,
+  },
+})
+```
+
+## Example
+
+Basic example:
+
+```ts
+import { createPool, isMain, task } from "@vixeny/knitting";
+
+export const add = task<[number, number], number>({
+  f: async ([a, b]) => a + b,
+});
+
+const { call, send, shutdown } = createPool({
+  threads: 2,
+})({ add });
+
+if (isMain) {
+  const jobs = [call.add([1, 2]), call.add([3, 4])];
+  send();
+  const results = await Promise.all(jobs);
+  console.log(results);
+  shutdown();
+}
+```
+
+:::danger
+After `shutdown()` runs, in-flight and future `call.*()` promises reject (reason:
+`"Thread closed"`).
+:::
+
+## balancer
+
+Controls how calls are routed across lanes (threads, plus the optional inliner).
+
+- `robinRound` (default): round-robin rotation.
+- `firstIdle`: pick the first idle lane, else fall back to round-robin.
+- `randomLane`: pick a random lane.
+- `firstIdleOrRandom`: pick the first idle lane, else random.
+
+## inliner
+
+Adds an extra lane that runs tasks on the main thread (useful for very small
+tasks where worker overhead dominates).
+
+- `position`: whether the inline lane appears before (`"first"`) or after
+  (`"last"`) the worker lanes for balancing purposes.
+- `batchSize`: max tasks processed per event-loop tick (default `1` when enabled).
+
+## worker
+
+### resolveAfterFinishingAll
+
+When set to `true`, the worker preferentially flushes results after it has
+drained its current work queue. This can improve throughput for some workloads
+at the cost of latency for early results.
+
+### timers
+
+Idle behavior tuning. These affect how workers spin, pause, and park when there
+is no work.
+
+#### spinMicroseconds
+
+Busy-spin budget before the worker parks (microseconds). Larger values can
+reduce latency under bursty load but increase CPU usage.
+
+Defaults to `max(1, totalLanes) * 50`, where `totalLanes = threads + (inliner ? 1 : 0)`.
+
+#### parkMs
+
+`Atomics.wait` timeout while parked (milliseconds). Smaller values wake more
+often (lower latency, higher overhead); larger values sleep longer (lower
+overhead, potentially higher latency).
+
+Defaults to `max(1, totalLanes) * 50`.
+
+#### pauseNanoseconds
+
+`Atomics.pause` duration while spinning (nanoseconds). Use this to reduce power
+draw / contention during spin loops.
+
+## host
+
+Host dispatcher backoff and scheduling options.
+
+### stallFreeLoops
+
+How many immediate notify loops run before backoff kicks in (default `128`).
+
+### maxBackoffMs
+
+Maximum backoff delay in milliseconds once the dispatcher starts stalling
+(default `10`).
+
+## debug
+
+### extras
+
+Enables extra warnings (for example, if `createPool` is accidentally called in a
+worker thread).
+
+### logMain
+
+Enables signal logging on the main thread. This writes log files under `./log/`.
+
+### logHref
+
+Logs the worker entry module URL used to spawn workers.
+
+### logImportedUrl
+
+Logs the list of module URLs that workers import to discover tasks.
+

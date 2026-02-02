@@ -1,0 +1,106 @@
+---
+title: Inliner
+description: Run tasks on the main thread as an extra lane.
+sidebar:
+  order: 3
+---
+
+The `inliner` option adds a main-thread execution lane. This can reduce latency
+for small tasks or when you want to keep one lane local.
+
+```ts
+const pool = createPool({
+  threads: 3,
+  inliner: { position: "last" },
+})({ add });
+```
+
+Use `position: "first"` if you want the inliner to be the first lane.
+
+:::note
+The inliner is a *lane*, not a replacement for worker threads. With the current
+implementation, using `inliner` requires at least one worker thread (so you
+have 2+ lanes total).
+:::
+
+## What You Get
+
+When `inliner` is enabled:
+
+- `threads` worker lanes are started.
+- One extra lane runs tasks on the main thread.
+- The pool’s `balancer` can route calls to either workers or the inline lane.
+
+`call.*()` still returns a promise, just like worker-backed execution.
+
+:::warning
+Inline tasks run on the main thread. CPU-heavy work will block the event loop
+(timers, I/O callbacks, HTTP handlers, etc.). Use the inliner for small/fast
+tasks, not long-running computation.
+:::
+
+## Options
+
+```ts
+createPool({
+  inliner: {
+    position?: "first" | "last",
+    batchSize?: number,
+  },
+})
+```
+
+### position
+
+Controls where the inline lane appears relative to worker lanes.
+
+- `"first"`: inline lane is lane 0.
+- `"last"` (default): inline lane is added after worker lanes.
+
+This matters when you use a `balancer` that depends on lane ordering (for
+example round-robin).
+
+### batchSize
+
+Limits how many inline tasks are processed per event-loop tick.
+
+- Lower values improve responsiveness (less time spent inside the inline lane).
+- Higher values can improve throughput, but may starve the event loop if tasks
+  are expensive.
+
+If not set, it defaults to `1` when the inliner is enabled.
+
+## Behavior Notes
+
+- Promise inputs are supported: if you pass a promise as an argument, it’s
+  resolved before the task function runs (rejections propagate to the caller).
+- Task timeouts are respected in the inline lane (same `task({ timeout })`
+  behavior as worker execution).
+- `send()` triggers all lanes, including the inliner, which is useful when you
+  enqueue a batch and want to start processing immediately.
+
+## Examples
+
+### Prioritize inline lane
+
+```ts
+const { call, send, shutdown } = createPool({
+  threads: 1,
+  inliner: { position: "first", batchSize: 8 },
+  balancer: "robinRound",
+})({ add });
+```
+
+### Latency-friendly batch
+
+```ts
+const { call, send } = createPool({
+  threads: 2,
+  inliner: { position: "last", batchSize: 1 },
+})({ add });
+
+const jobs = Array.from({ length: 1_000 }, () => call.add([1, 2]));
+send();
+await Promise.all(jobs);
+```
+
