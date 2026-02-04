@@ -1,17 +1,20 @@
-import { isMain, task } from "@vixeny/knitting";
+import { createPool, isMain, task } from "@vixeny/knitting";
+
+export const hello = task({
+  f: () => "hello ",
+});
 
 export const world = task({
-  f: (args: string) => args + " world",
-}).createPool({
-  threads: 2,
+  f: (prefix: string) => `${prefix}world!`,
+});
+
+const { call, shutdown } = createPool({ threads: 2 })({
+  hello,
+  world,
 });
 
 if (isMain) {
-  Promise.all(
-    Array.from({
-      length: 4,
-    }).map(() => world.call("hello")),
-  )
-    .then(console.log)
-    .finally(world.shutdown);
+  Promise.all(Array.from({ length: 5 }, () => call.world(call.hello())))
+    .then((results) => console.log(results.join(" ")))
+    .finally(shutdown);
 }

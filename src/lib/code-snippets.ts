@@ -2,7 +2,8 @@ type CodeMap = Record<string, string>;
 
 const codeFiles = import.meta.glob("/src/assets/code/**/*", {
   eager: true,
-  as: "raw",
+  query: "?raw",
+  import: "default",
 }) as CodeMap;
 
 const normalizePath = (path: string): string => {

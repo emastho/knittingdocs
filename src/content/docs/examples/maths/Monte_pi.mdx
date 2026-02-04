@@ -1,0 +1,216 @@
+---
+title: Monte Carlo pi
+description: "Estimate π with parallel Monte Carlo"
+hero:
+  title: 'Parallel Monte Carlo π'
+sidebar:
+  order: 2
+
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+
+export const run = getCode("maths/monte_carlo/pi.ts");
+export const pi_chunk = getCode("maths/monte_carlo/montecarlo_pi.ts");
+
+## What is this about
+
+This example estimates **π (pi)** using a classic **Monte Carlo dartboard** idea, and uses Knitting to run the work across threads.
+
+We throw lots of random points into a square and count how many land inside the unit circle:
+
+* Points are uniform in $$[-1,1]\times[-1,1]$$
+* A point is “inside” if $$x^2 + y^2 \le 1$$
+
+Because areas scale nicely, we get:
+$$
+\pi \approx 4 \cdot \frac{\text{inside}}{\text{total}}
+$$
+
+The fun part: every point is independent, so it’s **embarrassingly parallel**.
+
+## What happens in this example
+
+1. The host creates a **pool of workers**.
+2. The host divides the total sample count into **chunks**.
+3. For each chunk, the host calls the worker task `piChunk(seed, samples)`.
+4. Each worker runs a tight inner loop:
+
+   * generate `(x, y)` with a fast deterministic RNG
+   * count how many fall inside the unit circle
+5. Each chunk returns a tiny summary: `{ inside, samples }`.
+6. The host aggregates chunk results and prints the final π estimate (plus a rough error scale).
+
+This structure mirrors real scientific workloads:
+
+* **embarrassingly parallel**: each chunk can run independently
+* **reduce step**: results are combined at the end
+
+## Commands
+
+:::info
+Bun
+```bash
+src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
+```
+Deno
+```bash
+deno run -A src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
+```
+
+Node
+```bash
+npx tsx src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
+```
+:::
+
+## Code
+<Tabs>
+  <TabItem label="pi.ts">
+    <Code code={run} lang="ts" title={"pi.ts"} />
+  </TabItem>
+  <TabItem label="montecarlo_pi.ts">
+    <Code code={pi_chunk} lang="ts" title={"montecarlo_pi.ts"} />
+  </TabItem>
+</Tabs>
+
+## What is this good for
+
+Monte Carlo parallelization is a great fit for problems where:
+
+* experiments are independent
+* you want better accuracy by increasing sample count
+* the model is expensive or high-dimensional
+
+Common uses:
+
+* **Numerical integration** (estimate integrals you can’t solve analytically)
+* **Uncertainty propagation** (how noisy inputs affect outputs)
+* **Risk estimation** (finance, reliability engineering)
+* **Statistical physics** (random walks, Ising models, diffusion)
+* **Computer graphics** (path tracing / light transport approximations)
+* **Optimization** (randomized search / sampling-based heuristics)
+
+If you can phrase your problem as “run many trials and combine results,” Knitting can usually help.
+
+---
+
+## Scientific background you should know
+
+### Monte Carlo in one sentence
+
+Monte Carlo approximates an expected value by averaging outcomes from randomized trials:
+$$
+\mathbb{E}[X] \approx \frac{1}{N}\sum_{i=1}^{N} X_i
+$$
+
+### Why it works
+
+As $$N$$ grows, the estimate converges by the **Law of Large Numbers**.
+
+### Error behavior
+
+Monte Carlo error typically shrinks like:
+$$
+\text{error} \propto \frac{1}{\sqrt{N}}
+$$
+
+This is why doubling accuracy is expensive: to reduce error by 10×, you often need ~100× more samples.
+
+### Reproducibility matters
+
+Scientific simulations need to be repeatable. That’s why this example uses deterministic seeds:
+
+* one base seed per run (so you can reproduce a result)
+* different per-chunk seeds (so chunks don’t reuse the same random stream)
+
+---
+
+## How parallelization is done here
+
+The simulation is split into **chunks**:
+
+* Each chunk returns partial statistics:
+
+  * `inside`
+  * `samples`
+
+The host then combines chunk outputs. This is a standard pattern:
+
+* **map**: compute chunk stats
+* **reduce**: aggregate stats
+
+Key idea: send back **small summaries**, not giant arrays. Less copying, less overhead, more speed.
+
+---
+
+## Lessons on using the scripts
+
+### 1) Choose chunk sizes that make sense
+
+Each task should do enough work to justify dispatch overhead.
+
+Rule of thumb:
+
+* If tasks are too small, overhead dominates → slower than single-threaded
+* If tasks are too big, you reduce load balancing and responsiveness
+
+Start with chunk sizes like:
+
+* `100k` to `5M` iterations per job (depends on your loop cost)
+
+### 2) Keep the inner loop “boringly tight”
+
+Avoid allocations and avoid calling expensive RNG APIs in your hot path. This example uses a tiny deterministic RNG (xorshift32) for speed.
+
+### 3) Seed carefully
+
+Use:
+
+* one base seed (so a run is reproducible)
+* different per-chunk seeds (so chunks don’t share the same random stream)
+
+This avoids accidental correlation between chunks.
+
+### 4) Validate results (don’t trust vibes)
+
+When teaching or benchmarking:
+
+* recompute an output on the host
+* validate invariants (counts non-negative, totals match)
+* check that results stay stable if you fix seeds
+
+---
+
+## Performance notes and what to look for
+
+### When you should see speedups
+
+* simulation loop is CPU-heavy
+* minimal allocation inside the loop
+* chunks are large enough
+* you have multiple physical cores
+
+### When you might not
+
+* you have tiny tasks
+* your loop spends time in IO or awaits
+* memory bandwidth is the bottleneck
+* your chunk result is huge and expensive to transfer
+
+### What “good behavior” looks like
+
+* throughput increases with more threads (until cores saturate)
+* p99 latency is stable
+* results are reproducible under fixed seeds
+
+---
+
+## Suggested exercises
+
+1. Increase `--samples` and watch how the estimate stabilizes.
+2. Try different `--chunk` sizes and measure throughput.
+3. Fix the seed base and confirm the output is identical across runs.
+4. Modify the worker to also return timing per chunk and plot a histogram.

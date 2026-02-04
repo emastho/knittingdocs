@@ -1,0 +1,249 @@
+---
+title: TSP (GSA)
+description: "Parallel restarts for a gravity-inspired TSP solver"
+hero:
+  title: 'TSP via Gravity Search (GSA) + 2-opt'
+sidebar:
+  order: 4
+
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+
+export const run = getCode("maths/gravity/run_tsp.ts");
+export const tsp_gsa = getCode("maths/gravity/tsp_gsa.ts");
+
+## What is this about
+
+This example tackles the **Traveling Salesman Problem (TSP)**, a classic **NP-hard** optimization problem:
+
+> Given **N cities** and distances between them, find the **shortest possible tour** that visits each city exactly once and returns to the start.
+
+We use Knitting to run many **parallel heuristic searches** (restarts) and keep the best result. This is not an exact solver, it’s a **high-throughput approximation** designed to show how well Knitting handles heavy compute workloads.
+
+---
+
+## What happens in this example
+
+1. The host generates (or seeds) a set of cities and a distance matrix.
+2. The host spawns a Knitting worker pool and launches many **independent solver runs** (“restarts”).
+3. Each worker runs a **gravity-inspired search** to produce a candidate tour.
+4. The worker applies a **local improvement step** (2-opt) to sharpen the tour.
+5. Each worker returns:
+
+   * `bestLen`: the tour length
+   * `bestTour`: a permutation of city indices
+6. The host selects the global best tour, validates it, and recomputes its length for correctness.
+
+## Commands
+
+:::info
+Bun
+```bash
+src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
+```
+Deno
+```bash
+deno run -A src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
+```
+
+Node
+```bash
+npx tsx src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
+```
+:::
+
+## Code
+<Tabs>
+  <TabItem label="run_tsp.ts">
+    <Code code={run} lang="ts" title={"run_tsp.ts"} />
+  </TabItem>
+  <TabItem label="tsp_gsa.ts">
+    <Code code={tsp_gsa} lang="ts" title={"tsp_gsa.ts"} />
+  </TabItem>
+</Tabs>
+
+---
+
+## What is this good for
+
+This example is useful for learning and benchmarking:
+
+* **NP-hard optimization**: how heuristics approximate solutions when exact methods are too expensive
+* **Parallel restarts**: a practical strategy for metaheuristics (often yields better solutions than longer single runs)
+* **High-throughput compute**: Knitting’s worker scheduling + batching (`call` + `send()`)
+* **Verification discipline**: validating permutations and recomputing lengths to avoid silent corruption
+
+Real-world analogs of TSP appear in:
+
+* delivery routing and logistics
+* manufacturing toolpath optimization
+* PCB drilling / CNC routing
+* robotics path planning (simplified)
+* scheduling and sequencing problems
+
+---
+
+## Scientific background
+
+### Why TSP is NP-hard
+
+The number of possible tours grows factorially:
+$$
+\text{tours} \approx (N-1)!
+$$
+Even modest N becomes astronomically large, so exact search becomes impractical.
+
+### Why heuristics work in practice
+
+Heuristic solvers don’t guarantee optimality, but they often find very good solutions by combining:
+
+* **global exploration** (metaheuristics, randomness, population search)
+* **local exploitation** (local search like 2-opt / 3-opt)
+
+### Key idea: parallel restarts
+
+A single heuristic run can get stuck in a local minimum. Running many independent trials in parallel increases the chance that at least one run finds a better region of the search space.
+
+This example uses Knitting to treat each restart like an independent experiment:
+
+* embarrassingly parallel
+* minimal communication overhead
+* easy aggregation (pick best)
+
+---
+
+## How the algorithm works
+
+### Representation
+
+TSP requires a **permutation** of cities. We represent candidate tours using **random keys**:
+
+* each agent stores a real-valued vector $$(X \in \mathbb{R}^N)$$
+* sorting the keys produces the permutation
+* gravity updates the real vector
+* re-sorting gives the updated tour
+
+This makes “continuous” gravity-like motion compatible with a discrete permutation problem.
+
+### Global search: gravity-inspired population search
+
+Each agent has a “mass” proportional to its quality:
+
+* better tours ⇒ higher mass
+* agents attract each other like gravity
+* attraction gradually pulls the population toward better solutions
+
+This provides exploration + exploitation without enumerating permutations directly.
+
+### Local refinement: 2-opt
+
+After global search produces a best tour, we apply **2-opt**:
+
+* pick two edges
+* reverse a segment if it shortens the tour
+* repeat until no improvement
+
+2-opt is fast and usually provides large gains.
+
+---
+
+## How Knitting is used here
+
+### Work decomposition
+
+Each restart is one job:
+
+* same `worldSeed` (same cities)
+* a different per-restart seed (different search trajectory)
+
+This maps well to Knitting:
+
+* restart jobs are independent
+* results are small: `{ bestLen, bestTour }`
+* host only needs to pick the best
+
+### Why batching matters
+
+Instead of dispatching restarts one-by-one, we:
+
+* enqueue many calls via `call`
+* then call `send()` once
+
+This reduces scheduling overhead and improves throughput.
+
+---
+
+## Correctness checks included
+
+This example includes verification steps so results can be trusted:
+
+### 1) Tour validation
+
+We confirm:
+
+* tour length is N
+* all entries are integers
+* no duplicates
+* all cities appear exactly once
+
+### 2) Length recomputation
+
+We recompute the tour length on the host using the same distance matrix.
+This prevents bugs like:
+
+* delta-update drift in local search
+* corrupted permutations
+* mismatched city generation
+
+### 3) Random sampling check (optional)
+
+We can validate a randomly selected run from the results list (not just the best), and compare against a purely random tour baseline to ensure the solver is beating noise.
+
+---
+
+## Lessons for students and other AIs
+
+* NP-hard problems don’t “fail”, they *scale into difficulty*. Heuristics are how we cope.
+* Parallelism is not magic: the best gains come from problems that are naturally decomposable.
+* Verification is part of science: always validate invariants and recompute critical metrics.
+* Local search (2-opt) is often the difference between “random” and “competitive”.
+
+---
+
+## How to run and tune
+
+### Main knobs
+
+* `cities` (N): increases difficulty sharply
+* `restarts`: increases probability of finding a better tour
+* `iters`: improves a single run’s quality (but costs more)
+* `pop`: increases exploration (but costs more)
+
+### Practical tuning advice
+
+* Start small: `cities=32`, `restarts=threads*4`, `iters=200`
+* Increase quality via restarts first (cheap parallel wins)
+* Increase iters/pop when you want deeper exploration
+
+---
+
+## Suggested extensions
+
+If you want to go “more advanced”:
+
+* replace 2-opt with 3-opt or Lin–Kernighan style moves
+* add candidate edge lists (nearest neighbors) for faster local search
+* implement island model (multiple populations exchanging best tours)
+* measure solution quality vs runtime and plot scaling across threads
+
+---
+
+## Suggested exercises
+
+1. Compare `--restarts` vs `--iters`: which improves quality faster per second?
+2. Increase `--cities` and watch how quickly the search becomes “spiky”.
+3. Lower `--pop` to 2–3 and see how much worse it gets (and how much faster).
+4. Swap the city distance to Manhattan distance and compare behavior.

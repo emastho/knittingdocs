@@ -1,31 +1,26 @@
 import { createPool, isMain, task } from "@vixeny/knitting";
 
-export const hello = task({
-  f: () => "hello ",
+export const double = task({
+  f: (n: number) => n * 2,
 });
 
-export const world = task({
-  f: (args: string) => args + " world!",
+export const square = task({
+  f: (n: number) => n * n,
 });
 
-const { call, shutdown } = createPool({
-  threads: 3,
-  inliner: {
-    position: "last"
-  }
-})({
-  hello,
-  world,
-});
+const { call, send, shutdown } = createPool({
+  threads: 2,
+  inliner: { position: "first", batchSize: 2 },
+})({ double, square });
 
 if (isMain) {
-  Promise.all(
-    Array.from({
-      length: 5,
-    }).map(
-      () => call.world(call.hello()),
-    ),
-  )
-    .then(console.log)
+  const jobs = Array.from({ length: 5 }, (_, i) => i + 1).map(async (n) => {
+    const d = await call.double(n);
+    return call.square(d);
+  });
+
+  send();
+  Promise.all(jobs)
+    .then((results) => console.log(results))
     .finally(shutdown);
 }

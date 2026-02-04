@@ -1,0 +1,139 @@
+---
+title: React SSR parsing
+description: "Parse payloads and render HTML in worker threads"
+hero:
+  title: 'Parsing + SSR in workers'
+sidebar:
+  order: 1
+  
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/react_ssr/run_ssr.ts");
+export const render_user_card = getCode("data_transforms/react_ssr/render_user_card.tsx");
+
+## What is this about
+
+“Data transforms” usually means: take some input bytes, **parse** them, **validate** them, then **turn them into something else**.
+
+This example does exactly that, but with a realistic web flavor:
+
+1. The host receives user payloads (we simulate this with JSON strings).
+2. A worker parses + validates the payload.
+3. The worker renders an HTML string using **React SSR** (`renderToString`).
+4. The host sends the HTML to the client (or caches it, compresses it, etc.).
+
+To make the comparison fair, the simulated request payloads are **tiny** (≤ **44 bytes** of JSON). That keeps the “send the work” overhead honest.
+
+It’s not “scientific”, it’s just a clean way to learn the Knitting workflow for workloads like:
+
+* parsing lots of JSON
+* validating inputs
+* generating HTML
+* keeping your main thread responsive while CPU work happens elsewhere
+
+---
+
+## Install
+
+:::info
+Bun
+```bash
+bun add react react-dom
+```
+:::
+
+This page uses Bun for the commands because it runs TypeScript/TSX with very little ceremony. The same architecture works in Node and Deno too — it’s still just “parse → validate → render”, then compare worker mode vs host-only.
+
+## What happens in this example
+
+1. The host creates a pool with `createPool({ threads })`.
+2. The host builds a batch of jobs (each job is one “request payload”).
+3. The host queues jobs with `fastCall.*()` and dispatches once with `send()`.
+4. Each worker runs:
+
+   * `JSON.parse(payload)`
+   * basic validation / defaults
+   * HTML rendering via `react-dom/server`
+5. Workers return `{ html, bytes }`.
+6. The host aggregates stats and prints throughput.
+
+---
+
+## Commands
+
+:::info
+Bun
+```bash
+src/run_ssr.ts --threads 6 --requests 50000 --batch 64 --mode knitting
+```
+Host baseline (no workers)
+```bash
+src/run_ssr.ts --requests 50000 --batch 64 --mode host
+```
+:::
+
+## Code
+<Tabs>
+  <TabItem label="run_ssr.ts">
+    <Code code={run} lang="ts" title={"run_ssr.ts"} />
+  </TabItem>
+  <TabItem label="render_user_card.tsx">
+    <Code code={render_user_card} lang="tsx" title={"render_user_card.tsx"} />
+  </TabItem>
+</Tabs>
+
+---
+
+## Why this is a good “data transform” example
+
+This pattern generalizes nicely:
+
+* **Parsing**: JSON, CSV, logs, protobuf, HTML, markdown…
+* **Validation**: type checks, ranges, defaults, schema enforcement
+* **Transformation**: normalize fields, enrich data, extract features, build tokens…
+* **Rendering / output**: HTML strings, token arrays, compressed buffers, indexes…
+
+If you can break your work into “independent inputs”, Knitting can run those inputs in parallel and keep the main thread from getting stuck.
+
+---
+
+## Practical notes (so you don’t get bitten later)
+
+### Keep worker payloads simple
+
+Send primitives and plain objects/arrays. In SSR workflows, send:
+
+* the parsed data needed to render
+* a template key / component id
+* maybe a small set of feature flags
+
+Don’t try to send live framework objects (React elements, class instances, DB connections).
+
+### JSX / TSX support
+
+The worker uses **TSX** so it can render a real React component. Bun supports `.tsx` directly. (Node and Deno can do the same, but the setup differs.)
+
+### React SSR note
+
+This example uses `renderToString` from `react-dom/server` to keep the output a plain string. For streaming SSR in Bun, the Bun guide uses `renderToReadableStream`.
+
+### Treat HTML like untrusted output until you escape it
+
+If you render from user-provided fields, escape or sanitize them. Avoid `dangerouslySetInnerHTML` unless you fully control the input.
+
+### Batch dispatch is your friend
+
+Queue a bunch of jobs, then dispatch once with `send()` to reduce overhead under load.
+
+---
+
+## Suggested exercises
+
+1. Add gzip compression on the host (render in workers, compress in workers, compare throughput).
+2. Switch to streaming SSR and return a `ReadableStream` for Bun.
+3. Swap JSON for a “log line parser” and return structured events.
+4. Add a tokenization step: return a small list of tokens per payload instead of HTML.

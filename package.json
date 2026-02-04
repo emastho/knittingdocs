@@ -11,8 +11,15 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.34.4",
-    "@vixeny/knitting": "npm:@jsr/vixeny__knitting",
+    "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.2",
     "astro": "^5.6.1",
+    "katex": "^0.16.28",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }
