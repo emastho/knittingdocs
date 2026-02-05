@@ -2,7 +2,7 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { task } from "@vixeny/knitting";
 
-type Args = readonly [payloadJson: string];
+type Args = string;
 type Result = { html: string; bytes: number };
 
 type UserStats = {
@@ -53,10 +53,9 @@ function normalizeUser(payload: unknown): NormalizedUser {
   const bio = typeof obj.bio === "string" ? obj.bio : "";
   const plan = obj.plan === "pro" ? "pro" : "free";
   const location = typeof obj.location === "string" ? obj.location : "Unknown";
-  const joinedAt =
-    typeof obj.joinedAt === "string"
-      ? obj.joinedAt
-      : "2024-05-01";
+  const joinedAt = typeof obj.joinedAt === "string"
+    ? obj.joinedAt
+    : "2024-05-01";
 
   const statsRaw = (obj.stats ?? {}) as Record<string, unknown>;
   const alertsRaw = (obj.alerts ?? {}) as Record<string, unknown>;
@@ -70,10 +69,9 @@ function normalizeUser(payload: unknown): NormalizedUser {
 
   const alerts: UserAlerts = {
     unread: toNumber(alertsRaw.unread, 0),
-    lastLogin:
-      typeof alertsRaw.lastLogin === "string"
-        ? alertsRaw.lastLogin
-        : "2026-01-18",
+    lastLogin: typeof alertsRaw.lastLogin === "string"
+      ? alertsRaw.lastLogin
+      : "2026-01-18",
   };
 
   const tags = toStringArray(obj.tags);
@@ -144,8 +142,7 @@ function UserCard({ user }: { user: NormalizedUser }) {
   const score = engagementScore(user.stats);
   const level = levelForScore(score);
   const joined = formatJoinDate(user.joinedAt);
-  const profileCompleteness =
-    (user.bio ? 30 : 0) +
+  const profileCompleteness = (user.bio ? 30 : 0) +
     (user.location ? 20 : 0) +
     (user.tags.length ? 20 : 0) +
     (user.handle ? 10 : 0) +
@@ -181,7 +178,9 @@ function UserCard({ user }: { user: NormalizedUser }) {
         </div>
         <div className="alerts">
           <span className="pill">{user.alerts.unread} unread</span>
-          <span className="pill subtle">Last login {user.alerts.lastLogin}</span>
+          <span className="pill subtle">
+            Last login {user.alerts.lastLogin}
+          </span>
         </div>
       </header>
 
@@ -212,30 +211,30 @@ function UserCard({ user }: { user: NormalizedUser }) {
       <section className="achievements">
         <h3>Highlights</h3>
         <ul>
-          {achievementBadges.length > 0 ? (
-            achievementBadges.map((badge) => (
-              <li key={badge} className="tag">
-                {badge}
-              </li>
-            ))
-          ) : (
-            <li className="tag muted">Getting started</li>
-          )}
+          {achievementBadges.length > 0
+            ? (
+              achievementBadges.map((badge) => (
+                <li key={badge} className="tag">
+                  {badge}
+                </li>
+              ))
+            )
+            : <li className="tag muted">Getting started</li>}
         </ul>
       </section>
 
       <section className="tags">
         <h3>Interests</h3>
         <ul>
-          {topTags.length > 0 ? (
-            topTags.map((tag) => (
-              <li key={tag} className="tag">
-                {tag}
-              </li>
-            ))
-          ) : (
-            <li className="tag muted">No tags</li>
-          )}
+          {topTags.length > 0
+            ? (
+              topTags.map((tag) => (
+                <li key={tag} className="tag">
+                  {tag}
+                </li>
+              ))
+            )
+            : <li className="tag muted">No tags</li>}
         </ul>
       </section>
 
@@ -258,7 +257,7 @@ export function renderUserCardHost(payloadJson: string): Result {
 }
 
 export const renderUserCard = task<Args, Result>({
-  f: ([payloadJson]) => {
+  f: (payloadJson) => {
     return renderUserCardHost(payloadJson);
   },
 });

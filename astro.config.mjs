@@ -23,22 +23,24 @@ export default defineConfig({
         {
           label: "Getting Started",
           autogenerate: {
-            directory: "start"
-          }
+            directory: "start",
+          },
         },
         {
           label: "Guides",
-          autogenerate: { directory: "guides"}
+          autogenerate: { directory: "guides" },
         },
         {
           label: "Examples",
           collapsed: true,
           autogenerate: { directory: "examples" },
         },
-        { label: "Benchmarks",  
+        {
+          label: "Benchmarks",
           collapsed: true,
-          slug: "benchmarks" , autogenerate: { directory: "benchmarks"} },
- 
+          slug: "benchmarks",
+          autogenerate: { directory: "benchmarks" },
+        },
       ],
     }),
   ],

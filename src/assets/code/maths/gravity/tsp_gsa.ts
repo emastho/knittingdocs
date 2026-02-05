@@ -2,10 +2,10 @@ import { task } from "@vixeny/knitting";
 
 type Args = readonly [
   worldSeed: number, // generates the same city map for all runs
-  runSeed: number,   // controls the optimizer randomness
+  runSeed: number, // controls the optimizer randomness
   nCities: number,
   popSize: number,
-  iters: number
+  iters: number,
 ];
 
 type Result = {
@@ -66,7 +66,12 @@ function tourLen(dist: Float32Array, n: number, tour: Int32Array): number {
   return sum;
 }
 
-function decodeKeysToTour(keys: Float64Array, n: number, scratchIdx: number[], outTour: Int32Array) {
+function decodeKeysToTour(
+  keys: Float64Array,
+  n: number,
+  scratchIdx: number[],
+  outTour: Int32Array,
+) {
   // scratchIdx contains 0..n-1 and is reused
   scratchIdx.sort((a, b) => keys[a] - keys[b]);
   for (let i = 0; i < n; i++) outTour[i] = scratchIdx[i];
@@ -76,7 +81,6 @@ const eps = 1e-12;
 
 function twoOpt(dist: Float32Array, n: number, tour: Int32Array): number {
   let best = tourLen(dist, n, tour);
-
 
   while (true) {
     let improved = false;
@@ -89,7 +93,7 @@ function twoOpt(dist: Float32Array, n: number, tour: Int32Array): number {
         const d = tour[(k + 1) % n];
 
         const before = dist[a * n + b] + dist[c * n + d];
-        const after  = dist[a * n + c] + dist[b * n + d];
+        const after = dist[a * n + c] + dist[b * n + d];
 
         if (after + eps < before) {
           // reverse segment (i+1..k)
@@ -100,7 +104,7 @@ function twoOpt(dist: Float32Array, n: number, tour: Int32Array): number {
           }
 
           // delta update is valid because we restart scanning immediately
-          best += (after - before);
+          best += after - before;
 
           improved = true;
           break outer;
@@ -114,7 +118,6 @@ function twoOpt(dist: Float32Array, n: number, tour: Int32Array): number {
   // Safety: compute the true length once (guaranteed non-negative if dist is)
   return tourLen(dist, n, tour);
 }
-
 
 export const solveTspGsa = task<Args, Result>({
   f: ([worldSeed, runSeed, nCities, popSize, iters]) => {
@@ -135,7 +138,7 @@ export const solveTspGsa = task<Args, Result>({
 
     // Init positions and velocities
     for (let i = 0; i < pop * n; i++) {
-      X[i] = rand01(st);               // [0,1)
+      X[i] = rand01(st); // [0,1)
       V[i] = (rand01(st) - 0.5) * 0.1; // small initial velocity
     }
 
@@ -188,7 +191,7 @@ export const solveTspGsa = task<Args, Result>({
       for (let i = 0; i < pop; i++) mass[i] *= invSumM;
 
       // K-best shrinks over time
-      const K = Math.max(2, ((pop * (1 - t / T)) | 0));
+      const K = Math.max(2, (pop * (1 - t / T)) | 0);
       const G = G0 * Math.exp(-alpha * (t / T));
 
       // Update each agent via gravitational attraction

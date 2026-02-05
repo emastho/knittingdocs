@@ -1,0 +1,27 @@
+---
+import { Aside } from '@astrojs/starlight/components';
+---
+
+<Aside type="tip" title="Don't double-parse">
+  <p>
+    Usually, when you read a value from a <code>Request</code>, it arrives as a raw string payload.
+  </p>
+
+  <p>
+    If you parse it on the host just to <code>JSON.stringify()</code> it to send to a worker, you end up doing extra work:
+  </p>
+
+  <p>
+    <code>Raw string → parse (host) → stringify (host) → (to worker) → parse (worker)</code>
+  </p>
+
+  <p>Better:</p>
+
+  <p>
+    <code>Raw string → (to worker) → parse (worker)</code>
+  </p>
+
+  <p>This applies in the other direction too.</p>
+
+   <p>And remember, validate at worker level! knitting has some extra optmizations for early returns.</p>
+</Aside>

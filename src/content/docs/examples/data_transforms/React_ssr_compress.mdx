@@ -1,0 +1,89 @@
+---
+title: React SSR compression
+description: "Render HTML and compress it in workers or on the host"
+hero:
+  title: 'SSR + compression'
+sidebar:
+  order: 2
+
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/react_ssr_compress/run_ssr_compress.ts");
+export const render_compress = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
+import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
+import WorkRightFastTip from '../../../../components/tips/WorkRightFastTip.astro';
+
+
+## What is this about
+
+This example adds a **compression step** to the React SSR pipeline:
+
+1. Parse JSON payloads.
+2. Normalize/validate.
+3. Render HTML with React SSR.
+4. **Compress** the HTML (brotli).
+
+You can compare **compression on the host** vs **compression in workers**.
+
+---
+
+## Install
+
+:::info
+Bun
+```bash
+bun add react react-dom
+```
+:::
+
+Compression uses the built-in `node:zlib` APIs (no extra packages required).
+
+---
+
+## Commands
+
+:::info
+Bun
+```bash
+src/run_ssr_compress.ts --threads 1 --requests 50000 --mode knitting
+```
+
+Host baseline (no workers)
+```bash
+src/run_ssr_compress.ts --requests 50000 --mode host --compress host 
+```
+:::
+
+---
+
+## What happens in this example
+
+1. The host creates a pool with `createPool({ threads })`.
+2. Each worker parses JSON, normalizes fields, and renders HTML with `renderToString`.
+3. Depending on `--compress`:
+
+   * `worker`: compress in the worker and return byte counts.
+   * `host`: return HTML, compress on the host.
+4. The host aggregates totals and prints throughput + compression ratio.
+
+<DontDoubleParseTip />
+
+
+## Code
+
+<Tabs>
+  <TabItem label="run_ssr_compress.ts">
+    <Code code={run} lang="ts" title={"run_ssr_compress.ts"} />
+  </TabItem>
+  <TabItem label="render_user_card_compressed.tsx">
+    <Code code={render_compress} lang="tsx" title={"render_user_card_compressed.tsx"} />
+  </TabItem>
+</Tabs>
+
+---
+<DontDoubleParseTip />
+

@@ -1,8 +1,8 @@
 ---
-title: React SSR parsing
+title: React SSR 
 description: "Parse payloads and render HTML in worker threads"
 hero:
-  title: 'Parsing + SSR in workers'
+  title: 'React SSR'
 sidebar:
   order: 1
   
@@ -11,6 +11,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../lib/code-snippets';
+import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
+import WorkRightFastTip from '../../../../components/tips/WorkRightFastTip.astro';
 
 export const run = getCode("data_transforms/react_ssr/run_ssr.ts");
 export const render_user_card = getCode("data_transforms/react_ssr/render_user_card.tsx");
@@ -51,24 +53,23 @@ This page uses Bun for the commands because it runs TypeScript/TSX with very lit
 ## What happens in this example
 
 1. The host creates a pool with `createPool({ threads })`.
-2. The host builds a batch of jobs (each job is one “request payload”).
-3. The host queues jobs with `fastCall.*()` and dispatches once with `send()`.
-4. Each worker runs:
-
+2. The host queues jobs with `call.*()`.
+3. Each worker runs:
    * `JSON.parse(payload)`
    * basic validation / defaults
    * HTML rendering via `react-dom/server`
-5. Workers return `{ html, bytes }`.
+5. Workers runs `renderUserCardHost` return `{ html, bytes }`.
 6. The host aggregates stats and prints throughput.
 
----
+<DontDoubleParseTip />
 
 ## Commands
 
 :::info
 Bun
 ```bash
-src/run_ssr.ts --threads 6 --requests 50000 --batch 64 --mode knitting
+src/run_ssr.ts --threads 1 --requests 50000 --batch 64 \
+--mode knitting
 ```
 Host baseline (no workers)
 ```bash
@@ -97,11 +98,19 @@ This pattern generalizes nicely:
 * **Transformation**: normalize fields, enrich data, extract features, build tokens…
 * **Rendering / output**: HTML strings, token arrays, compressed buffers, indexes…
 
-If you can break your work into “independent inputs”, Knitting can run those inputs in parallel and keep the main thread from getting stuck.
 
----
+## Practical notes
 
-## Practical notes (so you don’t get bitten later)
+## What was the fastest way do do it?
+
+As you saw `renderUserCardHost` return `{ html, bytes }` , this means :
+
+  - Two extra object creations and one Stringication.
+
+Now, this is nor a big issue because the object in question was small, 
+don't try to get optimal optimizations until you get something workings.
+
+<WorkRightFastTip />
 
 ### Keep worker payloads simple
 
@@ -124,16 +133,3 @@ This example uses `renderToString` from `react-dom/server` to keep the output a 
 ### Treat HTML like untrusted output until you escape it
 
 If you render from user-provided fields, escape or sanitize them. Avoid `dangerouslySetInnerHTML` unless you fully control the input.
-
-### Batch dispatch is your friend
-
-Queue a bunch of jobs, then dispatch once with `send()` to reduce overhead under load.
-
----
-
-## Suggested exercises
-
-1. Add gzip compression on the host (render in workers, compress in workers, compare throughput).
-2. Switch to streaming SSR and return a `ReadableStream` for Bun.
-3. Swap JSON for a “log line parser” and return structured events.
-4. Add a tokenization step: return a small list of tokens per payload instead of HTML.

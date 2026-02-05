@@ -64,7 +64,9 @@ function splitCounts(total: number, parts: number): number[] {
   return out;
 }
 
-async function scanOneWindow(): Promise<{ hit: string | null; tested: number }> {
+async function scanOneWindow(): Promise<
+  { hit: string | null; tested: number }
+> {
   // We interleave odds across threads: thread i tests start+2i, start+2i+2T, ...
   const stepNum = 2 * THREADS;
 
@@ -76,7 +78,7 @@ async function scanOneWindow(): Promise<{ hit: string | null; tested: number }> 
 
   // For each thread, we run sequential “subtasks” so each thread covers its share of WINDOW.
   // But all threads run in parallel each wave.
-  const subTasksPerThread = perThread.map(c => Math.ceil(c / CHUNK));
+  const subTasksPerThread = perThread.map((c) => Math.ceil(c / CHUNK));
   const maxSubs = Math.max(...subTasksPerThread);
 
   for (let sub = 0; sub < maxSubs; sub++) {
@@ -99,7 +101,7 @@ async function scanOneWindow(): Promise<{ hit: string | null; tested: number }> 
           stepNum,
           offsetNum,
           ROUNDS,
-        ])
+        ]),
       );
 
       tested += count;
@@ -127,7 +129,18 @@ async function scanOneWindow(): Promise<{ hit: string | null; tested: number }> 
 
 async function main() {
   console.log("Prime hunt (probable primes via Miller–Rabin)");
-  console.log("threads:", THREADS, "bits:", BITS, "window:", WINDOW.toLocaleString(), "chunk:", CHUNK.toLocaleString(), "rounds:", ROUNDS);
+  console.log(
+    "threads:",
+    THREADS,
+    "bits:",
+    BITS,
+    "window:",
+    WINDOW.toLocaleString(),
+    "chunk:",
+    CHUNK.toLocaleString(),
+    "rounds:",
+    ROUNDS,
+  );
   console.log("start  :", windowStartOdd.toString());
   console.log("mode   : infinite windows (Ctrl+C to stop)");
 
@@ -141,11 +154,11 @@ async function main() {
 
     if (hit) {
       console.log(
-        `[window ${windowsDone}] +${tested.toLocaleString()} tested (total ${totalTested.toString()}) | HIT: ${hit}`
+        `[window ${windowsDone}] +${tested.toLocaleString()} tested (total ${totalTested.toString()}) | HIT: ${hit}`,
       );
     } else {
       console.log(
-        `[window ${windowsDone}] +${tested.toLocaleString()} tested (total ${totalTested.toString()}) | no hit (Ctrl+C to stop)`
+        `[window ${windowsDone}] +${tested.toLocaleString()} tested (total ${totalTested.toString()}) | no hit (Ctrl+C to stop)`,
       );
     }
 

@@ -1,13 +1,31 @@
 import { createPool, isMain } from "@vixeny/knitting";
 import {
-  intArg,
   renderUserCard,
   renderUserCardHost,
-  strArg,
-} from "./render_user_card.tsx";
+} from "../react_ssr/render_user_card.tsx";
+import { renderUserCardCompressed } from "./render_user_card_compressed.tsx";
+import { brotliCompressSync } from "node:zlib";
+
+function intArg(name: string, fallback: number) {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i !== -1 && i + 1 < process.argv.length) {
+    const v = Number(process.argv[i + 1]);
+    if (Number.isFinite(v) && v > 0) return Math.floor(v);
+  }
+  return fallback;
+}
+
+function strArg(name: string, fallback: string) {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i !== -1 && i + 1 < process.argv.length) {
+    return String(process.argv[i + 1]);
+  }
+  return fallback;
+}
 
 const THREADS = intArg("threads", 1);
-const REQUESTS = intArg("requests", 1000);
+const REQUESTS = intArg("requests", 500);
+
 const MODE = strArg("mode", "knitting");
 
 const TAGS = [
@@ -27,8 +45,6 @@ function pickFrom<T>(arr: T[], index: number): T {
 }
 
 function makePayload(i: number): string {
-  // Pretend this is a user payload arriving over the network.
-  // Use JSON strings here to show the “parse → validate → transform” path.
   const short = i.toString(36);
 
   return JSON.stringify({
@@ -58,46 +74,54 @@ function makePayload(i: number): string {
   });
 }
 
+function compressHtml(html: string) {
+  return brotliCompressSync(html).buffer;
+}
+
 async function main() {
   const pool = createPool({
     threads: THREADS,
-  })({ renderUserCard });
-
+    inliner: {
+      position: "last",
+    },
+  })({ renderUserCard, renderUserCardCompressed });
   const started = performance.now();
-  let finished = 0;
   const payloads = new Array<string>(REQUESTS);
   for (let i = 0; i < REQUESTS; i++) payloads[i] = makePayload(i);
 
   if (MODE === "host") {
-    // Baseline: do all parsing + SSR on the host thread.
     for (let i = 0; i < payloads.length; i++) {
-      renderUserCardHost(payloads[i]!);
-    }
-    finished = performance.now();
-  } else {
-    const jobs: Promise<{ html: string; bytes: number }>[] = [];
+      const res = renderUserCardHost(payloads[i]!);
 
+      compressHtml(res.html);
+    }
+  } else {
+    const jobs: Promise<unknown>[] = [];
     for (let i = 0; i < payloads.length; i++) {
-      jobs.push(pool.call.renderUserCard(payloads[i]));
+      jobs.push(pool.call.renderUserCardCompressed(payloads[i]));
     }
 
     await Promise.all(jobs);
-    finished = performance.now();
   }
 
+  const finished = performance.now();
   const secs = Math.max(1e-9, (finished - started) / 1000);
   const rps = REQUESTS / secs;
 
-  console.log("Worker parsing + SSR-style rendering");
-  console.log("mode      :", MODE);
-  console.log("threads   :", MODE === "host" ? 0 : THREADS);
-  console.log("requests  :", REQUESTS.toLocaleString());
-  console.log("took      :", (finished - started).toFixed(2), "ms");
-  console.log("throughput:", rps.toFixed(0), "req/s");
+  console.log("Worker parsing + SSR + compression");
+  console.log("mode        :", MODE);
+  console.log("threads     :", MODE === "host" ? 0 : THREADS);
+  console.log("requests    :", REQUESTS.toLocaleString());
+  console.log("compress    :", "brotli");
+  console.log("took        :", (finished - started).toFixed(2), "ms");
+  console.log("throughput  :", rps.toFixed(0), "req/s");
 
   pool.shutdown();
 }
 
 if (isMain) {
-  main();
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
 }

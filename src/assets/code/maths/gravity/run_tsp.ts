@@ -140,7 +140,10 @@ async function main() {
   const coords = makeCities(worldSeed, N);
   const dist = makeDistMatrix(coords, N);
 
-  function checkResult(label: string, res: { bestLen: number; bestTour: number[] }) {
+  function checkResult(
+    label: string,
+    res: { bestLen: number; bestTour: number[] },
+  ) {
     validateTour(res.bestTour, N);
     const recomputed = recomputeLen(res.bestTour, dist, N);
     const delta = recomputed - res.bestLen;
@@ -149,7 +152,9 @@ async function main() {
       throw new Error(`${label}: bestLen invalid: ${res.bestLen}`);
     }
     if (Math.abs(delta) > 1e-6) {
-      throw new Error(`${label}: length mismatch (delta=${delta}). Host generator != worker generator?`);
+      throw new Error(
+        `${label}: length mismatch (delta=${delta}). Host generator != worker generator?`,
+      );
     }
 
     return { recomputed, delta };
@@ -188,7 +193,7 @@ async function main() {
   console.log(
     "tour head    :",
     best.bestTour.slice(0, Math.min(16, best.bestTour.length)).join(", "),
-    "..."
+    "...",
   );
 }
 

@@ -15,18 +15,20 @@ const TOTAL_SAMPLES = intArg("samples", 50_000_000_000);
 const CHUNK_SAMPLES = intArg("chunk", 10_000_000);
 const THREADS = intArg("threads", 6);
 
-const { call,  shutdown } = createPool({
+const { call, shutdown } = createPool({
   threads: THREADS,
-  inliner: { 
-    position: "last", 
-    batchSize: 8
+  inliner: {
+    position: "last",
+    batchSize: 8,
   },
   balancer: "firstIdle",
 })({ piChunk });
 
 async function main() {
   const jobCount = Math.ceil(TOTAL_SAMPLES / CHUNK_SAMPLES);
-  const jobs = new Array<Promise<{ inside: number; samples: number }>>(jobCount);
+  const jobs = new Array<Promise<{ inside: number; samples: number }>>(
+    jobCount,
+  );
 
   // Seed base: stable-ish, different each run
   const seedBase = ((Date.now() | 0) ^ 0x9e3779b9) | 0;
@@ -42,9 +44,9 @@ async function main() {
     jobs[i] = call.piChunk([seed, samples]);
   }
 
-  const time = performance.now()
+  const time = performance.now();
   const results = await Promise.all(jobs);
-  const finished = performance.now()
+  const finished = performance.now();
 
   let inside = 0;
   let total = 0;
@@ -63,7 +65,7 @@ async function main() {
   console.log("total samples:", total.toLocaleString());
   console.log("chunk size   :", CHUNK_SAMPLES.toLocaleString());
   console.log("pi           :", pi);
-  console.log("took         :", (finished - time).toFixed(3) , " ms");
+  console.log("took         :", (finished - time).toFixed(3), " ms");
   console.log("rough ±err   :", `~${(approxStdErr * 4).toExponential(2)}`);
 }
 

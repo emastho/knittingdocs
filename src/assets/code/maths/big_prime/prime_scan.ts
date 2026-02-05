@@ -42,7 +42,6 @@ function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
   return r;
 }
 
-  
 const small = [3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
 const bases = [2n, 325n, 9375n, 28178n, 450775n, 9780504n, 1795265022n];
 
@@ -50,7 +49,6 @@ function isProbablePrime(n: bigint, rounds: number): boolean {
   if (n < 2n) return false;
   if (n === 2n || n === 3n) return true;
   if ((n & 1n) === 0n) return false;
-
 
   // quick small-prime filter
   for (const p of small) {
@@ -66,8 +64,7 @@ function isProbablePrime(n: bigint, rounds: number): boolean {
     s++;
   }
 
-
- // good practical bases (still "probable prime" for 65-bit+)
+  // good practical bases (still "probable prime" for 65-bit+)
 
   const rds = rounds | 0;
   for (let i = 0; i < rds; i++) {

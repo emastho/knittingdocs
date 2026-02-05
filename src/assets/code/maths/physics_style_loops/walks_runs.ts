@@ -34,7 +34,16 @@ const { call, send, shutdown } = createPool({
 
 async function main() {
   const jobsCount = Math.ceil(TOTAL_RUNS / RUNS_PER_JOB);
-  const jobs = new Array<Promise<{ escaped: number; totalRuns: number; sumSteps: number; sumSteps2: number }>>(jobsCount);
+  const jobs = new Array<
+    Promise<
+      {
+        escaped: number;
+        totalRuns: number;
+        sumSteps: number;
+        sumSteps2: number;
+      }
+    >
+  >(jobsCount);
 
   const seedBase = ((Date.now() | 0) ^ 0x9e3779b9) | 0;
 

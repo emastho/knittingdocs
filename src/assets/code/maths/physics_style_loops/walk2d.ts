@@ -11,8 +11,8 @@ type Args = readonly [
 type Result = {
   escaped: number;
   totalRuns: number;
-  sumSteps: number;   // sum of steps taken until escape (only for escaped runs)
-  sumSteps2: number;  // sum of steps^2 (only for escaped runs)
+  sumSteps: number; // sum of steps taken until escape (only for escaped runs)
+  sumSteps2: number; // sum of steps^2 (only for escaped runs)
 };
 
 // Fast deterministic RNG (xorshift32)
