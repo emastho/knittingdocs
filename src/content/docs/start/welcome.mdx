@@ -7,8 +7,12 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../lib/code-snippets';
-import nodeBench from '../../../assets/benchmark/md/node_test.md?raw';
-import nodeIpc from '../../../assets/benchmark/runtime/node/node_ipc.png';
+import nodeBench from '../../../assets/results/node_ipc.md?raw';
+import nodeIpc from '../../../assets/charts/node_ipc.png';
+import denoBench from '../../../assets/results/deno_ipc.md?raw';
+import denoIpc from '../../../assets/charts/deno_ipc.png';
+import bunBench from '../../../assets/results/bun_ipc.md?raw';
+import bunIpc from '../../../assets/charts/bun_ipc.png';
 
 export const hello = getCode('hello_world.ts');
 
@@ -64,7 +68,7 @@ Knitting exists to make `“parallelize this”` practical again:
 The result is a worker workflow that just works, and can be **4x to 200x faster** than message-based IPC approaches for small-to-medium, high-frequency tasks.
 
 <Tabs>
-  <TabItem label="V8">
+  <TabItem label="Node">
     <img
       src={nodeIpc.src}
       width={nodeIpc.width}
@@ -73,8 +77,32 @@ The result is a worker workflow that just works, and can be **4x to 200x faster*
       loading="lazy"
     />
   </TabItem>
-  <TabItem label="Data">
+  <TabItem label="Node_data">
     <Code code={nodeBench} lang="md" title={"node_test.md"} />
+  </TabItem>
+    <TabItem label="Deno">
+    <img
+      src={denoIpc.src}
+      width={denoIpc.width}
+      height={denoIpc.height}
+      alt="Deno IPC benchmark"
+      loading="lazy"
+    />
+  </TabItem>
+  <TabItem label="Deno_data">
+    <Code code={denoBench} lang="md" title={"deno_test.md"} />
+  </TabItem>
+    <TabItem label="Bun">
+    <img
+      src={bunIpc.src}
+      width={bunIpc.width}
+      height={bunIpc.height}
+      alt="Bun IPC benchmark"
+      loading="lazy"
+    />
+  </TabItem>
+  <TabItem label="Bun_data">
+    <Code code={bunBench} lang="md" title={"bun_test.md"} />
   </TabItem>
 </Tabs>
 

@@ -1,0 +1,124 @@
+---
+title: Benchmarks
+description: Overall benchmark overview across Node, Deno, and Bun.
+sidebar:
+  order: 1
+---
+
+import ipcCombined from "../../../assets/charts/ipc_combined.png";
+import latencyLine from "../../../assets/charts/latency_line.png";
+import typesCombinedCount1 from "../../../assets/charts/types_combined_count1.png";
+import typesCombinedCount100 from "../../../assets/charts/types_combined_count100.png";
+import withloadSpeedup from "../../../assets/charts/withload_speedup.png";
+import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
+
+This page is the high-level benchmark summary across Node, Deno, and Bun.
+For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
+
+## Run the suite
+
+```bash
+./run.sh
+```
+
+Results are written into `results/`.
+
+## JSON output
+
+```bash
+./run.sh --json
+```
+
+JSON output is useful for plotting scripts under `graphs/`.
+
+## What these benchmarks measure
+
+- IPC overhead between main and worker threads
+- End-to-end message latency as batch size increases
+- Payload sensitivity (primitive, structured, and binary types)
+- Heavy-task scaling and parallel efficiency under CPU-intensive workloads
+
+## IPC (combined)
+
+The IPC combined chart compares Knitting against worker `postMessage`, websocket, and HTTP across runtimes.
+
+- At one message, Knitting is typically about `3.5x-6x` faster than worker `postMessage`.
+- Against websocket, Knitting is usually around `3.5x-15x` faster.
+- Against HTTP, Knitting is usually around `10x-57x` faster for the same benchmark shape.
+
+<img
+  src={ipcCombined.src}
+  width={ipcCombined.width}
+  height={ipcCombined.height}
+  alt="Combined IPC benchmark chart across runtimes"
+  loading="lazy"
+/>
+
+## Latency (line)
+
+This chart shows how latency changes as the number of messages per iteration increases.
+
+- Across runtimes and batch sizes, Knitting is generally around `3x-45x` faster than worker baselines.
+- The advantage is strongest in small-to-medium batch ranges where message overhead dominates.
+- At very large batches, absolute latency rises for all approaches, but Knitting still keeps lower overhead.
+
+<img
+  src={latencyLine.src}
+  width={latencyLine.width}
+  height={latencyLine.height}
+  alt="Latency line chart across runtimes"
+  loading="lazy"
+/>
+
+## Payload Types (combined)
+
+These two charts compare type-dependent overhead at count `1` and count `100`.
+
+- Count `1`: Knitting remains low-latency even for structured and binary payloads.
+- Count `100`: batching increases throughput while preserving strong relative performance.
+- Heavier payload classes (e.g. large objects/arrays, errors) cost more in every runtime, but Knitting keeps the best profile overall.
+
+<img
+  src={typesCombinedCount1.src}
+  width={typesCombinedCount1.width}
+  height={typesCombinedCount1.height}
+  alt="Combined types benchmark chart for count 1"
+  loading="lazy"
+/>
+
+<img
+  src={typesCombinedCount100.src}
+  width={typesCombinedCount100.width}
+  height={typesCombinedCount100.height}
+  alt="Combined types benchmark chart for count 100"
+  loading="lazy"
+/>
+
+## Heavy Load: Speedup and Efficiency
+
+Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute work across extra threads.
+
+- Speedup grows steadily as threads are added, reaching roughly `3.5x-3.8x` at `+4` extra threads in these runs.
+- Efficiency remains strong under contention, staying around `~70-77%` at higher thread counts.
+- Bun and Deno show slightly stronger scaling than Node in this specific heavy-load scenario.
+
+<img
+  src={withloadSpeedup.src}
+  width={withloadSpeedup.width}
+  height={withloadSpeedup.height}
+  alt="Heavy-load speedup chart across runtimes"
+  loading="lazy"
+/>
+
+<img
+  src={withloadEfficiency.src}
+  width={withloadEfficiency.width}
+  height={withloadEfficiency.height}
+  alt="Heavy-load efficiency chart across runtimes"
+  loading="lazy"
+/>
+
+## Where to read details
+
+- Use this page for cross-runtime trends.
+- Use `benchmarks/node`, `benchmarks/deno`, and `benchmarks/bun` for raw tables and per-runtime interpretation.

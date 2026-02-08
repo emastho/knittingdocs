@@ -6,24 +6,25 @@ hero:
   tagline: "Real nanosecond responses for JavaScript."
   actions:
     - text: Quick Start
-      link: /start/welcome
+      link: /start/welcome/
     - text: Benchmarks
-      link: /benchmarks/
-      variant: minimal
+      link: /benchmarks/introduction/
 ---
 
 import AshesBackground from "../../components/AshesBackground.astro";
 import { Card, CardGrid } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import nodeIpc from "../../assets/charts/node_ipc.png";
+import denoIpc from "../../assets/charts/deno_ipc.png";
+import bunIpc from "../../assets/charts/bun_ipc.png";
 
 <AshesBackground />
 
-Knitting is a IPC protocol for Node.js, Deno, and Bun. Define tasks
-once, then call them from the main thread with a small, typed API.
-
-
+Knitting is a shared-memory IPC runtime for Node.js, Deno, and Bun.
+Define tasks once, then call them from the main thread with a small, typed API.
 
 <CardGrid stagger>
-  <Card title="Multi threading in 10 lines" icon="rocket">
+  <Card title="Multi threading in 10 lines">
     ```ts
     import { isMain, task } from "@vixeny/knitting";
 
@@ -33,12 +34,108 @@ once, then call them from the main thread with a small, typed API.
       threads: 2,
     });
 
-    if (isMain) world.call("hello")
-      .then(console.log).finally(world.shutdown);
+    if (isMain) {
+      world.call("hello")
+        .then(console.log)
+        .finally(world.shutdown);
+    }
     ```
   </Card>
-  <Card title="Start here" icon="rocket">
-    Read the quick start and spin up your first pool.
+
+  <Card title="Start here">
+    Build your first worker pool in minutes, then scale into guides, examples, and benchmarks.
+
+    - [Installation](/start/installation/)
+    - [Quick Start](/start/quick-start/)
+    - [Benchmarks](/benchmarks/introduction/)
   </Card>
 
+  <Card title="IPC slides" >
+    <Tabs>
+      <TabItem label="Node">
+        <img
+          src={nodeIpc.src}
+          width={nodeIpc.width}
+          height={nodeIpc.height}
+          alt="Node IPC benchmark"
+          loading="lazy"
+        />
+      </TabItem>
+      <TabItem label="Deno">
+        <img
+          src={denoIpc.src}
+          width={denoIpc.width}
+          height={denoIpc.height}
+          alt="Deno IPC benchmark"
+          loading="lazy"
+        />
+      </TabItem>
+      <TabItem label="Bun">
+        <img
+          src={bunIpc.src}
+          width={bunIpc.width}
+          height={bunIpc.height}
+          alt="Bun IPC benchmark"
+          loading="lazy"
+        />
+      </TabItem>
+    </Tabs>
+  </Card>
 </CardGrid>
+
+## Why Knitting
+
+- Function-call workflow instead of manual message routing.
+- Lower IPC overhead for high-frequency workloads.
+- Same model across Node, Deno, and Bun.
+- Explicit control over batching, inlining, and shutdown behavior.
+
+## Benchmarking Introduction
+
+Knitting benchmarks are designed to answer practical questions, not just produce one score.
+They compare transports and runtimes under the same benchmark shapes so you can decide where Knitting helps most.
+
+- IPC cost: round-trip overhead between main and worker threads.
+- Latency growth: how performance changes as message count increases.
+- Payload behavior: primitives, JSON/collections, typed arrays, and error-like objects.
+- Heavy-load scaling: speedup and efficiency as worker count increases.
+
+## Benchmark Snapshot
+
+Current docs benchmarks show consistent wins for Knitting IPC overhead:
+
+- Node IPC (`1` message): about `6x` faster than worker `postMessage`.
+- Deno IPC (`25` messages): about `9.5x` faster than worker `postMessage`.
+- Bun IPC (`50` messages): about `7x` faster than worker `postMessage`.
+- Heavy CPU workloads (`+4` threads): around `3.5x` to `3.8x` speedup.
+
+## Documentation Map
+
+1. Start with [Installation](/start/installation/) and [Quick Start](/start/quick-start/).
+2. Use [Guides](/guides/defining-tasks/) for production patterns.
+3. Explore [Examples](/examples/hello/) for real workloads.
+4. Compare runtimes in [Benchmarks](/benchmarks/introduction/).
+
+## Project Scope
+
+Knitting focuses on local multi-thread execution with shared-memory IPC.
+It is not a distributed scheduler or cluster manager.
+
+## How To Run Benchmarks
+
+The benchmark harness lives in the main runtime repository (`mimiMonads/knitting`), while this docs project publishes the generated charts and result tables.
+
+1. Clone the runtime repo and enter it.
+2. Run the full suite:
+
+```bash
+./run.sh
+```
+
+3. Optional: generate JSON output for plotting:
+
+```bash
+./run.sh --json
+```
+
+By default, markdown results are written to `results/` and JSON results to `results-json/`.

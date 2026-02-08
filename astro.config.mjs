@@ -38,7 +38,6 @@ export default defineConfig({
         {
           label: "Benchmarks",
           collapsed: true,
-          slug: "benchmarks",
           autogenerate: { directory: "benchmarks" },
         },
       ],

@@ -24,7 +24,7 @@ function strArg(name: string, fallback: string) {
 }
 
 const THREADS = intArg("threads", 1);
-const REQUESTS = intArg("requests", 500);
+const REQUESTS = intArg("requests", 5000);
 
 const MODE = strArg("mode", "knitting");
 
@@ -83,7 +83,8 @@ async function main() {
     threads: THREADS,
     inliner: {
       position: "last",
-    },
+      batchSize: 8
+    }
   })({ renderUserCard, renderUserCardCompressed });
   const started = performance.now();
   const payloads = new Array<string>(REQUESTS);
