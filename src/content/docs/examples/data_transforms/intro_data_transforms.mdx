@@ -1,0 +1,31 @@
+---
+title: Data transforms
+description: Topic carpet for parsing, validation, rendering, and output examples.
+sidebar:
+  order: 0
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+This section groups data-transform examples by workflow stage so you can find
+the right pattern quickly.
+
+<CardGrid>
+  <Card title="Validation & parsing">
+    Parse incoming strings, validate shape and types, then return safe output.
+    Start with [Schema validate](/examples/data_transforms/validation/Schema_validate)
+    or [Prompt token budgeting](/examples/data_transforms/validation/Prompt_token_budgeting).
+  </Card>
+  <Card title="Rendering & output">
+    Convert validated input into final output formats.
+    Try [React SSR](/examples/data_transforms/rendering_output/React_ssr),
+    [React SSR compression](/examples/data_transforms/rendering_output/React_ssr_compress),
+    or [Markdown to HTML](/examples/data_transforms/rendering_output/Markdown_to_html).
+  </Card>
+</CardGrid>
+
+## Why this carpet exists
+
+- Validation examples focus on correctness and typed outputs.
+- Rendering examples focus on throughput and output size.
+- Every example includes a host-only baseline so performance comparisons stay honest.

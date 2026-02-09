@@ -1,0 +1,83 @@
+---
+title: Schema validate
+description: Parse JSON strings, validate with Zod, and return typed results.
+hero:
+  title: 'Validation + parsing'
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/schema_validate/run_schema_validate.ts");
+export const schema_validate = getCode("data_transforms/schema_validate/parse_validate.ts");
+
+## What is this about
+
+This example takes a **string payload**, parses it as JSON, validates it with a
+schema, and returns either:
+
+- a typed object, or
+- a list of validation issues.
+
+It follows a common API path:
+`string -> parse -> validate -> return`.
+
+## Install
+
+:::info
+Bun
+```bash
+bun add zod
+```
+:::
+
+## Commands
+
+:::info
+Bun
+```bash
+src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+```
+Deno
+```bash
+deno run -A src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+```
+
+Node
+```bash
+npx tsx src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+```
+
+Host baseline (no workers)
+```bash
+src/run_schema_validate.ts --requests 50000 --invalid 15 --mode host
+```
+:::
+
+## What happens in this example
+
+1. The host generates JSON strings (some valid, some intentionally invalid).
+2. Each job parses the string.
+3. Zod validates the parsed object against `UserSchema`.
+4. The task returns `{ ok: true, value }` or `{ ok: false, issues }`.
+5. The host aggregates valid/invalid counts and prints sample issues.
+
+## Code
+
+<Tabs>
+  <TabItem label="run_schema_validate.ts">
+    <Code code={run} lang="ts" title={"run_schema_validate.ts"} />
+  </TabItem>
+  <TabItem label="parse_validate.ts">
+    <Code code={schema_validate} lang="ts" title={"parse_validate.ts"} />
+  </TabItem>
+</Tabs>
+
+## Why this pattern matters
+
+- You get deterministic validation behavior across host and workers.
+- Schema errors are explicit and easy to aggregate for reporting.
+- Typed outputs reduce downstream checks in render or transform stages.

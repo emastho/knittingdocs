@@ -15,21 +15,6 @@ import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
 This page is the high-level benchmark summary across Node, Deno, and Bun.
 For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
 
-## Run the suite
-
-```bash
-./run.sh
-```
-
-Results are written into `results/`.
-
-## JSON output
-
-```bash
-./run.sh --json
-```
-
-JSON output is useful for plotting scripts under `graphs/`.
 
 ## What these benchmarks measure
 
@@ -122,3 +107,19 @@ Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute w
 
 - Use this page for cross-runtime trends.
 - Use `benchmarks/node`, `benchmarks/deno`, and `benchmarks/bun` for raw tables and per-runtime interpretation.
+
+## Run the suite
+
+```bash
+./run.sh
+```
+
+Results are written into `results/`.
+
+## JSON output
+
+```bash
+./run.sh --json
+```
+
+JSON output is useful for plotting scripts under `graphs/`.

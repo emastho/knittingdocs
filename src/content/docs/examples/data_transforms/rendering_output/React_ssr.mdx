@@ -1,36 +1,38 @@
 ---
-title: React SSR 
+title: React SSR
 description: "Parse payloads and render HTML in worker threads"
 hero:
   title: 'React SSR'
 sidebar:
   order: 1
-  
+
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../lib/code-snippets';
-import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
-import WorkRightFastTip from '../../../../components/tips/WorkRightFastTip.astro';
+import { getCode } from '../../../../../lib/code-snippets';
+import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
+import WorkRightFastTip from '../../../../../components/tips/WorkRightFastTip.astro';
 
 export const run = getCode("data_transforms/react_ssr/run_ssr.ts");
 export const render_user_card = getCode("data_transforms/react_ssr/render_user_card.tsx");
 
 ## What is this about
 
-“Data transforms” usually means: take some input bytes, **parse** them, **validate** them, then **turn them into something else**.
+Most data-transform pipelines follow the same shape: parse input, validate it,
+then produce output.
 
-This example does exactly that, but with a realistic web flavor:
+This example uses a realistic web path:
 
-1. The host receives user payloads (we simulate this with JSON strings).
-2. A worker parses + validates the payload.
+1. The host receives user payloads (simulated with JSON strings).
+2. A worker parses and validates the payload.
 3. The worker renders an HTML string using **React SSR** (`renderToString`).
 4. The host sends the HTML to the client (or caches it, compresses it, etc.).
 
-To make the comparison fair, the simulated request payloads are **tiny** (≤ **44 bytes** of JSON). That keeps the “send the work” overhead honest.
+To keep the comparison fair, payloads are intentionally tiny (&lt;= 44 bytes of
+JSON). That makes transfer overhead visible.
 
-It’s not “scientific”, it’s just a clean way to learn the Knitting workflow for workloads like:
+This is a practical starting point for workloads like:
 
 * parsing lots of JSON
 * validating inputs
@@ -48,7 +50,8 @@ bun add react react-dom
 ```
 :::
 
-This page uses Bun for the commands because it runs TypeScript/TSX with very little ceremony. The same architecture works in Node and Deno too — it’s still just “parse → validate → render”, then compare worker mode vs host-only.
+This page uses Bun for simplicity, but the same architecture works in Node and
+Deno: `parse -> validate -> render`, then compare worker mode against host-only.
 
 ## What happens in this example
 
@@ -58,8 +61,8 @@ This page uses Bun for the commands because it runs TypeScript/TSX with very lit
    * `JSON.parse(payload)`
    * basic validation / defaults
    * HTML rendering via `react-dom/server`
-5. Workers runs `renderUserCardHost` return `{ html, bytes }`.
-6. The host aggregates stats and prints throughput.
+4. Workers run `renderUserCardHost` and return `{ html, bytes }`.
+5. The host aggregates stats and prints throughput.
 
 <DontDoubleParseTip />
 
@@ -91,24 +94,24 @@ src/run_ssr.ts --requests 50000 --batch 64 --mode host
 
 ## Why this is a good “data transform” example
 
-This pattern generalizes nicely:
+This pattern generalizes well:
 
 * **Parsing**: JSON, CSV, logs, protobuf, HTML, markdown…
 * **Validation**: type checks, ranges, defaults, schema enforcement
 * **Transformation**: normalize fields, enrich data, extract features, build tokens…
-* **Rendering / output**: HTML strings, token arrays, compressed buffers, indexes…
+* **Rendering / output**: HTML strings, token arrays, compressed buffers, indexes...
 
 
 ## Practical notes
 
-## What was the fastest way do do it?
+### Keep return values small
 
-As you saw `renderUserCardHost` return `{ html, bytes }` , this means :
+`renderUserCardHost` returns `{ html, bytes }` for convenience.
+In fast loops, extra allocations add up, so keep return payloads small and avoid
+work you do not need.
 
-  - Two extra object creations and one Stringication.
-
-Now, this is nor a big issue because the object in question was small, 
-don't try to get optimal optimizations until you get something workings.
+In this example the object is small, so readability wins. Optimize only after
+you measure.
 
 <WorkRightFastTip />
 

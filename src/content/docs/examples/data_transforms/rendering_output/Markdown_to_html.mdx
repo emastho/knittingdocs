@@ -1,0 +1,81 @@
+---
+title: Markdown to HTML
+description: Convert markdown strings to HTML in workers or on the host.
+hero:
+  title: 'Markdown rendering'
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_html.ts");
+export const render_markdown = getCode("data_transforms/markdown_to_html/render_markdown.ts");
+
+## What is this about
+
+This example is a simple rendering pipeline:
+
+1. Receive markdown strings.
+2. Convert markdown to HTML.
+3. Return rendered output plus lightweight metrics (`bytes`, `headings`, `words`).
+
+It complements React SSR as another **Rendering & Output** example.
+
+## Install
+
+:::info
+Bun
+```bash
+bun add marked
+```
+:::
+
+## Commands
+
+:::info
+Bun
+```bash
+src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
+```
+Deno
+```bash
+deno run -A src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
+```
+
+Node
+```bash
+npx tsx src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
+```
+
+Host baseline (no workers)
+```bash
+src/run_markdown_to_html.ts --docs 25000 --mode host
+```
+:::
+
+## What happens in this example
+
+1. The host generates markdown documents.
+2. Each worker runs `marked.parse(...)` and computes tiny summary stats.
+3. The host aggregates totals and prints throughput.
+4. You compare this against `--mode host` to decide whether workers help.
+
+## Code
+
+<Tabs>
+  <TabItem label="run_markdown_to_html.ts">
+    <Code code={run} lang="ts" title={"run_markdown_to_html.ts"} />
+  </TabItem>
+  <TabItem label="render_markdown.ts">
+    <Code code={render_markdown} lang="ts" title={"render_markdown.ts"} />
+  </TabItem>
+</Tabs>
+
+## Why this pattern matters
+
+- Rendering can become CPU-heavy at high document counts.
+- Returning compact metrics keeps IPC overhead low.
+- The same host-vs-worker pattern used in SSR applies cleanly here.

@@ -10,24 +10,23 @@ sidebar:
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../lib/code-snippets';
+import { getCode } from '../../../../../lib/code-snippets';
 
 export const run = getCode("data_transforms/react_ssr_compress/run_ssr_compress.ts");
 export const render_compress = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
-import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
-import WorkRightFastTip from '../../../../components/tips/WorkRightFastTip.astro';
+import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
 
 
 ## What is this about
 
-This example adds a **compression step** to the React SSR pipeline:
+This example extends the React SSR pipeline with a compression step:
 
 1. Parse JSON payloads.
 2. Normalize/validate.
 3. Render HTML with React SSR.
-4. **Compress** the HTML (brotli).
+4. **Compress** the HTML (Brotli).
 
-You can compare **compression on the host** vs **compression in workers**.
+You can compare compression on the host versus compression in workers.
 
 ---
 
@@ -84,6 +83,8 @@ src/run_ssr_compress.ts --requests 50000 --mode host --compress host
   </TabItem>
 </Tabs>
 
----
-<DontDoubleParseTip />
+## Why this pattern matters
 
+- It shows where compression work belongs in a real pipeline.
+- It helps you compare transfer cost versus local CPU cost.
+- It keeps the same host-vs-worker benchmark style as the other examples.

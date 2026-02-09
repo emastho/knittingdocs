@@ -25,6 +25,9 @@ Define tasks once, then call them from the main thread with a small, typed API.
 
 <CardGrid stagger>
   <Card title="Multi threading in 10 lines">
+    Start here if you want the smallest possible mental model.
+    Define tasks, create a pool, call it, and shut it down.
+
     ```ts
     import { isMain, task } from "@vixeny/knitting";
 
@@ -40,24 +43,21 @@ Define tasks once, then call them from the main thread with a small, typed API.
         .finally(world.shutdown);
     }
     ```
-  </Card>
 
-  <Card title="Start here">
-    Build your first worker pool in minutes, then scale into guides, examples, and benchmarks.
-
-    - [Installation](/start/installation/)
-    - [Quick Start](/start/quick-start/)
-    - [Benchmarks](/benchmarks/introduction/)
+    This is intentionally simple. You can add batching and balancing later.
   </Card>
 
   <Card title="IPC slides" >
+    A quick look at runtime behavior across Bun, Deno, and Node.
+    Switch tabs to compare how each runtime responds under the same benchmark shape.
+
     <Tabs>
-      <TabItem label="Node">
+      <TabItem label="Bun">
         <img
-          src={nodeIpc.src}
-          width={nodeIpc.width}
-          height={nodeIpc.height}
-          alt="Node IPC benchmark"
+          src={bunIpc.src}
+          width={bunIpc.width}
+          height={bunIpc.height}
+          alt="Bun IPC benchmark"
           loading="lazy"
         />
       </TabItem>
@@ -70,17 +70,29 @@ Define tasks once, then call them from the main thread with a small, typed API.
           loading="lazy"
         />
       </TabItem>
-      <TabItem label="Bun">
+      <TabItem label="Node">
         <img
-          src={bunIpc.src}
-          width={bunIpc.width}
-          height={bunIpc.height}
-          alt="Bun IPC benchmark"
+          src={nodeIpc.src}
+          width={nodeIpc.width}
+          height={nodeIpc.height}
+          alt="Node IPC benchmark"
           loading="lazy"
         />
       </TabItem>
     </Tabs>
+
+    Use this as orientation, then check the benchmark pages for details.
   </Card>
+
+  <Card title="10+ diverse examples (and growing)">
+    There is enough here to copy real patterns, not just toy snippets.
+    We keep adding examples as new workflows land.
+
+    - [Browse examples](/examples/intro_examples)
+    - [Data transforms](/examples/data_transforms/intro_data_transforms)
+    - [Math examples](/examples/maths/Big_prime)
+  </Card>
+
 </CardGrid>
 
 ## Why Knitting
@@ -90,52 +102,8 @@ Define tasks once, then call them from the main thread with a small, typed API.
 - Same model across Node, Deno, and Bun.
 - Explicit control over batching, inlining, and shutdown behavior.
 
-## Benchmarking Introduction
-
-Knitting benchmarks are designed to answer practical questions, not just produce one score.
-They compare transports and runtimes under the same benchmark shapes so you can decide where Knitting helps most.
-
-- IPC cost: round-trip overhead between main and worker threads.
-- Latency growth: how performance changes as message count increases.
-- Payload behavior: primitives, JSON/collections, typed arrays, and error-like objects.
-- Heavy-load scaling: speedup and efficiency as worker count increases.
-
-## Benchmark Snapshot
-
-Current docs benchmarks show consistent wins for Knitting IPC overhead:
-
-- Node IPC (`1` message): about `6x` faster than worker `postMessage`.
-- Deno IPC (`25` messages): about `9.5x` faster than worker `postMessage`.
-- Bun IPC (`50` messages): about `7x` faster than worker `postMessage`.
-- Heavy CPU workloads (`+4` threads): around `3.5x` to `3.8x` speedup.
-
-## Documentation Map
-
-1. Start with [Installation](/start/installation/) and [Quick Start](/start/quick-start/).
-2. Use [Guides](/guides/defining-tasks/) for production patterns.
-3. Explore [Examples](/examples/hello/) for real workloads.
-4. Compare runtimes in [Benchmarks](/benchmarks/introduction/).
 
 ## Project Scope
 
 Knitting focuses on local multi-thread execution with shared-memory IPC.
 It is not a distributed scheduler or cluster manager.
-
-## How To Run Benchmarks
-
-The benchmark harness lives in the main runtime repository (`mimiMonads/knitting`), while this docs project publishes the generated charts and result tables.
-
-1. Clone the runtime repo and enter it.
-2. Run the full suite:
-
-```bash
-./run.sh
-```
-
-3. Optional: generate JSON output for plotting:
-
-```bash
-./run.sh --json
-```
-
-By default, markdown results are written to `results/` and JSON results to `results-json/`.
