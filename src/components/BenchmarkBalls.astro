@@ -1,0 +1,373 @@
+---
+// BenchmarkBalls.astro
+// Drop into: src/components/BenchmarkBalls.astro
+// Usage: <BenchmarkBalls /> or <BenchmarkBalls items={[...]} />
+
+type Item = {
+  label: string;
+  // Higher = faster (shorter duration). You can think of it as "ops/sec".
+  speed: number;
+  // Optional: CSS color for the ball.
+  color?: string;
+};
+
+const {
+  items = [
+    { label: "Rust", speed: 420, color: "#F97316" },
+    { label: "Go", speed: 300, color: "#06B6D4" },
+    { label: "JS", speed: 240, color: "#FACC15" },
+    { label: "Python", speed: 80, color: "#60A5FA" },
+  ] satisfies Item[],
+  // Visual controls
+  rowHeight = 44,          // px
+  rowGap = 8,              // px
+  ballSize = 30,           // px
+  labelWidth = 92,         // px
+  // Motion controls
+  raceDuration = 3,      // seconds race window (and fastest finish time)
+  stagger = 0,             // seconds delay per row
+  sourceLabel = "based on node.js ipc graph (50 msg avg)",
+} = Astro.props as {
+  items?: Item[];
+  rowHeight?: number;
+  rowGap?: number;
+  ballSize?: number;
+  labelWidth?: number;
+  raceDuration?: number;
+  stagger?: number;
+  sourceLabel?: string;
+};
+
+const speeds = items.map((d) => d.speed);
+const maxSpeed = Math.max(...speeds, 1);
+const speedFormatter = new Intl.NumberFormat("en-US");
+
+// Fastest ball reaches the end in raceDuration seconds.
+// Others scale proportionally by speed ratio.
+function durationFor(speed: number) {
+  const safeSpeed = Math.max(0.0001, speed);
+  return raceDuration * (maxSpeed / safeSpeed);
+}
+
+function speedText(speed: number) {
+  return `${speedFormatter.format(speed)} req/sec`;
+}
+
+function speedAriaText(speed: number) {
+  const noun = Math.abs(speed) === 1 ? "request" : "requests";
+  return `${speedFormatter.format(speed)} ${noun} per second`;
+}
+---
+
+<section
+  class="bench"
+  data-benchmark-balls
+  style={`
+    --row-h:${rowHeight}px;
+    --row-gap:${rowGap}px;
+    --ball:${ballSize}px;
+    --label-w:${labelWidth}px;
+    --stagger:${stagger}s;
+    --race-window:${raceDuration}s;
+  `}
+  aria-label="Benchmark balls animation"
+>
+  <!-- <div class="legend" aria-hidden="true">
+    <span class="pill">left → right → left</span>
+    <span class="pill">fastest: {fastestLegDuration}s each way</span>
+    <span class="pill">Astro-ready</span>
+  </div> -->
+
+  <div class="rows" role="list">
+    {items.map((it, i) => (
+      <div
+        class="row"
+        role="listitem"
+        style={`
+          --dur:${durationFor(it.speed)}s;
+          --delay:${(i * stagger).toFixed(3)}s;
+          --c:${it.color ?? "currentColor"};
+        `}
+        aria-label={`${it.label}, speed ${speedAriaText(it.speed)}`}
+      >
+        <div class="label" title={it.label}>
+          {it.label}
+        </div>
+
+        <div class="track" data-track>
+          <div class="ball" aria-hidden="true"></div>
+        </div>
+
+        <div class="meta" aria-hidden="true">
+          <span class="speed">{speedText(it.speed)}</span>
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <div class="controls">
+    <button class="restart" type="button" data-race-restart>
+      Restart
+    </button>
+    <p class="source-note">{sourceLabel}</p>
+  </div>
+</section>
+
+<style>
+  .bench{
+    --fg: #1f2937;
+    --muted: #4b5563;
+    --line: rgba(15, 23, 42, 0.18);
+    color: var(--fg);
+    padding: 14px;
+    border-radius: 14px;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.82),
+      rgba(249, 250, 251, 0.72)
+    );
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+  }
+
+  :global(:root[data-theme='dark']) .bench{
+    --fg: rgba(241, 245, 249, 0.92);
+    --muted: rgba(203, 213, 225, 0.72);
+    --line: rgba(148, 163, 184, 0.24);
+    background: linear-gradient(
+      180deg,
+      rgba(15, 23, 42, 0.62),
+      rgba(15, 23, 42, 0.44)
+    );
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .legend{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom: 10px;
+  }
+  .pill{
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    background: rgba(255,255,255,0.28);
+  }
+
+  :global(:root[data-theme='dark']) .pill{
+    background: rgba(15, 23, 42, 0.35);
+  }
+
+  .rows{
+    display: grid;
+    gap: var(--row-gap);
+  }
+
+  .controls{
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    column-gap: 8px;
+  }
+
+  .restart{
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: rgba(255,255,255,0.38);
+    color: var(--fg);
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .restart:hover{
+    background: rgba(255,255,255,0.52);
+  }
+
+  :global(:root[data-theme='dark']) .restart{
+    background: rgba(15, 23, 42, 0.42);
+  }
+
+  :global(:root[data-theme='dark']) .restart:hover{
+    background: rgba(30, 41, 59, 0.56);
+  }
+
+  .source-note{
+    grid-column: 1;
+    margin: 0;
+    text-align: left;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    text-transform: lowercase;
+  }
+
+  .restart{
+    grid-column: 2;
+  }
+
+  .row{
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--label-w) 1fr minmax(150px, max-content);
+    align-items: center;
+
+    height: var(--row-h);
+
+    gap: 10px;
+  }
+
+  .label{
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .meta{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .track{
+    position: relative;
+    height: calc(var(--ball) + 8px);
+    border-radius: 999px;
+    /* Give the track its own box so 100% travel is predictable */
+    width: 100%;
+    contain: layout paint;
+    display: flex;
+    align-items: center;
+  }
+
+  .ball{
+    position:absolute;
+    left: 0;
+    top: 50%;
+    width: var(--ball);
+    height: var(--ball);
+    transform: translate3d(0,-50%,0);
+    border-radius: 999px;
+    background: transparent;
+    border: 2px solid var(--c);
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.08),
+      0 1px 4px rgba(0,0,0,0.14);
+
+    /* Keep animation composited and avoid expensive filter effects. */
+    backface-visibility: hidden;
+
+    will-change: transform;
+
+    /* Default travel, replaced by JS with exact pixels */
+    --travel: calc(100% - var(--ball));
+
+    animation: race var(--dur) linear var(--delay) 1 forwards;
+    animation-play-state: paused;
+  }
+
+  .bench.is-running .ball{
+    animation-play-state: running;
+  }
+
+  @keyframes race{
+    from { transform: translate3d(0,-50%,0); }
+    to { transform: translate3d(var(--travel),-50%,0); }
+  }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce){
+    .ball{
+      animation: none;
+      transform: translate3d(0, -50%, 0);
+    }
+  }
+</style>
+
+<script is:inline>
+  // Initializes each BenchmarkBalls instance once.
+  const sections = document.querySelectorAll(".bench[data-benchmark-balls]");
+
+  sections.forEach((section) => {
+    if (!(section instanceof HTMLElement)) return;
+    if (section.dataset.benchInit === "1") return;
+    section.dataset.benchInit = "1";
+
+    const tracks = Array.from(section.querySelectorAll("[data-track]"));
+    const balls = tracks.map((track) => track.querySelector(".ball"));
+    const restart = section.querySelector("[data-race-restart]");
+
+    let stopTimer = 0;
+
+    const updateTravel = () => {
+      const raw = parseFloat(getComputedStyle(section).getPropertyValue("--ball"));
+      const ballSize = Number.isFinite(raw) ? raw : 16;
+
+      tracks.forEach((track, index) => {
+        const ball = balls[index];
+        if (!(track instanceof HTMLElement) || !(ball instanceof HTMLElement)) return;
+        const fullTravel = Math.max(0, track.clientWidth - ballSize);
+        ball.style.setProperty("--travel", `${fullTravel}px`);
+      });
+    };
+
+    const resetRace = () => {
+      section.classList.remove("is-running");
+      balls.forEach((ball) => {
+        if (!(ball instanceof HTMLElement)) return;
+        ball.style.animation = "none";
+        // Force reflow so the next animation starts from 0.
+        void ball.offsetHeight;
+        ball.style.animation = "";
+      });
+    };
+
+    const startRace = () => {
+      const raw = parseFloat(getComputedStyle(section).getPropertyValue("--race-window"));
+      const raceMs = (Number.isFinite(raw) ? raw : 5) * 1000;
+
+      window.clearTimeout(stopTimer);
+      resetRace();
+
+      requestAnimationFrame(() => {
+        section.classList.add("is-running");
+        stopTimer = window.setTimeout(() => {
+          section.classList.remove("is-running");
+        }, raceMs);
+      });
+    };
+
+    const ro = new ResizeObserver(updateTravel);
+    ro.observe(section);
+
+    if (restart instanceof HTMLButtonElement) {
+      restart.addEventListener("click", startRace);
+    }
+
+    updateTravel();
+    startRace();
+
+    const cleanup = () => {
+      window.clearTimeout(stopTimer);
+      ro.disconnect();
+      if (restart instanceof HTMLButtonElement) {
+        restart.removeEventListener("click", startRace);
+      }
+    };
+
+    window.addEventListener("pagehide", cleanup, { once: true });
+    document.addEventListener("astro:before-swap", cleanup, { once: true });
+  });
+</script>

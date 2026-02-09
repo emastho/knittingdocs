@@ -17,12 +17,23 @@ import { Tabs, TabItem } from "@astrojs/starlight/components";
 import nodeIpc from "../../assets/charts/node_ipc.png";
 import denoIpc from "../../assets/charts/deno_ipc.png";
 import bunIpc from "../../assets/charts/bun_ipc.png";
+import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 
 <AshesBackground />
 
 Knitting is a shared-memory IPC runtime for Node.js, Deno, and Bun.
 Define tasks once, then call them from the main thread with a small, typed API.
 
+
+<BenchmarkBalls
+  sourceLabel="based on node.js ipc graph (50 msg)"
+  items={[
+    { label: "Knitting", speed: 2030869, color: "#336244ff" },
+    { label: "PostMessage", speed: 573394, color: "#58523bff" },
+    { label: "WebSockets", speed: 178603, color: "#A78BFA" },
+    { label: "HTTP", speed: 17483,  color: "#60A5FA" },
+  ]}
+/>
 <CardGrid stagger>
   <Card title="Multi threading in 10 lines">
     Start here if you want the smallest possible mental model.
@@ -43,6 +54,7 @@ Define tasks once, then call them from the main thread with a small, typed API.
         .finally(world.shutdown);
     }
     ```
+
 
     This is intentionally simple. You can add batching and balancing later.
   </Card>
