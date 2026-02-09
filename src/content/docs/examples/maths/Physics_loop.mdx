@@ -178,7 +178,7 @@ A good starting point is something like:
 
 ### 2) Prefer batch dispatch
 
-Queue many `call`s, then call `send()` once. This reduces scheduling overhead and tends to improve throughput.
+Queue many `call`s, then await them together. This reduces scheduling overhead and tends to improve throughput.
 
 ### 3) Use deterministic RNG and seed properly
 

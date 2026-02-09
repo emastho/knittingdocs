@@ -73,7 +73,7 @@ This example is useful for learning and benchmarking:
 
 * **NP-hard optimization**: how heuristics approximate solutions when exact methods are too expensive
 * **Parallel restarts**: a practical strategy for metaheuristics (often yields better solutions than longer single runs)
-* **High-throughput compute**: Knitting’s worker scheduling + batching (`call` + `send()`)
+* **High-throughput compute**: Knitting’s worker scheduling + batched `call` workloads
 * **Verification discipline**: validating permutations and recomputing lengths to avoid silent corruption
 
 Real-world analogs of TSP appear in:
@@ -170,7 +170,7 @@ This maps well to Knitting:
 Instead of dispatching restarts one-by-one, we:
 
 * enqueue many calls via `call`
-* then call `send()` once
+* await them together as one batch
 
 This reduces scheduling overhead and improves throughput.
 

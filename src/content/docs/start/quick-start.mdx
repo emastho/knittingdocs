@@ -28,7 +28,7 @@ A few words we’ll use a lot:
 - **Task**: an exported function wrapped with `task({ f })`. Tasks live at module scope so workers can load them consistently.
 - **`call.*()`**: runs a task on the pool and returns a `Promise` with the result.
 - **`isMain`**: a safe boolean that’s `true` only on the host (main thread). Use it to avoid running “host code” inside workers.
-- **`createPool()`**: creates the worker pool and returns helpers like `call`, `send`, and `shutdown`.
+- **`createPool()`**: creates the worker pool and returns helpers like `call` and `shutdown`.
 - **Thread pool**: the set of workers available to execute tasks.
 - **Inlining / inliner**: optionally includes the host as an extra “lane”, so some work can run locally instead of always going to workers.
 - **Host ↔ Worker**: the host is the process that creates the pool; workers are the spawned threads.
@@ -171,4 +171,3 @@ It keeps your app code clean and helps workers load only what they need.
   * pages/
 
 </FileTree>
-

@@ -25,7 +25,7 @@ const RUNS_PER_JOB = intArg("batch", 5_000);
 const MAX_STEPS = intArg("steps", 15_000);
 const RADIUS = numArg("radius", 100);
 
-const { call, send, shutdown } = createPool({
+const { call, shutdown } = createPool({
   threads: THREADS,
   balancer: "firstIdle",
   // Optional: inliner helps if each job is too small.
@@ -56,9 +56,6 @@ async function main() {
 
     jobs[j] = call.walkChunk([seed, runs, MAX_STEPS, RADIUS]);
   }
-
-  // Kick dispatcher once after enqueueing a batch
-  send();
 
   const results = await Promise.all(jobs);
 

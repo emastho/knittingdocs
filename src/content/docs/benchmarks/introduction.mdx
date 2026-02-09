@@ -11,6 +11,7 @@ import typesCombinedCount1 from "../../../assets/charts/types_combined_count1.pn
 import typesCombinedCount100 from "../../../assets/charts/types_combined_count100.png";
 import withloadSpeedup from "../../../assets/charts/withload_speedup.png";
 import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
+import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
 This page is the high-level benchmark summary across Node, Deno, and Bun.
 For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
@@ -80,6 +81,8 @@ These two charts compare type-dependent overhead at count `1` and count `100`.
 />
 
 ## Heavy Load: Speedup and Efficiency
+
+<HeavyTaskPrimeTransferCaution />
 
 Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute work across extra threads.
 

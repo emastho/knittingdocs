@@ -14,6 +14,7 @@ import denoTypesOne from '../../../assets/charts/deno_types_types_count1.png';
 import denoTypesHundred from '../../../assets/charts/deno_types_types_count100.png';
 import denoHeavyLoad from '../../../assets/results/deno_withload.md?raw';
 import denoAllTypes from '../../../assets/results/deno_types_knitting.md?raw';
+import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
 This page summarizes Deno benchmark runs for Knitting on `deno 2.6.6 (aarch64-apple-darwin)`.
 
@@ -89,6 +90,8 @@ At `100` messages per iteration, the gap remains strong:
 </Tabs>
 
 ## Efficiency under heavy tasks (Deno)
+<HeavyTaskPrimeTransferCaution />
+
 This stress test computes prime numbers over a large range, then serializes and parses large JSON payloads:
 
 ```ts

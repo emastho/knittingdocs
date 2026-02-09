@@ -8,8 +8,6 @@ sidebar:
 `createPool(options)(tasks)` starts worker threads and returns helpers:
 
 - `call.<task>(args)` enqueue a task and return a promise.
-- `call.<task>(args)` like `call`, but optimized for tight loops.
-- `send()` kick the dispatcher loop (useful after enqueueing a batch).
 - `shutdown()` stop all workers.
 
 `call.*()` always returns a promise. Inputs may also be promises; they are
@@ -64,13 +62,12 @@ export const add = task<[number, number], number>({
   f: async ([a, b]) => a + b,
 });
 
-const { call, send, shutdown } = createPool({
+const { call, shutdown } = createPool({
   threads: 2,
 })({ add });
 
 if (isMain) {
   const jobs = [call.add([1, 2]), call.add([3, 4])];
-  send();
   const results = await Promise.all(jobs);
   console.log(results);
   shutdown();
@@ -164,4 +161,3 @@ Logs the worker entry module URL used to spawn workers.
 ### logImportedUrl
 
 Logs the list of module URLs that workers import to discover tasks.
-

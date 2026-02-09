@@ -1,0 +1,12 @@
+---
+import { Aside } from '@astrojs/starlight/components';
+---
+
+<Aside type="caution" title="Heavy-task caveat">
+  <p>
+    This benchmark is especially hard for Knitting because the workload is not only prime calculation.
+  </p>
+  <p>
+    It also includes returning results back to the host, which adds transfer and serialization cost.
+  </p>
+</Aside>

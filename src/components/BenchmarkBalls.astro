@@ -24,7 +24,7 @@ const {
   ballSize = 30,           // px
   labelWidth = 92,         // px
   // Motion controls
-  raceDuration = 3,      // seconds race window (and fastest finish time)
+  raceDuration = 3,      // seconds for the fastest one-way leg
   stagger = 0,             // seconds delay per row
   sourceLabel = "based on node.js ipc graph (50 msg avg)",
 } = Astro.props as {
@@ -274,8 +274,16 @@ function speedAriaText(speed: number) {
     /* Default travel, replaced by JS with exact pixels */
     --travel: calc(100% - var(--ball));
 
-    animation: race var(--dur) linear var(--delay) 1 forwards;
+    animation: race calc(var(--dur) * 2) linear var(--delay) 1 forwards;
     animation-play-state: paused;
+  }
+
+  .ball.is-finished{
+    background: var(--c);
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.08),
+      0 1px 4px rgba(0,0,0,0.14),
+      inset 0 0 0 1px rgba(255,255,255,0.35);
   }
 
   .bench.is-running .ball{
@@ -284,7 +292,8 @@ function speedAriaText(speed: number) {
 
   @keyframes race{
     from { transform: translate3d(0,-50%,0); }
-    to { transform: translate3d(var(--travel),-50%,0); }
+    50% { transform: translate3d(var(--travel),-50%,0); }
+    to { transform: translate3d(0,-50%,0); }
   }
 
   /* Respect reduced motion */
@@ -308,8 +317,28 @@ function speedAriaText(speed: number) {
     const tracks = Array.from(section.querySelectorAll("[data-track]"));
     const balls = tracks.map((track) => track.querySelector(".ball"));
     const restart = section.querySelector("[data-race-restart]");
+    const finishListeners = [];
 
     let stopTimer = 0;
+
+    const parseCssTimeMs = (value) => {
+      const str = String(value).trim();
+      if (!str) return 0;
+      if (str.endsWith("ms")) return Number.parseFloat(str) || 0;
+      if (str.endsWith("s")) return (Number.parseFloat(str) || 0) * 1000;
+      return Number.parseFloat(str) || 0;
+    };
+
+    const getRaceCycleMs = () => {
+      let maxMs = 0;
+      balls.forEach((ball) => {
+        if (!(ball instanceof HTMLElement)) return;
+        const styles = getComputedStyle(ball);
+        const total = parseCssTimeMs(styles.animationDuration) + parseCssTimeMs(styles.animationDelay);
+        maxMs = Math.max(maxMs, total);
+      });
+      return maxMs;
+    };
 
     const updateTravel = () => {
       const raw = parseFloat(getComputedStyle(section).getPropertyValue("--ball"));
@@ -327,6 +356,7 @@ function speedAriaText(speed: number) {
       section.classList.remove("is-running");
       balls.forEach((ball) => {
         if (!(ball instanceof HTMLElement)) return;
+        ball.classList.remove("is-finished");
         ball.style.animation = "none";
         // Force reflow so the next animation starts from 0.
         void ball.offsetHeight;
@@ -335,8 +365,7 @@ function speedAriaText(speed: number) {
     };
 
     const startRace = () => {
-      const raw = parseFloat(getComputedStyle(section).getPropertyValue("--race-window"));
-      const raceMs = (Number.isFinite(raw) ? raw : 5) * 1000;
+      const raceMs = getRaceCycleMs();
 
       window.clearTimeout(stopTimer);
       resetRace();
@@ -345,12 +374,23 @@ function speedAriaText(speed: number) {
         section.classList.add("is-running");
         stopTimer = window.setTimeout(() => {
           section.classList.remove("is-running");
-        }, raceMs);
+        }, raceMs || 1);
       });
     };
 
     const ro = new ResizeObserver(updateTravel);
     ro.observe(section);
+
+    balls.forEach((ball) => {
+      if (!(ball instanceof HTMLElement)) return;
+      const onFinish = (event) => {
+        if (!(event instanceof AnimationEvent)) return;
+        if (event.animationName !== "race") return;
+        ball.classList.add("is-finished");
+      };
+      ball.addEventListener("animationend", onFinish);
+      finishListeners.push([ball, onFinish]);
+    });
 
     if (restart instanceof HTMLButtonElement) {
       restart.addEventListener("click", startRace);
@@ -362,6 +402,9 @@ function speedAriaText(speed: number) {
     const cleanup = () => {
       window.clearTimeout(stopTimer);
       ro.disconnect();
+      finishListeners.forEach(([ball, onFinish]) => {
+        ball.removeEventListener("animationend", onFinish);
+      });
       if (restart instanceof HTMLButtonElement) {
         restart.removeEventListener("click", startRace);
       }

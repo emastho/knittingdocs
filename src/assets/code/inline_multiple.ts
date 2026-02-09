@@ -8,7 +8,7 @@ export const square = task({
   f: (n: number) => n * n,
 });
 
-const { call, send, shutdown } = createPool({
+const { call, shutdown } = createPool({
   threads: 2,
   inliner: { position: "first", batchSize: 2 },
 })({ double, square });
@@ -19,7 +19,6 @@ if (isMain) {
     return call.square(d);
   });
 
-  send();
   Promise.all(jobs)
     .then((results) => console.log(results))
     .finally(shutdown);

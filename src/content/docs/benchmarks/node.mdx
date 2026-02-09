@@ -14,6 +14,7 @@ import nodeTypesOne from '../../../assets/charts/node_types_types_count1.png';
 import nodeTypesHundred from '../../../assets/charts/node_types_types_count100.png';
 import nodeHeavyLoad from '../../../assets/results/node_withload.md?raw';
 import nodeAllTypes from '../../../assets/results/node_types_knitting.md?raw';
+import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
 This page summarizes Node.js benchmark runs for Knitting on `node 24.12.0 (arm64-darwin)`.
 
@@ -89,6 +90,8 @@ At `100` messages per iteration, the gap remains strong:
 </Tabs>
 
 ## Efficiency under heavy tasks (Node)
+<HeavyTaskPrimeTransferCaution />
+
 This stress test computes prime numbers over a large range, then serializes and parses large JSON payloads:
 
 ```ts

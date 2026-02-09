@@ -42,7 +42,7 @@ function makeRandomOdd(bits: number, seed: number): bigint {
 const seedBase = (Date.now() | 0) ^ 0x9e3779b9;
 let windowStartOdd = makeRandomOdd(BITS, seedBase);
 
-const { call, send, shutdown } = createPool({
+const { call, shutdown } = createPool({
   threads: THREADS,
   balancer: "firstIdle",
 })({ scanForProbablePrime });
@@ -107,7 +107,6 @@ async function scanOneWindow(): Promise<
       tested += count;
     }
 
-    send();
     const results = await Promise.all(jobs);
 
     // If any job found a hit, keep the smallest hit (nice for consistency)

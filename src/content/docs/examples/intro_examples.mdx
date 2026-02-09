@@ -46,7 +46,7 @@ workloads: CPU-heavy loops, batch scheduling, and data-transform pipelines.
 ## What to emulate from these examples
 
 1. Keep worker tasks focused and deterministic.
-2. Batch calls, then flush with `send()` to reduce scheduler overhead.
+2. Batch calls and await them together (`Promise.all`) to reduce scheduling overhead.
 3. Return compact summaries from workers instead of large raw outputs.
 4. Validate invariants on the host and recompute critical metrics when needed.
 5. Compare against a host-only baseline before claiming speedups.

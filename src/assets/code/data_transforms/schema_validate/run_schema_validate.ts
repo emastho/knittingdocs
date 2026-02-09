@@ -114,7 +114,6 @@ async function runWorkers(payloads: string[]): Promise<Summary> {
       jobs.push(pool.call.parseAndValidate(payloads[i]!));
     }
 
-    pool.send();
     const results = await Promise.all(jobs);
     return summarize(results);
   } finally {

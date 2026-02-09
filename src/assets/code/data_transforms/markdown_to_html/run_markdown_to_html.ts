@@ -97,7 +97,6 @@ async function runWorkers(markdowns: string[]): Promise<Totals> {
       jobs.push(pool.call.markdownToHtml(markdowns[i]!));
     }
 
-    pool.send();
     const results = await Promise.all(jobs);
 
     let totals: Totals = { bytes: 0, headings: 0, words: 0 };
