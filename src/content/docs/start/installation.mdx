@@ -11,25 +11,22 @@ import { Code } from '@astrojs/starlight/components';
 
 - Node.js 22+
 - Deno 2+
-- Bun (recent)
+- Bun (recent stable)
 
 ## Install
 
 Knitting is published on JSR:
 
 <Tabs>
-  <TabItem label="Deno"><Code code="deno add --npm jsr:@vixeny/knitting"lang="bash" title={"deno.sh"} mark={['--npm']} /></TabItem>
-  <TabItem label="NPM"><Code code="npx jsr add @vixeny/knitting" lang="bash" title={"npm.sh"} mark={['--npm']} /></TabItem>
-  <TabItem label="Bun"><Code code="bunx jsr add @vixeny/knitting" lang="bash" title={"bun.sh"} mark={['--npm']} /></TabItem>
+  <TabItem label="Deno"><Code code="deno add --npm jsr:@vixeny/knitting" lang="bash" title={"deno.sh"} mark={['--npm']} /></TabItem>
+  <TabItem label="NPM"><Code code="npx jsr add @vixeny/knitting" lang="bash" title={"npm.sh"} /></TabItem>
+  <TabItem label="Bun"><Code code="bunx jsr add @vixeny/knitting" lang="bash" title={"bun.sh"} /></TabItem>
 </Tabs>
 
 :::note
-That knitting needs a file on the host side, reason why we need to add `--npm` for `deno` and `jsr`
+Knitting needs host-side package metadata, so use `--npm` when installing
+through `deno` or `jsr`.
 
 <Code code="jsr add --npm @vixeny/knitting" lang="bash" title={"jsr.sh"} mark={['--npm']}/>
-
-
 :::
-
-
 

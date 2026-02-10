@@ -12,6 +12,7 @@ it. Tasks should be defined at module scope and exported.
 type Task = {
   f: (uknown) => uknown,
   createPool?: (options: CreatePool) => SingleTaskPool,
+  href?: string,
   timeout?: number | {
     time: number;
     maybe?: true;
@@ -59,36 +60,104 @@ export const add = task<[number, number], number>({
 });
 ```
 
-### Promises and resolution
+### Promise inputs and awaited outputs
 
-Something important about Knitting behaivour is that it will wait for a promise until this one resolves,
-no mattering the level of nesting:
+Knitting accepts promise-like task inputs and always returns awaited task
+results from `call.*()`.
 
-```js
-import { isMain, task } from "@vixeny/knitting";
+#### What this means
 
-export const world = task({
-  f: (str: string ) => str + "world",
-}).createPool();
+- You can call `pool.call.someTask(Promise.resolve(value))`.
+- If the input promise resolves, the resolved value is dispatched to the worker.
+- If the input promise rejects, the host call rejects immediately and the task
+  is not executed on the worker.
+- If the task function returns a promise, Knitting awaits it before resolving or
+  rejecting the host call.
 
-const promise = Promise.resolve("hello")
+#### Why this exists
 
-if (isMain) {
-  world.call(promise)
-    .then(console.log)
-    .finally(world.shutdown)
-}
+Promises are runtime state, not transferable payload data.
+Knitting resolves promise inputs on the host first, then serializes plain values
+through IPC. This keeps transport deterministic while preserving ergonomic async
+APIs.
 
+#### Type guarantees
+
+- Task inputs support `PromiseLike` values.
+- Task handlers receive awaited input types (`Awaited<A>`).
+- `call` returns `Promise<Awaited<ReturnType<TaskFn>>>`, so consumers get the
+  final resolved type.
+
+```ts
+type TaskInput<A> = A | PromiseLike<A>;
+type TaskHandler<A, R> = (args: Awaited<A>) => R | PromiseLike<R>;
+type CallResult<R> = Promise<Awaited<R>>;
 ```
 
-:::caution
-If this where to be rejected, the rejection will be passed to the promise.
-:::
+#### Example
+
+```ts
+import { createPool, task } from "@vixeny/knitting";
+
+const addOne = task<Promise<number> | number, number>({
+  f: (n) => n + 1, // n is already awaited here
+});
+
+const pool = createPool({ threads: 1 })({ addOne });
+
+// Promise input is accepted.
+const result = await pool.call.addOne(Promise.resolve(41));
+// result: number (42)
+```
+
+#### Behavior summary
+
+| Case | Outcome |
+| --- | --- |
+| Promise argument fulfilled | Task runs with the fulfilled value. |
+| Promise argument rejected | Host call rejects immediately and task is not run. |
+| Async task result | Host call resolves/rejects with the awaited task outcome. |
 
 
 ## Optionals
 
 You can easily modify the behaivour adding options to a task.
+
+### `href` override behavior (unsafe / experimental)
+
+By default, `task()` captures the caller module URL and workers use that for
+task discovery.
+
+Passing `href` overrides that module URL and forces workers to import from your
+custom path/URL.
+
+:::caution
+`href` override is not considered a safe long-term public contract and may be
+removed in a future major release.
+:::
+
+Rules for `href`:
+
+- Prefer not using `href`; default caller resolution is the supported path.
+- If you use it, pass an absolute module URL (`file://...` or full URL).
+- Avoid remote URLs (`http(s)://...`) in production; runtime support and
+  security expectations vary across Node, Deno, and Bun.
+- Ensure the target module exports top-level `task(...)` values discoverable by
+  workers.
+- Ensure `href` points to a stable module identity (do not use ad-hoc dynamic
+  URL variations for the same task module).
+- Treat this as compatibility-risky and pin versions if you depend on it.
+
+```ts
+import { task } from "@vixeny/knitting";
+
+const stableModuleHref = new URL("./tasks.ts", import.meta.url).href;
+
+export const parseJob = task({
+  href: stableModuleHref,
+  f: (payload: string) => payload.length,
+});
+```
 
 ### Single-task pool
 

@@ -19,10 +19,15 @@ The transport supports the following payloads:
 - `Error` (name, message, stack)
 - `Date`
 - `symbol` from `Symbol.for(...)` only
-- `Promise<supported>` (resolved on the host before dispatch)
 
 If you need multiple values, pass a tuple or object as the single argument.
 Functions are not supported as payloads.
+
+Promise-like values are accepted at the `call.*()` boundary, but promises
+themselves are runtime state and are not transferred through IPC as payloads.
+Only resolved values are serialized and sent to workers.
+If a promise input rejects, the host call rejects and the worker task is not
+executed.
 
 ```ts
 type JSONValue =

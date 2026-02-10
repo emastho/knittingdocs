@@ -14,6 +14,7 @@ const { call, shutdown } = createPool({ threads: 2 })({
 });
 
 if (isMain) {
+  // Promise input is accepted: call.hello() resolves before world is dispatched.
   Promise.all(Array.from({ length: 5 }, () => call.world(call.hello())))
     .then((results) => console.log(results.join(" ")))
     .finally(shutdown);

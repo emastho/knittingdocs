@@ -59,12 +59,8 @@ function makePayload(i: number): string {
 }
 
 async function main() {
-  const pool = createPool({
-    threads: THREADS,
-  })({ renderUserCard });
-
   const started = performance.now();
-  let finished = 0;
+  let finished = started;
   const payloads = new Array<string>(REQUESTS);
   for (let i = 0; i < REQUESTS; i++) payloads[i] = makePayload(i);
 
@@ -75,14 +71,22 @@ async function main() {
     }
     finished = performance.now();
   } else {
-    const jobs: Promise<{ html: string; bytes: number }>[] = [];
+    const pool = createPool({
+      threads: THREADS,
+    })({ renderUserCard });
 
-    for (let i = 0; i < payloads.length; i++) {
-      jobs.push(pool.call.renderUserCard(payloads[i]));
+    try {
+      const jobs: ReturnType<typeof pool.call.renderUserCard>[] = [];
+
+      for (let i = 0; i < payloads.length; i++) {
+        jobs.push(pool.call.renderUserCard(payloads[i]));
+      }
+
+      await Promise.all(jobs);
+      finished = performance.now();
+    } finally {
+      pool.shutdown();
     }
-
-    await Promise.all(jobs);
-    finished = performance.now();
   }
 
   const secs = Math.max(1e-9, (finished - started) / 1000);
@@ -94,10 +98,11 @@ async function main() {
   console.log("requests  :", REQUESTS.toLocaleString());
   console.log("took      :", (finished - started).toFixed(2), "ms");
   console.log("throughput:", rps.toFixed(0), "req/s");
-
-  pool.shutdown();
 }
 
 if (isMain) {
-  main();
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

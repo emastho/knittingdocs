@@ -10,8 +10,13 @@ sidebar:
 - `call.<task>(args)` enqueue a task and return a promise.
 - `shutdown()` stop all workers.
 
-`call.*()` always returns a promise. Inputs may also be promises; they are
-resolved on the host before dispatch (rejections propagate to the caller).
+`call.*()` always returns a promise.
+Inputs may also be promises; they are resolved on the host before dispatch.
+If an input promise rejects, the host call rejects and the worker task is not
+executed. If a task returns a promise, `call.*()` resolves/rejects with the
+awaited task result.
+
+See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs).
 
 :::note
 `createPool(...)` can only be called from the main thread. Use `isMain` to guard
@@ -26,6 +31,7 @@ createPool({
   inliner?: {
     position?: "first" | "last",
     batchSize?: number,
+    dispatchThreshold?: number,
   },
   balancer?: {
     strategy: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
@@ -96,6 +102,16 @@ tasks where worker overhead dominates).
 - `position`: whether the inline lane appears before (`"first"`) or after
   (`"last"`) the worker lanes for balancing purposes.
 - `batchSize`: max tasks processed per event-loop tick (default `1` when enabled).
+- `dispatchThreshold`: minimum in-flight calls per task invoker before the
+  inline lane is eligible (default `1`).
+  Below the threshold, only worker lanes are scheduled; at/above it, workers
+  plus inline lane are scheduled.
+  This option has effect only when `inliner` is enabled.
+
+:::note
+Migration: `host.dispatchThreshold` was removed. Use
+`inliner.dispatchThreshold` instead.
+:::
 
 ## worker
 
@@ -157,6 +173,7 @@ Enables signal logging on the main thread. This writes log files under `./log/`.
 ### logHref
 
 Logs the worker entry module URL used to spawn workers.
+Useful when auditing module resolution (for example `task({ href })` overrides).
 
 ### logImportedUrl
 

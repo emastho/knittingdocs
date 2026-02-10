@@ -75,34 +75,42 @@ function makePayload(i: number): string {
 }
 
 function compressHtml(html: string) {
-  return brotliCompressSync(html).buffer;
+  return brotliCompressSync(html);
 }
 
 async function main() {
-  const pool = createPool({
-    threads: THREADS,
-    inliner: {
-      position: "last",
-      batchSize: 8
-    }
-  })({ renderUserCard, renderUserCardCompressed });
   const started = performance.now();
   const payloads = new Array<string>(REQUESTS);
   for (let i = 0; i < REQUESTS; i++) payloads[i] = makePayload(i);
+  let compressedBytes = 0;
 
   if (MODE === "host") {
     for (let i = 0; i < payloads.length; i++) {
       const res = renderUserCardHost(payloads[i]!);
-
-      compressHtml(res.html);
+      compressedBytes += compressHtml(res.html).byteLength;
     }
   } else {
-    const jobs: Promise<unknown>[] = [];
-    for (let i = 0; i < payloads.length; i++) {
-      jobs.push(pool.call.renderUserCardCompressed(payloads[i]));
-    }
+    const pool = createPool({
+      threads: THREADS,
+      inliner: {
+        position: "last",
+        batchSize: 8,
+        // Keep host lane out at light load; let it help on bursts.
+        dispatchThreshold: 16,
+      },
+    })({ renderUserCard, renderUserCardCompressed });
 
-    await Promise.all(jobs);
+    try {
+      const jobs: ReturnType<typeof pool.call.renderUserCardCompressed>[] = [];
+      for (let i = 0; i < payloads.length; i++) {
+        jobs.push(pool.call.renderUserCardCompressed(payloads[i]));
+      }
+
+      const compressed = await Promise.all(jobs);
+      for (const chunk of compressed) compressedBytes += chunk.byteLength;
+    } finally {
+      pool.shutdown();
+    }
   }
 
   const finished = performance.now();
@@ -114,10 +122,9 @@ async function main() {
   console.log("threads     :", MODE === "host" ? 0 : THREADS);
   console.log("requests    :", REQUESTS.toLocaleString());
   console.log("compress    :", "brotli");
+  console.log("bytes       :", compressedBytes.toLocaleString());
   console.log("took        :", (finished - started).toFixed(2), "ms");
   console.log("throughput  :", rps.toFixed(0), "req/s");
-
-  pool.shutdown();
 }
 
 if (isMain) {

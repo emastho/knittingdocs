@@ -18,7 +18,7 @@ export const multi = getCode('inline_multiple.ts');
 ## Introduction
 
 In a few minutes you’ll have your first tasks running in parallel.  
-If you already know what workers are, think of Knitting as: 
+If you already know what workers are, think of Knitting as:
 *“workers, but with a function-call API and much lower overhead.”*
 
 ### Quick definitions
@@ -35,7 +35,7 @@ A few words we’ll use a lot:
 
 ### Examples
 
-Now that we share the vocabulary, the snippets should feel a lot less spooky!
+Now that we share the vocabulary, the snippets should feel much more familiar.
 
 <Tabs>
   <TabItem label="1 Thread"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
@@ -52,7 +52,7 @@ Now that we share the vocabulary, the snippets should feel a lot less spooky!
 
    ```ts
    import { isMain, task, createPool } from "@vixeny/knitting";
-    ```
+   ```
 
 2. Define your tasks:
 
@@ -126,6 +126,9 @@ Now that we share the vocabulary, the snippets should feel a lot less spooky!
    }
    ```
 
+   `call.world(call.hello())` is intentional: `call.hello()` returns a promise,
+   and Knitting resolves promise inputs on the host before dispatching `world`.
+
    Or the “single task pool” version:
 
    ```ts
@@ -142,7 +145,7 @@ Now that we share the vocabulary, the snippets should feel a lot less spooky!
    }
    ```
 
-5. Shut down when you’re done 🙂
+5. Shut down when you’re done.
 
    Workers don’t magically disappear. Call `shutdown()` to clean up and let the process exit.
 

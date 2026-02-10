@@ -56,13 +56,15 @@ Deno: `parse -> validate -> render`, then compare worker mode against host-only.
 ## What happens in this example
 
 1. The host creates a pool with `createPool({ threads })`.
-2. The host queues jobs with `call.*()`.
+   (only in `--mode knitting`).
+2. The host queues jobs with `call.*()` in worker mode.
 3. Each worker runs:
    * `JSON.parse(payload)`
    * basic validation / defaults
    * HTML rendering via `react-dom/server`
 4. Workers run `renderUserCardHost` and return `{ html, bytes }`.
-5. The host aggregates stats and prints throughput.
+5. In `--mode host`, rendering stays on the host as a baseline.
+6. The host aggregates stats and prints throughput.
 
 <DontDoubleParseTip />
 

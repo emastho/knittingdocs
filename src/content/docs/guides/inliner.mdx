@@ -53,6 +53,7 @@ createPool({
   inliner: {
     position?: "first" | "last",
     batchSize?: number,
+    dispatchThreshold?: number,
   },
   balancer?: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
 })
@@ -76,11 +77,45 @@ Limits how many inline tasks are processed per macro-queue turn.
 
 If not set, it defaults to `1` when the inliner is enabled.
 
+### dispatchThreshold
+
+Controls when the inline lane becomes eligible for scheduling.
+
+- `1` (default): inline lane is immediately eligible (same behavior as before).
+- Higher values: keep the host lane out of scheduling at light concurrency, then
+  let it join once load bursts.
+- If `inliner` is not enabled, this option has no effect.
+
+:::note
+Migration: `host.dispatchThreshold` was removed.
+Use `inliner.dispatchThreshold` instead.
+:::
+
+## Exact Behavior
+
+- The scheduler tracks `inFlight` calls per task invoker.
+- On each call, `inFlight` increments before lane selection.
+- If `inFlight < dispatchThreshold`, scheduling uses worker-only lanes (inline
+  lane excluded).
+- If `inFlight >= dispatchThreshold`, scheduling uses all lanes (workers +
+  inline lane).
+- `inFlight` decrements on resolve, reject, or synchronous throw.
+- The configured balancer strategy (`robinRound`, `firstIdle`, `randomLane`,
+  `firstIdleOrRandom`) applies to whichever lane set is currently active.
+
+## Behavior Checks
+
+Existing tests validate both cases:
+
+- Below threshold: inline lane stays unused.
+- At/above threshold: inline lane becomes eligible and is used.
+
 ## Balancer Guidance
 
 - For HTTP-style workloads:
   use `inliner.position: "last"` with `balancer: "firstIdle"` so workers are
-  prioritized before the host lane.
+  prioritized before the host lane. Add a higher `dispatchThreshold` to keep
+  host scheduling out of low-load traffic.
 - For pools with many registered tasks or uneven load:
   `randomLane` or `firstIdleOrRandom` can help spread pressure.
 
@@ -101,11 +136,9 @@ choice than aggressive inlining.
 
 ## Current Limits
 
-- There is no strategy yet for "use workers until threshold X, then efficiently
-  wait on host lane."
 - There is no built-in dynamic rebalance policy tied to event-loop pressure.
 
-Those strategies are planned, so revisit your tuning as they land.
+Revisit tuning as rebalance strategies land.
 
 ## Examples
 
@@ -114,7 +147,7 @@ Those strategies are planned, so revisit your tuning as they land.
 ```ts
 const { call, shutdown } = createPool({
   threads: 4,
-  inliner: { position: "last", batchSize: 32 },
+  inliner: { position: "last", batchSize: 20 },
   balancer: "firstIdleOrRandom",
 })({ scoreChunk });
 ```
@@ -124,7 +157,10 @@ const { call, shutdown } = createPool({
 ```ts
 const { call, shutdown } = createPool({
   threads: 2,
-  inliner: { position: "last" },
+  inliner: {
+    position: "last",
+    dispatchThreshold: 16,
+  },
   balancer: "firstIdle",
 })({ routeTask });
 ```

@@ -53,7 +53,7 @@ src/run_ssr_compress.ts --threads 1 --requests 50000 --mode knitting
 
 Host baseline (no workers)
 ```bash
-src/run_ssr_compress.ts --requests 50000 --mode host --compress host 
+src/run_ssr_compress.ts --requests 50000 --mode host
 ```
 :::
 
@@ -61,13 +61,11 @@ src/run_ssr_compress.ts --requests 50000 --mode host --compress host
 
 ## What happens in this example
 
-1. The host creates a pool with `createPool({ threads })`.
-2. Each worker parses JSON, normalizes fields, and renders HTML with `renderToString`.
-3. Depending on `--compress`:
-
-   * `worker`: compress in the worker and return byte counts.
-   * `host`: return HTML, compress on the host.
-4. The host aggregates totals and prints throughput + compression ratio.
+1. In `--mode knitting`, the host creates a pool with `createPool({ threads, inliner })`.
+2. The inliner uses `dispatchThreshold` so the host lane stays out at light load
+   and joins on bursts.
+3. In `--mode host`, work stays on the host (no pool).
+4. Both modes compress with Brotli and report bytes + throughput.
 
 <DontDoubleParseTip />
 
