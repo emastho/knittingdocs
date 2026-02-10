@@ -217,10 +217,10 @@ function speedAriaText(speed: number) {
   .row{
     position: relative;
     display: grid;
-    grid-template-columns: var(--label-w) 1fr minmax(150px, max-content);
+    grid-template-columns: minmax(0, var(--label-w)) minmax(0, 1fr) minmax(9ch, max-content);
     align-items: center;
 
-    height: var(--row-h);
+    min-height: var(--row-h);
 
     gap: 10px;
   }
@@ -250,6 +250,7 @@ function speedAriaText(speed: number) {
     contain: layout paint;
     display: flex;
     align-items: center;
+    min-width: 0;
   }
 
   .ball{
@@ -294,6 +295,54 @@ function speedAriaText(speed: number) {
     from { transform: translate3d(0,-50%,0); }
     50% { transform: translate3d(var(--travel),-50%,0); }
     to { transform: translate3d(0,-50%,0); }
+  }
+
+  @media (max-width: 640px){
+    .bench{
+      padding: 12px;
+    }
+
+    .row{
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "label meta"
+        "track track";
+      min-height: 0;
+      gap: 6px 8px;
+    }
+
+    .label{
+      grid-area: label;
+      font-size: 12px;
+    }
+
+    .meta{
+      grid-area: meta;
+      font-size: 10px;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .track{
+      grid-area: track;
+    }
+
+    .controls{
+      grid-template-columns: 1fr;
+      align-items: start;
+      row-gap: 6px;
+    }
+
+    .restart{
+      grid-column: 1;
+      justify-self: start;
+    }
+
+    .source-note{
+      grid-column: 1;
+      font-size: 10px;
+    }
   }
 
   /* Respect reduced motion */
