@@ -15,7 +15,55 @@ export default defineConfig({
       title: "Knitting",
       description:
         "Knitting is a shared-memory IPC library for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
-      favicon: "/logo.png",
+      favicon: "/light_logo.svg",
+      head: [
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image",
+            content: "/light_logo.svg",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:alt",
+            content: "Knitting logo",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image",
+            content: "/light_logo.svg",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image:alt",
+            content: "Knitting logo",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
+            href: "/logo.svg",
+            type: "image/svg+xml",
+            media: "(prefers-color-scheme: dark)",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
+            href: "/light_logo.svg",
+            type: "image/svg+xml",
+            media: "(prefers-color-scheme: light)",
+          },
+        },
+      ],
       customCss: ["./src/styles/katex.css"],
       social: [{
         icon: "github",
