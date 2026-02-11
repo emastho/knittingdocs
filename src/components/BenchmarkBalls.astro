@@ -19,9 +19,9 @@ const {
     { label: "Python", speed: 80, color: "#60A5FA" },
   ] satisfies Item[],
   // Visual controls
-  rowHeight = 44,          // px
-  rowGap = 8,              // px
-  ballSize = 30,           // px
+  rowHeight = 55,          // px
+  rowGap = 12,              // px
+  ballSize = 35,           // px
   labelWidth = 92,         // px
   // Motion controls
   raceDuration = 3,      // seconds for the fastest one-way leg
@@ -59,10 +59,15 @@ function speedAriaText(speed: number) {
   const noun = Math.abs(speed) === 1 ? "request" : "requests";
   return `${speedFormatter.format(speed)} ${noun} per second`;
 }
+
+function barWidthPercent(speed: number) {
+  const ratio = Math.max(0, speed) / maxSpeed;
+  return Math.max(8, ratio * 100);
+}
 ---
 
 <section
-  class="bench"
+  class="bench not-content"
   data-benchmark-balls
   data-bench-infinite={infinite ? "1" : "0"}
   style={`
@@ -91,6 +96,7 @@ function speedAriaText(speed: number) {
           --dur:${durationFor(it.speed)}s;
           --delay:${(i * stagger).toFixed(3)}s;
           --c:${it.color ?? "currentColor"};
+          --bar-w:${barWidthPercent(it.speed).toFixed(2)}%;
         `}
         aria-label={`${it.label}, speed ${speedAriaText(it.speed)}`}
       >
@@ -99,6 +105,7 @@ function speedAriaText(speed: number) {
         </div>
 
         <div class="track" data-track>
+          <div class="bar" aria-hidden="true"></div>
           <div class="ball" aria-hidden="true"></div>
         </div>
 
@@ -295,6 +302,21 @@ function speedAriaText(speed: number) {
     min-width: 0;
   }
 
+  .bar{
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: var(--bar-w);
+    height: clamp(8px, calc(var(--ball) * 0.42), 14px);
+    transform: translateY(-50%);
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--c) 52%, transparent);
+    border: 1px solid color-mix(in oklab, var(--c) 78%, transparent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .ball{
     position:absolute;
     left: 0;
@@ -331,6 +353,20 @@ function speedAriaText(speed: number) {
 
   .bench.is-running .ball{
     animation-play-state: running;
+  }
+
+  .bench.is-bars .ball{
+    animation: none;
+    display: none;
+  }
+
+  .bench.is-bars .bar{
+    opacity: 1;
+  }
+
+  .bench.is-bars .restart,
+  .bench.is-bars .toggle-loop{
+    display: none;
   }
 
   @keyframes race{
@@ -387,12 +423,29 @@ function speedAriaText(speed: number) {
 <script is:inline>
   // Initializes each BenchmarkBalls instance once.
   const sections = document.querySelectorAll(".bench[data-benchmark-balls]");
+  const getConnectionInfo = () =>
+    navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  const shouldPreferBarsFallback = () => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) return true;
+
+    const connection = getConnectionInfo();
+    const effectiveType = String(connection?.effectiveType || "");
+    if (connection?.saveData || /2g|slow-2g/i.test(effectiveType)) return true;
+
+    const memory = typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : null;
+    const cores =
+      typeof navigator.hardwareConcurrency === "number" ? navigator.hardwareConcurrency : null;
+
+    return (memory !== null && memory <= 2) || (cores !== null && cores <= 2);
+  };
 
   sections.forEach((section) => {
     if (!(section instanceof HTMLElement)) return;
     if (section.dataset.benchInit === "1") return;
     section.dataset.benchInit = "1";
     let isInfinite = section.dataset.benchInfinite === "1";
+    let isBarsMode = false;
 
     const tracks = Array.from(section.querySelectorAll("[data-track]"));
     const balls = tracks.map((track) => track.querySelector(".ball"));
@@ -401,6 +454,8 @@ function speedAriaText(speed: number) {
     const finishListeners = [];
 
     let stopTimer = 0;
+    let noMotionTimer = 0;
+    let ro = null;
 
     const parseCssTimeMs = (value) => {
       const str = String(value).trim();
@@ -421,6 +476,44 @@ function speedAriaText(speed: number) {
       return maxMs;
     };
 
+    const readOffset = (ball, track) => {
+      const ballRect = ball.getBoundingClientRect();
+      const trackRect = track.getBoundingClientRect();
+      return ballRect.left - trackRect.left;
+    };
+
+    const getReferencePair = () => {
+      let reference = null;
+      let referenceDuration = Number.POSITIVE_INFINITY;
+
+      tracks.forEach((track, index) => {
+        const ball = balls[index];
+        if (!(track instanceof HTMLElement) || !(ball instanceof HTMLElement)) return;
+        const styles = getComputedStyle(ball);
+        const duration = parseCssTimeMs(styles.animationDuration);
+        if (!duration) return;
+        if (duration < referenceDuration) {
+          referenceDuration = duration;
+          reference = { track, ball };
+        }
+      });
+
+      return reference;
+    };
+
+    const clearNoMotionWatchdog = () => {
+      window.clearTimeout(noMotionTimer);
+    };
+
+    const removeFinishListeners = () => {
+      while (finishListeners.length) {
+        const entry = finishListeners.pop();
+        if (!entry) break;
+        const [ball, onFinish] = entry;
+        ball.removeEventListener("animationend", onFinish);
+      }
+    };
+
     const updateTravel = () => {
       const raw = parseFloat(getComputedStyle(section).getPropertyValue("--ball"));
       const ballSize = Number.isFinite(raw) ? raw : 16;
@@ -431,6 +524,20 @@ function speedAriaText(speed: number) {
         const fullTravel = Math.max(0, track.clientWidth - ballSize);
         ball.style.setProperty("--travel", `${fullTravel}px`);
       });
+    };
+
+    const onResize = () => updateTravel();
+
+    const teardownMotionRuntime = () => {
+      window.clearTimeout(stopTimer);
+      clearNoMotionWatchdog();
+      if (ro) {
+        ro.disconnect();
+        ro = null;
+      }
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      removeFinishListeners();
     };
 
     const resetRace = () => {
@@ -445,6 +552,34 @@ function speedAriaText(speed: number) {
       });
     };
 
+    const enableBarsMode = () => {
+      if (isBarsMode) return;
+      isBarsMode = true;
+      section.dataset.benchMode = "bars";
+      section.classList.add("is-bars");
+      section.classList.remove("is-running");
+      teardownMotionRuntime();
+      if (restart instanceof HTMLButtonElement) restart.disabled = true;
+      if (infiniteToggle instanceof HTMLButtonElement) infiniteToggle.disabled = true;
+    };
+
+    const scheduleNoMotionFallback = () => {
+      clearNoMotionWatchdog();
+      if (isBarsMode) return;
+      const ref = getReferencePair();
+      if (!ref) return;
+      const startOffset = readOffset(ref.ball, ref.track);
+
+      noMotionTimer = window.setTimeout(() => {
+        if (isBarsMode) return;
+        const endOffset = readOffset(ref.ball, ref.track);
+        if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset)) return;
+        if (Math.abs(endOffset - startOffset) < 0.8) {
+          enableBarsMode();
+        }
+      }, 1100);
+    };
+
     const syncInfiniteUi = () => {
       section.dataset.benchInfinite = isInfinite ? "1" : "0";
       section.style.setProperty("--iter", isInfinite ? "infinite" : "1");
@@ -455,29 +590,32 @@ function speedAriaText(speed: number) {
     };
 
     const startRace = () => {
+      if (isBarsMode) return;
       const raceMs = isInfinite ? 0 : getRaceCycleMs();
 
       window.clearTimeout(stopTimer);
+      clearNoMotionWatchdog();
       resetRace();
 
       requestAnimationFrame(() => {
+        if (isBarsMode) return;
         section.classList.add("is-running");
         if (!isInfinite) {
           stopTimer = window.setTimeout(() => {
             section.classList.remove("is-running");
           }, raceMs || 1);
         }
+        scheduleNoMotionFallback();
       });
     };
 
     const toggleInfinite = () => {
+      if (isBarsMode) return;
       isInfinite = !isInfinite;
       syncInfiniteUi();
       startRace();
     };
 
-    const onResize = () => updateTravel();
-    let ro = null;
     if ('ResizeObserver' in window) {
       ro = new ResizeObserver(updateTravel);
       ro.observe(section);
@@ -506,16 +644,14 @@ function speedAriaText(speed: number) {
 
     syncInfiniteUi();
     updateTravel();
-    startRace();
+    if (shouldPreferBarsFallback()) {
+      enableBarsMode();
+    } else {
+      startRace();
+    }
 
     const cleanup = () => {
-      window.clearTimeout(stopTimer);
-      if (ro) ro.disconnect();
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
-      finishListeners.forEach(([ball, onFinish]) => {
-        ball.removeEventListener("animationend", onFinish);
-      });
+      teardownMotionRuntime();
       if (restart instanceof HTMLButtonElement) {
         restart.removeEventListener("click", startRace);
       }

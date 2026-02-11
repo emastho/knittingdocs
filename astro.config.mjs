@@ -21,7 +21,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image",
-            content: "/light_logo.svg",
+            content: "/logo.webp",
           },
         },
         {
@@ -35,7 +35,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image",
-            content: "/light_logo.svg",
+            content: "/logo.webp",
           },
         },
         {
