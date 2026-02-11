@@ -26,6 +26,7 @@ const {
   // Motion controls
   raceDuration = 3,      // seconds for the fastest one-way leg
   stagger = 0,             // seconds delay per row
+  infinite = true,        // keep balls moving continuously
   sourceLabel = "based on node.js ipc graph (50 msg avg)",
 } = Astro.props as {
   items?: Item[];
@@ -35,6 +36,7 @@ const {
   labelWidth?: number;
   raceDuration?: number;
   stagger?: number;
+  infinite?: boolean;
   sourceLabel?: string;
 };
 
@@ -62,6 +64,7 @@ function speedAriaText(speed: number) {
 <section
   class="bench"
   data-benchmark-balls
+  data-bench-infinite={infinite ? "1" : "0"}
   style={`
     --row-h:${rowHeight}px;
     --row-gap:${rowGap}px;
@@ -69,6 +72,7 @@ function speedAriaText(speed: number) {
     --label-w:${labelWidth}px;
     --stagger:${stagger}s;
     --race-window:${raceDuration}s;
+    --iter:${infinite ? "infinite" : "1"};
   `}
   aria-label="Benchmark balls animation"
 >
@@ -105,11 +109,21 @@ function speedAriaText(speed: number) {
     ))}
   </div>
 
-  <div class="controls">
-    <button class="restart" type="button" data-race-restart>
-      Restart
-    </button>
+  <div class="controls not-content">
     <p class="source-note">{sourceLabel}</p>
+    <div class="actions">
+      <button class="restart" type="button" data-race-restart>
+        Restart
+      </button>
+      <button
+        class="toggle-loop"
+        type="button"
+        data-race-infinite
+        aria-pressed={infinite ? "true" : "false"}
+      >
+        {infinite ? "Infinite: on" : "Infinite: off"}
+      </button>
+    </div>
   </div>
 </section>
 
@@ -170,13 +184,22 @@ function speedAriaText(speed: number) {
 
   .controls{
     margin-top: 12px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: end;
-    column-gap: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
   }
 
-  .restart{
+  .actions{
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .restart,
+  .toggle-loop{
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 6px 10px;
@@ -185,22 +208,40 @@ function speedAriaText(speed: number) {
     font-size: 12px;
     line-height: 1.2;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    min-height: 34px;
+    touch-action: manipulation;
   }
 
-  .restart:hover{
+  .restart:hover,
+  .toggle-loop:hover{
     background: rgba(255,255,255,0.52);
   }
 
-  :global(:root[data-theme='dark']) .restart{
+  :global(:root[data-theme='dark']) .restart,
+  :global(:root[data-theme='dark']) .toggle-loop{
     background: rgba(15, 23, 42, 0.42);
   }
 
-  :global(:root[data-theme='dark']) .restart:hover{
+  :global(:root[data-theme='dark']) .restart:hover,
+  :global(:root[data-theme='dark']) .toggle-loop:hover{
     background: rgba(30, 41, 59, 0.56);
   }
 
+  .toggle-loop[aria-pressed='true']{
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(16, 185, 129, 0.45);
+  }
+
+  :global(:root[data-theme='dark']) .toggle-loop[aria-pressed='true']{
+    background: rgba(16, 185, 129, 0.24);
+    border-color: rgba(52, 211, 153, 0.52);
+  }
+
   .source-note{
-    grid-column: 1;
     margin: 0;
     text-align: left;
     color: var(--muted);
@@ -208,10 +249,11 @@ function speedAriaText(speed: number) {
     line-height: 1.2;
     letter-spacing: 0.02em;
     text-transform: lowercase;
-  }
-
-  .restart{
-    grid-column: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .row{
@@ -275,7 +317,7 @@ function speedAriaText(speed: number) {
     /* Default travel, replaced by JS with exact pixels */
     --travel: calc(100% - var(--ball));
 
-    animation: race calc(var(--dur) * 2) linear var(--delay) 1 forwards;
+    animation: race calc(var(--dur) * 2) linear var(--delay) var(--iter) both;
     animation-play-state: paused;
   }
 
@@ -328,19 +370,7 @@ function speedAriaText(speed: number) {
       grid-area: track;
     }
 
-    .controls{
-      grid-template-columns: 1fr;
-      align-items: start;
-      row-gap: 6px;
-    }
-
-    .restart{
-      grid-column: 1;
-      justify-self: start;
-    }
-
     .source-note{
-      grid-column: 1;
       font-size: 10px;
     }
   }
@@ -362,10 +392,12 @@ function speedAriaText(speed: number) {
     if (!(section instanceof HTMLElement)) return;
     if (section.dataset.benchInit === "1") return;
     section.dataset.benchInit = "1";
+    let isInfinite = section.dataset.benchInfinite === "1";
 
     const tracks = Array.from(section.querySelectorAll("[data-track]"));
     const balls = tracks.map((track) => track.querySelector(".ball"));
     const restart = section.querySelector("[data-race-restart]");
+    const infiniteToggle = section.querySelector("[data-race-infinite]");
     const finishListeners = [];
 
     let stopTimer = 0;
@@ -413,22 +445,46 @@ function speedAriaText(speed: number) {
       });
     };
 
+    const syncInfiniteUi = () => {
+      section.dataset.benchInfinite = isInfinite ? "1" : "0";
+      section.style.setProperty("--iter", isInfinite ? "infinite" : "1");
+      if (infiniteToggle instanceof HTMLButtonElement) {
+        infiniteToggle.setAttribute("aria-pressed", isInfinite ? "true" : "false");
+        infiniteToggle.textContent = isInfinite ? "Infinite: on" : "Infinite: off";
+      }
+    };
+
     const startRace = () => {
-      const raceMs = getRaceCycleMs();
+      const raceMs = isInfinite ? 0 : getRaceCycleMs();
 
       window.clearTimeout(stopTimer);
       resetRace();
 
       requestAnimationFrame(() => {
         section.classList.add("is-running");
-        stopTimer = window.setTimeout(() => {
-          section.classList.remove("is-running");
-        }, raceMs || 1);
+        if (!isInfinite) {
+          stopTimer = window.setTimeout(() => {
+            section.classList.remove("is-running");
+          }, raceMs || 1);
+        }
       });
     };
 
-    const ro = new ResizeObserver(updateTravel);
-    ro.observe(section);
+    const toggleInfinite = () => {
+      isInfinite = !isInfinite;
+      syncInfiniteUi();
+      startRace();
+    };
+
+    const onResize = () => updateTravel();
+    let ro = null;
+    if ('ResizeObserver' in window) {
+      ro = new ResizeObserver(updateTravel);
+      ro.observe(section);
+    } else {
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', onResize);
+    }
 
     balls.forEach((ball) => {
       if (!(ball instanceof HTMLElement)) return;
@@ -444,18 +500,27 @@ function speedAriaText(speed: number) {
     if (restart instanceof HTMLButtonElement) {
       restart.addEventListener("click", startRace);
     }
+    if (infiniteToggle instanceof HTMLButtonElement) {
+      infiniteToggle.addEventListener("click", toggleInfinite);
+    }
 
+    syncInfiniteUi();
     updateTravel();
     startRace();
 
     const cleanup = () => {
       window.clearTimeout(stopTimer);
-      ro.disconnect();
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
       finishListeners.forEach(([ball, onFinish]) => {
         ball.removeEventListener("animationend", onFinish);
       });
       if (restart instanceof HTMLButtonElement) {
         restart.removeEventListener("click", startRace);
+      }
+      if (infiniteToggle instanceof HTMLButtonElement) {
+        infiniteToggle.removeEventListener("click", toggleInfinite);
       }
     };
 

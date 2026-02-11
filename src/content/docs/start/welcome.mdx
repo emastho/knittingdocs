@@ -30,9 +30,9 @@ Let’s dive in.
 
 JavaScript can do many things at once, but it can’t run CPU work in parallel on a single thread. That’s why **Workers** exist.
 
-In general application code, though, workers are still surprisingly rare. Not because parallelism isn’t useful, but because the default solutions drifted elsewhere.
+Yet, in general application code, workers are still surprisingly rare. Not because parallelism isn’t useful, but because the default solutions drifted elsewhere.
 
-Promises made I/O concurrency painless. When servers got hot, it often felt
+Promises made I/O concurrency less painfull. When servers got hot, it often felt
 easier to scale out: spawn another process or container and communicate over
 HTTP or WebSockets.
 
@@ -204,13 +204,12 @@ module lifecycles.
 
 Supporting them properly would require careful design, not a quick port.
 
-**Remote imports are treated with caution**  
-Knitting relies on loading task modules consistently across workers. Importing
-code directly from the network introduces security risks, reproducibility
-issues, and unclear trust boundaries.
+**Remote imports are currently supported (with caution)**  
+Knitting can load task modules from remote sources, but this expands trust
+boundaries and can reduce reproducibility across environments.
 
-If remote imports are ever supported, they will likely appear first in `Deno`,
-be opt-in, and come with explicit safety constraints.
+Because of security and supply-chain concerns, remote import support may be
+restricted or removed in future releases.
 
 **Not a distributed system**  
 Knitting is not a cluster manager, a job queue, or a distributed execution framework. It operates within a single runtime instance, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.

@@ -6,6 +6,44 @@
 
 <script>
   const containers = document.querySelectorAll('[data-ashes]');
+  const DEFAULT_PARTICLE_COUNT = 50;
+
+  function getConnectionInfo() {
+    return navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  }
+
+  function shouldDisableAshes() {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) return true;
+
+    const connection = getConnectionInfo();
+    const effectiveType = String(connection?.effectiveType || '');
+    if (connection?.saveData || /2g/i.test(effectiveType)) return true;
+
+    const memory = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null;
+    const cores =
+      typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : null;
+
+    return (memory !== null && memory <= 2) || (cores !== null && cores <= 2);
+  }
+
+  function getParticleCount(container) {
+    if (shouldDisableAshes()) return 0;
+
+    const area = Math.max(1, container.clientWidth * container.clientHeight);
+    const areaScale = Math.min(1.25, Math.max(0.6, area / (1280 * 720)));
+    let count = Math.round(DEFAULT_PARTICLE_COUNT * areaScale);
+
+    const memory = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null;
+    const cores =
+      typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : null;
+
+    if ((memory !== null && memory <= 4) || (cores !== null && cores <= 4)) {
+      count = Math.min(count, 28);
+    }
+
+    return Math.max(0, count);
+  }
 
   function normalizeHexColor(value) {
     if (!value) return null;
@@ -46,6 +84,13 @@
     const ctxs = [canvas[0].getContext('2d'), canvas[1].getContext('2d')];
 
     if (!ctxs[0] || !ctxs[1]) return () => {};
+
+    const particleCount = getParticleCount(container);
+    if (particleCount <= 0) {
+      container.dataset.ashesDisabled = '1';
+      container.style.display = 'none';
+      return () => {};
+    }
 
     const incr = ((n) => () => (n < 0.7 ? (n = 0.00008 + n) : n))(0);
     let W = 0;
@@ -164,7 +209,7 @@
     }
 
     resize();
-    for (let i = 0; i < 50; i++) A.push(new Ash());
+    for (let i = 0; i < particleCount; i++) A.push(new Ash());
 
     const intervalId = window.setInterval(draw, 33);
     const onResize = () => resize();
