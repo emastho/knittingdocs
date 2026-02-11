@@ -1,6 +1,19 @@
 ---
 title: Quick Start
-description: Run your first tasks with a worker pool.
+description: Build your first Knitting worker pool, define tasks, call them like functions, and run parallel JavaScript across CPU cores.
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Knitting quick start, JavaScript worker pool, shared-memory IPC tutorial, Node.js parallel tasks, Deno, Bun"
+  - tag: meta
+    attrs:
+      property: og:type
+      content: article
+  - tag: meta
+    attrs:
+      name: robots
+      content: "index,follow,max-image-preview:large"
 sidebar:
   order: 3
 ---
@@ -14,6 +27,8 @@ export const hello = getCode('hello_world.ts');
 export const two = getCode('multi_thread.ts');
 export const inline = getCode('inline.ts');
 export const multi = getCode('inline_multiple.ts');
+
+This quick start shows how to define tasks, create a worker pool, execute task calls, and shut down cleanly.
 
 ## Introduction
 

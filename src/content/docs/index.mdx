@@ -1,11 +1,36 @@
 ---
 title: "Knitting"
-description: "A real IPC for Node.js, Deno, and Bun."
+description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun, built for low-latency worker tasks and high-throughput parallel JavaScript."
 template: splash
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "shared-memory IPC, Node.js worker threads, Deno workers, Bun workers, JavaScript parallelism, Knitting"
+  - tag: meta
+    attrs:
+      property: og:type
+      content: website
+  - tag: meta
+    attrs:
+      name: robots
+      content: "index,follow,max-image-preview:large"
+  - tag: meta
+    attrs:
+      property: og:image
+      content: /logo.png
+  - tag: meta
+    attrs:
+      name: twitter:image
+      content: /logo.png
+
 hero:
+  image:
+    alt: A glittering, brightly colored logo
+    file: ../../assets/logo.webp
   tagline: "Real nanosecond responses for JavaScript."
   actions:
-    - text: Quick Start
+    - text: Welcome
       link: /start/welcome/
     - text: Benchmarks
       link: /benchmarks/introduction/
@@ -21,8 +46,6 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 
 <AshesBackground />
 
-Knitting is a shared-memory IPC for Node.js, Deno, and Bun.
-
 <BenchmarkBalls
   sourceLabel="based on node.js ipc graph (50 msg)"
   items={[
@@ -33,7 +56,7 @@ Knitting is a shared-memory IPC for Node.js, Deno, and Bun.
   ]}
 />
 <CardGrid stagger>
-  <Card title="Multi threading in 10 lines">
+  <Card title="Multi-threading in 10 lines">
     Start here if you want the smallest possible mental model.
     Define tasks, create a pool, call it, and shut it down.
 

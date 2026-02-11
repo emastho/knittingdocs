@@ -13,6 +13,9 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Knitting",
+      description:
+        "Knitting is a shared-memory IPC library for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
+      favicon: "/logo.png",
       customCss: ["./src/styles/katex.css"],
       social: [{
         icon: "github",

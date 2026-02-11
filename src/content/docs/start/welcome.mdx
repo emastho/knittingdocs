@@ -1,6 +1,19 @@
 ---
-title: Welcome
-description: What Knitting is and how it works.
+title: Welcome to Knitting
+description: Learn what Knitting is, why shared-memory IPC matters, and when to use worker pools in Node.js, Deno, and Bun.
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Knitting overview, shared-memory IPC, JavaScript worker pool, Node.js IPC, Deno IPC, Bun IPC"
+  - tag: meta
+    attrs:
+      property: og:type
+      content: article
+  - tag: meta
+    attrs:
+      name: robots
+      content: "index,follow,max-image-preview:large"
 sidebar:
   order: 1
 ---
@@ -15,6 +28,8 @@ import bunBench from '../../../assets/results/bun_ipc.md?raw';
 import bunIpc from '../../../assets/charts/bun_ipc.png';
 
 export const hello = getCode('hello_world.ts');
+
+Knitting is a shared-memory IPC library for Node.js, Deno, and Bun that makes worker-thread parallelism feel like normal function calls.
 
 Welcome! We’re glad you’re here.
 
@@ -32,7 +47,7 @@ JavaScript can do many things at once, but it can’t run CPU work in parallel o
 
 Yet, in general application code, workers are still surprisingly rare. Not because parallelism isn’t useful, but because the default solutions drifted elsewhere.
 
-Promises made I/O concurrency less painfull. When servers got hot, it often felt
+Promises made I/O concurrency less painful. When servers got hot, it often felt
 easier to scale out: spawn another process or container and communicate over
 HTTP or WebSockets.
 
@@ -77,7 +92,7 @@ high-frequency tasks.
       src={nodeIpc.src}
       width={nodeIpc.width}
       height={nodeIpc.height}
-      alt="Node IPC benchmark"
+      alt="Node.js shared-memory IPC benchmark"
       loading="lazy"
     />
   </TabItem>
@@ -89,7 +104,7 @@ high-frequency tasks.
       src={denoIpc.src}
       width={denoIpc.width}
       height={denoIpc.height}
-      alt="Deno IPC benchmark"
+      alt="Deno shared-memory IPC benchmark"
       loading="lazy"
     />
   </TabItem>
@@ -101,7 +116,7 @@ high-frequency tasks.
       src={bunIpc.src}
       width={bunIpc.width}
       height={bunIpc.height}
-      alt="Bun IPC benchmark"
+      alt="Bun shared-memory IPC benchmark"
       loading="lazy"
     />
   </TabItem>

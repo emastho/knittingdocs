@@ -1,11 +1,26 @@
 ---
 title: Installation
-description: Requirements and how to install the package.
+description: Install Knitting from JSR for Node.js, Deno, and Bun, and verify runtime requirements for shared-memory worker IPC.
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "install Knitting, JSR package, Node.js worker IPC, Deno install, Bun install"
+  - tag: meta
+    attrs:
+      property: og:type
+      content: article
+  - tag: meta
+    attrs:
+      name: robots
+      content: "index,follow,max-image-preview:large"
 sidebar:
   order: 2
 ---
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
+
+Use this page to check runtime requirements and install Knitting correctly for your JavaScript runtime.
 
 ## Requirements
 
@@ -29,4 +44,3 @@ through `deno` or `jsr`.
 
 <Code code="jsr add --npm @vixeny/knitting" lang="bash" title={"jsr.sh"} mark={['--npm']}/>
 :::
-
