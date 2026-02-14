@@ -1,0 +1,125 @@
+---
+title: Hono server routes
+description: Build a Hono server with ping, SSR, and JWT routes in Knitting or host-only mode.
+hero:
+  title: 'Hono + SSR + JWT'
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+
+export const server = getCode("data_transforms/hono_server/hono_knitting.ts");
+export const renderSsrPage = getCode("data_transforms/hono_server/hono_componets_ssr.tsx");
+export const issueJwt = getCode("data_transforms/hono_server/hono_components_jwt.ts");
+
+## What is this about
+
+This example builds a small Hono API with 3 routes:
+
+1. `GET /ping` for health checks.
+2. `POST /ssr` to SSR a user card.
+3. `POST /jwt` to issue a valid signed JWT for a user.
+
+This example is split into three files:
+
+1. `hono_knitting.ts` (the Hono server, plus a Knitting worker pool).
+2. `hono_componets_ssr.tsx` (SSR task: parse + defaults + render).
+3. `hono_components_jwt.ts` (JWT task: validate + sign + return JSON string).
+
+## Technologies used (and why)
+
+- **Hono**: a small, fast routing layer. It keeps the request path minimal so most overhead is in your actual route work.
+- **`@hono/node-server`**: a thin adapter that runs a Hono `fetch` handler on Node/Bun.
+- **React SSR (`react-dom/server`)**: renders a tiny HTML page for `/ssr` so you can simulate CPU-heavy server work.
+- **`hono/jwt`**: signs a JWT (HS256) for `/jwt` so the example includes common auth-like CPU work.
+- **Knitting (`@vixeny/knitting`)**: runs selected transforms in a worker pool (threads). This is the core “offload expensive work” technique the example demonstrates.
+
+## Install
+
+:::info
+Bun
+```bash
+bun add hono @hono/node-server react react-dom zod
+```
+Bun (Knitting mode only)
+```bash
+bun add @vixeny/knitting
+```
+Node
+```bash
+npm i hono @hono/node-server react react-dom zod
+```
+:::
+
+The JWT route uses `hono/jwt` and signs with HS256.
+Set `JWT_SECRET` in production.
+
+## Run
+
+:::info
+Bun (Knitting)
+```bash
+JWT_SECRET="replace-me" bun src/hono_knitting.ts
+```
+Node
+```bash
+JWT_SECRET="replace-me" npx tsx src/hono_knitting.ts
+```
+:::
+
+## Route quick checks
+
+```bash
+# Ping
+curl -s http://localhost:3000/ping
+
+# SSR (returns HTML)
+curl -s http://localhost:3000/ssr \
+  -H 'content-type: application/json' \
+  -d '{"name":"Ari","plan":"pro","bio":"Building on Knitting","projects":17}'
+
+# JWT (returns JSON string with token)
+curl -s http://localhost:3000/jwt \
+  -H 'content-type: application/json' \
+  -d '{"user":{"id":"u_42","email":"ari@example.com","role":"admin"},"ttlSec":900}'
+```
+
+## Performance notes (how to talk about it correctly)
+
+There are two different comparisons here, and they produce different percentages:
+
+- **SSR-only uplift (single endpoint)**: the run you captured for `/ssr` in isolation was `9647 rps` vs `5079 rps`, which is about **+90%** throughput (about **1.9x**).
+- **Mixed-load uplift (ping + jwt + ssr hammered concurrently)**: the run you captured shows all three routes improving by roughly the same amount:
+  - `/ping`: `3198 → 5082 rps` (**+58.9%**)
+  - `/jwt`: `3188 → 5012 rps` (**+57.2%**)
+  - `/ssr`: `3198 → 5067 rps` (**+58.4%**)
+
+The mixed-load result supports a clean, defensible statement:
+
+> Offloading the expensive work reduces contention on the main server thread/event loop, so even “cheap” routes improve under pressure.
+
+One important wording detail: you do not need JWT itself to be offloaded for `/jwt` throughput to improve. The mixed-load numbers are consistent with “SSR offload freed the main thread,” which reduces shared bottlenecks (CPU scheduling, GC pressure, event loop stalls), improving overall service throughput.
+
+## Why this pattern matters
+
+- `ping` stays cheap and synchronous.
+- You can benchmark workers vs host-only with the same route behavior.
+- In Knitting mode, the JWT task returns **stringified JSON** to reduce structured-clone overhead.
+- Heavy route logic stays in one shared file, keeping both server entrypoints small.
+
+## Code
+
+<Tabs>
+  <TabItem label="hono_knitting.ts (server)">
+    <Code code={server} lang="ts" title={"hono_knitting.ts"} />
+  </TabItem>
+  <TabItem label="hono_componets_ssr.tsx (SSR task)">
+    <Code code={renderSsrPage} lang="tsx" title={"hono_componets_ssr.tsx"} />
+  </TabItem>
+  <TabItem label="hono_components_jwt.ts (JWT task)">
+    <Code code={issueJwt} lang="ts" title={"hono_components_jwt.ts"} />
+  </TabItem>
+</Tabs>

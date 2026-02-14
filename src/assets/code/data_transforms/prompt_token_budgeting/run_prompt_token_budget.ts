@@ -57,7 +57,8 @@ function makeHistory(i: number): string[] {
 
   for (let t = 0; t < turns; t++) {
     const topic = pick(TOPICS, i + t);
-    history[t] = `Need guidance on ${topic}. Include practical steps and one small code example.`;
+    history[t] =
+      `Need guidance on ${topic}. Include practical steps and one small code example.`;
   }
 
   return history;
@@ -128,7 +129,6 @@ async function runWorkers(inputs: PromptInput[]): Promise<Totals> {
       jobs.push(pool.call.preparePrompt(inputs[i]!));
     }
 
-    pool.send();
     const plans = await Promise.all(jobs);
     return summarize(plans);
   } finally {
@@ -146,9 +146,7 @@ async function main() {
   for (let i = 0; i < REQUESTS; i++) inputs[i] = makeInput(i);
 
   const started = performance.now();
-  const totals = MODE === "host"
-    ? runHost(inputs)
-    : await runWorkers(inputs);
+  const totals = MODE === "host" ? runHost(inputs) : await runWorkers(inputs);
   const finished = performance.now();
 
   const tookMs = finished - started;
@@ -167,7 +165,9 @@ async function main() {
   console.log("budgeted tokens   :", totals.budgetedTokens.toLocaleString());
   console.log(
     "saved tokens      :",
-    `${savedTokens.toLocaleString()} (${percent(savedTokens, totals.rawTokens)})`,
+    `${savedTokens.toLocaleString()} (${
+      percent(savedTokens, totals.rawTokens)
+    })`,
   );
   console.log("trimmed runs      :", totals.trimmedRuns.toLocaleString());
   console.log("query trimmed runs:", totals.queryTrimmedRuns.toLocaleString());

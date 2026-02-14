@@ -27,7 +27,7 @@ type Task = {
 
 - Define tasks at module scope (no conditional exports).
 - Export tasks from the module where they are defined.
-- Prefer a single argument; use a tuple or object for multiple values.
+- Use a single argument; use a tuple or object for multiple values.
 - Better to be on it's own file
 
 ### Simple task
@@ -85,8 +85,9 @@ APIs.
 
 - Task inputs support `PromiseLike` values.
 - Task handlers receive awaited input types (`Awaited<A>`).
-- `call` returns `Promise<Awaited<ReturnType<TaskFn>>>`, so consumers get the
-  final resolved type.
+- Task handlers can return `R` or `PromiseLike<R>`.
+- `call.*()` returns `Promise<Awaited<R>>`, so callers receive the final
+  resolved value type (not `Promise<Promise<...>>`).
 
 ```ts
 type TaskInput<A> = A | PromiseLike<A>;
@@ -97,17 +98,23 @@ type CallResult<R> = Promise<Awaited<R>>;
 #### Example
 
 ```ts
-import { createPool, task } from "@vixeny/knitting";
+import { createPool, isMain, task } from "@vixeny/knitting";
 
-const addOne = task<Promise<number> | number, number>({
-  f: (n) => n + 1, // n is already awaited here
+export const addOne = task<Promise<number> | number, number>({
+  f: (n) => {
+    const next = n + 1; // n is already awaited here
+    return Promise.resolve(next); // return can be a Promise
+  },
 });
 
 const pool = createPool({ threads: 1 })({ addOne });
 
-// Promise input is accepted.
-const result = await pool.call.addOne(Promise.resolve(41));
-// result: number (42)
+if (isMain) {
+  // Promise input is accepted and resolved before dispatch.
+  const result = await pool.call.addOne(Promise.resolve(41));
+  console.log(result);
+  // result: number (42), not Promise<number>
+}
 ```
 
 #### Behavior summary

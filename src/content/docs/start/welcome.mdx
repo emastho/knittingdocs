@@ -159,7 +159,7 @@ from magic; they come from removing friction:
 - **Batch-friendly execution:** work is encoded, dispatched, and resolved through a pipelined flow.
 - **Sleep instead of spin:** workers park and wake only when there’s work.
 - **Event-loop friendly:** runtimes cooperate with the event loop: no blocking,
-  no forced `await`, predictable behavior.
+  no forced `await`, just predictable behavior.
 - **Pressure-responsive:** higher load improves throughput instead of stalling.
 
 This matters most when the cost of reaching the compute is comparable to the compute itself.
@@ -172,14 +172,16 @@ This matters most when the cost of reaching the compute is comparable to the com
 
 Knitting shines in workloads that mix CPU pressure with burstiness:
 
-- **Math and simulation:** [Big prime](/examples/maths/big_prime), [Monte Carlo
-  π](/examples/maths/monte_pi), [Physics loop](/examples/maths/physics_loop),
+- **Math and simulation:** [Big prime](/examples/maths/big_prime), [Monte Carlo](/examples/maths/monte_pi), [Physics loop](/examples/maths/physics_loop),
   [TSP (GSA)](/examples/maths/tsp_gsa).
 - **Data transforms:** [Overview](/examples/data_transforms/intro_data_transforms),
   [Schema validation](/examples/data_transforms/validation/schema_validate),
+  [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation),
+  [Salt hashing](/examples/data_transforms/validation/salt_hashing),
   [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting),
   [React SSR parsing](/examples/data_transforms/rendering_output/react_ssr),
   [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress),
+  [Hono server routes](/examples/data_transforms/rendering_output/hono_server),
   [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html).
 - **Web servers with CPU spikes:** keeping the main thread responsive under load.
 - **High-frequency background jobs:** lots of small tasks where batching pays off.
@@ -209,7 +211,7 @@ fairly straightforward.
 
 The real reason is security. Shared memory in the browser comes with strict
 constraints, and speculative execution attacks have shown these risks are real
-(`yes, Spectre`). Until we know it is safe, Knitting stays server-side by
+(`yes, you Spectre`). Until we know it is safe, Knitting stays server-side by
 design.
 
 **No edge runtimes (for now)**  
@@ -227,7 +229,7 @@ Because of security and supply-chain concerns, remote import support may be
 restricted or removed in future releases.
 
 **Not a distributed system**  
-Knitting is not a cluster manager, a job queue, or a distributed execution framework. It operates within a single runtime instance, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.
+Knitting is not a cluster manager, or a distributed execution framework. It operates within a single runtime instance, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.
 
 Theoretically, because we use shared memory, we could have real IPC with other
 languages, but that is a far-off dream. There is still a lot to build first.

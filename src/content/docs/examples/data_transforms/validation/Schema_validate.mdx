@@ -1,6 +1,6 @@
 ---
 title: Schema validate
-description: Parse JSON strings, validate with Zod, and return typed results.
+description: Clean Zod validation example with a simple host-vs-worker benchmark.
 hero:
   title: 'Validation + parsing'
 sidebar:
@@ -11,19 +11,23 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
 
-export const run = getCode("data_transforms/schema_validate/run_schema_validate.ts");
-export const schema_validate = getCode("data_transforms/schema_validate/parse_validate.ts");
+export const run = getCode("data_transforms/schema_validate/schema_knitting.ts");
+export const bench = getCode("data_transforms/schema_validate/bench_schema_validate.ts");
+export const component = getCode("data_transforms/schema_validate/parse_validate.ts");
 
 ## What is this about
 
-This example takes a **string payload**, parses it as JSON, validates it with a
-schema, and returns either:
+This example is split into three files:
 
-- a typed object, or
-- a list of validation issues.
+1. `schema_knitting.ts` runs parse+validate in host and Knitting modes.
+2. `parse_validate.ts` isolates schema logic and exports tasks.
+3. `bench_schema_validate.ts` runs a quick benchmark with fixed settings (no flags).
 
-It follows a common API path:
-`string -> parse -> validate -> return`.
+## Technologies used (and why)
+
+- **Zod**: schema-first validation with typed outputs and predictable error paths.
+- **Knitting tasks**: compares direct host imports and worker task execution for the same validator.
+- **Batched payloads**: benchmark path batches JSON strings so dispatch overhead is controlled.
 
 ## Install
 
@@ -34,26 +38,33 @@ bun add zod
 ```
 :::
 
-## Commands
+## Run
 
 :::info
 Bun
 ```bash
-src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+bun src/schema_knitting.ts
 ```
 Deno
 ```bash
-deno run -A src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+deno run -A src/schema_knitting.ts
 ```
-
 Node
 ```bash
-npx tsx src/run_schema_validate.ts --threads 2 --requests 50000 --invalid 15 --mode knitting
+npx tsx src/schema_knitting.ts
 ```
+:::
 
-Host baseline (no workers)
+## Quick bench
+
+:::info
+Bun
 ```bash
-src/run_schema_validate.ts --requests 50000 --invalid 15 --mode host
+bun src/bench_schema_validate.ts
+```
+Node
+```bash
+npx tsx src/bench_schema_validate.ts
 ```
 :::
 
@@ -65,19 +76,33 @@ src/run_schema_validate.ts --requests 50000 --invalid 15 --mode host
 4. The task returns `{ ok: true, value }` or `{ ok: false, issues }`.
 5. The host aggregates valid/invalid counts and prints sample issues.
 
+## What the benchmark measures
+
+- `host`: `JSON.parse + UserSchema.safeParse` via direct function imports.
+- `knitting`: the same payload batches through worker task calls.
+- Batch calls keep per-dispatch overhead predictable.
+
+:::note
+This benchmark includes both execution paths in one script, so the main variable is
+host import vs worker task path.
+:::
+
 ## Code
 
 <Tabs>
-  <TabItem label="run_schema_validate.ts">
-    <Code code={run} lang="ts" title={"run_schema_validate.ts"} />
+  <TabItem label="schema_knitting.ts">
+    <Code code={run} lang="ts" title={"schema_knitting.ts"} />
+  </TabItem>
+  <TabItem label="bench_schema_validate.ts">
+    <Code code={bench} lang="ts" title={"bench_schema_validate.ts"} />
   </TabItem>
   <TabItem label="parse_validate.ts">
-    <Code code={schema_validate} lang="ts" title={"parse_validate.ts"} />
+    <Code code={component} lang="ts" title={"parse_validate.ts"} />
   </TabItem>
 </Tabs>
 
 ## Why this pattern matters
 
-- You get deterministic validation behavior across host and workers.
-- Schema errors are explicit and easy to aggregate for reporting.
-- Typed outputs reduce downstream checks in render or transform stages.
+- It isolates schema logic in one reusable component file.
+- It keeps benchmark commands simple and reproducible.
+- It compares host imports and task execution with one workload shape.

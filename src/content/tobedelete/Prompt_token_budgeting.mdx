@@ -1,0 +1,106 @@
+---
+title: Prompt token budgeting
+description: Clean prompt-budgeting example plus a dedicated mitata benchmark.
+hero:
+  title: 'LLM input shaping'
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/prompt_token_budgeting/run_prompt_token_budget.ts");
+export const bench = getCode("data_transforms/prompt_token_budgeting/bench_prompt_token_budget.ts");
+export const budget = getCode("data_transforms/prompt_token_budgeting/token_budget.ts");
+
+## What is this about
+
+This page has two parts:
+
+1. A practical prompt-budgeting example (`run_prompt_token_budget.ts`) for app logic.
+2. A dedicated benchmark (`bench_prompt_token_budget.ts`) that measures token-budget throughput with `mitata`.
+
+## Install
+
+:::info
+Bun
+```bash
+bun add tiktoken openai
+bun add -d mitata
+```
+:::
+
+`openai` is optional here. These examples only prepare prompts and token budgets.
+`mitata` is only required for the benchmark script.
+
+## Example command
+
+:::info
+Bun
+```bash
+bun src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
+```
+Deno
+```bash
+deno run -A src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
+```
+Node
+```bash
+npx tsx src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
+```
+:::
+
+## Benchmark command (mitata)
+
+:::info
+Bun
+```bash
+bun src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32
+```
+Node
+```bash
+npx tsx src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32
+```
+:::
+
+## What happens in the example
+
+1. The host generates prompt inputs (same system prefix, different history/query).
+2. Each task builds the prompt and counts tokens with `tiktoken`.
+3. If over budget, it drops oldest turns first, then trims query tokens.
+4. The host aggregates savings and trim counts.
+
+## What the benchmark measures
+
+- `host`: build prompts + tokenize + trim to budget on `N` requests.
+- `knitting`: the same `N` requests through worker threads.
+- Requests are sent as batches (`--batch`) so per-call IPC overhead is amortized.
+- Worker tasks return compact totals (token/trim counters), not full prompt strings.
+
+:::note
+For this benchmark, batch size matters. Tiny batches mostly measure dispatch
+overhead; very large batches can increase memory pressure. Start with `32` or
+`64`, then tune for your hardware and request shape.
+:::
+
+## Code
+
+<Tabs>
+  <TabItem label="run_prompt_token_budget.ts">
+    <Code code={run} lang="ts" title={"run_prompt_token_budget.ts"} />
+  </TabItem>
+  <TabItem label="bench_prompt_token_budget.ts">
+    <Code code={bench} lang="ts" title={"bench_prompt_token_budget.ts"} />
+  </TabItem>
+  <TabItem label="token_budget.ts">
+    <Code code={budget} lang="ts" title={"token_budget.ts"} />
+  </TabItem>
+</Tabs>
+
+## Why this pattern matters
+
+- It gives you a clean preflight step before model calls.
+- It benchmarks budgeting logic in a way that is fast and fair.
+- It keeps model input size predictable, which helps cost and latency control.

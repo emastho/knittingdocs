@@ -1,0 +1,104 @@
+---
+title: Salt hashing
+description: Password salting + PBKDF2 hashing with a simple host-vs-worker benchmark.
+hero:
+  title: 'Salting + hashing'
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+
+export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
+export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
+export const component = getCode("data_transforms/salt_hashing/salt_hashing.ts");
+
+## What is this about
+
+This example is split into three files:
+
+1. `salt_knitting.ts` runs salting + hashing checks in host and Knitting modes.
+2. `salt_hashing.ts` isolates hashing, verification, and packet fast-path functions.
+3. `bench_salt_hashing.ts` runs a quick benchmark with fixed settings (no flags).
+
+## Technologies used (and why)
+
+- **Web Crypto (`PBKDF2` + `SHA-256`)**: standard password derivation path with explicit iteration cost.
+- **Knitting tasks**: lets you compare host imports and worker execution with the same function logic.
+- **`Uint8Array` packets**: benchmark path uses typed-array payloads to reduce serialization noise in hot loops.
+
+## Install
+
+:::info
+Bun
+```bash
+bun add @vixeny/knitting
+```
+:::
+
+This example uses built-in Web Crypto APIs, so no extra crypto package is required.
+
+## Run
+
+:::info
+Bun
+```bash
+bun src/salt_knitting.ts
+```
+Deno
+```bash
+deno run -A src/salt_knitting.ts
+```
+Node
+```bash
+npx tsx src/salt_knitting.ts
+```
+:::
+
+## Quick bench
+
+:::info
+Bun
+```bash
+bun src/bench_salt_hashing.ts
+```
+Node
+```bash
+npx tsx src/bench_salt_hashing.ts
+```
+:::
+
+## What happens in this example
+
+1. Generate or receive per-password salt bytes.
+2. Derive a hash using `PBKDF2-SHA256`.
+3. Persist a compact record format (`algorithm$iterations$keyBytes$salt$hash`).
+4. Verify login attempts by recomputing and constant-time comparing hashes.
+
+## What the benchmark measures
+
+- `host`: hash typed-array packets through direct function imports.
+- `knitting`: hash the same packets using worker task calls.
+- Batch calls reduce dispatch overhead and keep comparison stable.
+
+## Code
+
+<Tabs>
+  <TabItem label="salt_knitting.ts">
+    <Code code={run} lang="ts" title={"salt_knitting.ts"} />
+  </TabItem>
+  <TabItem label="bench_salt_hashing.ts">
+    <Code code={bench} lang="ts" title={"bench_salt_hashing.ts"} />
+  </TabItem>
+  <TabItem label="salt_hashing.ts">
+    <Code code={component} lang="ts" title={"salt_hashing.ts"} />
+  </TabItem>
+</Tabs>
+
+## Why this pattern matters
+
+- It keeps password storage flow explicit and deterministic.
+- It keeps benchmark commands simple and reproducible.
+- It compares host imports and task execution with one workload shape.

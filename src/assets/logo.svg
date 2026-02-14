@@ -1,57 +1,95 @@
-<svg width="1024" height="1024" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+<svg
+  width="1024"
+  height="1024"
+  viewBox="0 0 100 100"
+  xmlns="http://www.w3.org/2000/svg"
+>
   <defs>
     <style>
-      .t { fill:none; stroke-width:7.4; stroke-linecap:round; stroke-linejoin:round; }
-      .badge { fill:#0B0B10; opacity:0.06; }
+    .t {
+      fill: none;
+      stroke-width: 7.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .badge {
+      fill: #0b0b10;
+      opacity: 0.06;
+    }
 
-      .ringBack { fill:none; stroke:#0B0B10; stroke-width:6.6; opacity:0.85; }
-      .ringLip  { fill:none; stroke:#0B0B10; stroke-width:6.6; stroke-linecap:round; }
+    .ringBack {
+      fill: none;
+      stroke: #0b0b10;
+      stroke-width: 6.6;
+      opacity: 0.85;
+    }
+    .ringLip {
+      fill: none;
+      stroke: #0b0b10;
+      stroke-width: 6.6;
+      stroke-linecap: round;
+    }
 
-      /* "Cut" lines to create underpasses */
-      .gap { fill:none; stroke:#FFFFFF; stroke-width:6.0; stroke-linecap:round; opacity:0.92; }
+    /* "Cut" lines to create underpasses */
+    .gap {
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 6.0;
+      stroke-linecap: round;
+      opacity: 0.92;
+    }
     </style>
   </defs>
 
   <!-- Badge -->
-  <rect x="6" y="6" width="88" height="88" rx="18" class="badge"/>
+  <rect x="6" y="6" width="88" height="88" rx="18" class="badge" />
 
   <!-- Ring behind -->
-  <circle cx="46" cy="50" r="9.0" class="ringBack"/>
+  <circle cx="46" cy="50" r="9.0" class="ringBack" />
 
   <!-- =========================
        TOP-LEFT: 3 intertwined rails (perfectly horizontal at y=22)
        ========================= -->
 
   <!-- Orange rail + into body -->
-  <path class="t" stroke="#FF7A00"
-        d="M 10 22 L 22 22
+  <path
+    class="t"
+    stroke="#FF7A00"
+    d="M 10 22 L 22 22
            C 30 22, 34 28, 40 38
-           C 43 43, 44.8 46.5, 46 50" />
+           C 43 43, 44.8 46.5, 46 50"
+  />
 
   <!-- Purple rail + into body -->
-  <path class="t" stroke="#7C3AED"
-        d="M 12 22 L 24 22
+  <path
+    class="t"
+    stroke="#7C3AED"
+    d="M 12 22 L 24 22
            C 32 22, 36 28, 41 37
-           C 43.5 41.5, 45.0 46.0, 46 50" />
+           C 43.5 41.5, 45.0 46.0, 46 50"
+  />
 
   <!-- Blue rail + into body -->
-  <path class="t" stroke="#06B6D4"
-        d="M 14 22 L 26 22
+  <path
+    class="t"
+    stroke="#06B6D4"
+    d="M 14 22 L 26 22
            C 34 22, 38 28, 42 36
-           C 44.0 40.0, 45.2 45.2, 46 50" />
+           C 44.0 40.0, 45.2 45.2, 46 50"
+  />
 
   <!-- ===== TOP-LEFT braid window (make the three rails feel knitted) ===== -->
   <!-- Crossover A: purple over orange -->
   <path class="gap" d="M 18.5 22.0 L 23.5 22.0" />
-  <path class="t"   stroke="#7C3AED" d="M 18.5 22.0 L 23.5 22.0" />
+  <path class="t" stroke="#7C3AED" d="M 18.5 22.0 L 23.5 22.0" />
 
   <!-- Crossover B: orange over blue -->
   <path class="gap" d="M 21.0 22.0 L 26.0 22.0" />
-  <path class="t"   stroke="#FF7A00" d="M 21.0 22.0 L 26.0 22.0" />
+  <path class="t" stroke="#FF7A00" d="M 21.0 22.0 L 26.0 22.0" />
 
   <!-- Crossover C: blue over purple -->
   <path class="gap" d="M 23.5 22.0 L 28.0 22.0" />
-  <path class="t"   stroke="#06B6D4" d="M 23.5 22.0 L 28.0 22.0" />
+  <path class="t" stroke="#06B6D4" d="M 23.5 22.0 L 28.0 22.0" />
   <!-- ===== end top-left braid window ===== -->
 
   <!-- =========================

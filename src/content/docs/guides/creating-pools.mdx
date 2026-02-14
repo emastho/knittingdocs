@@ -28,6 +28,8 @@ entrypoints that create pools.
 ```ts
 createPool({
   threads?: number,
+  payloadInitialBytes?: number,
+  payloadMaxBytes?: number,
   inliner?: {
     position?: "first" | "last",
     batchSize?: number,
@@ -37,7 +39,6 @@ createPool({
     strategy: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
   } | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
-    resolveAfterFinishingAll?: true,
     timers?: {
       spinMicroseconds?: number,
       parkMs?: number,
@@ -56,6 +57,28 @@ createPool({
   },
 })
 ```
+
+### payloadInitialBytes
+
+Initial size (in bytes) of each payload `SharedArrayBuffer` used by a worker.
+Lower values reduce startup memory; the buffer can grow later (when growable
+SAB is supported).
+
+### payloadMaxBytes
+
+Maximum size (in bytes) each payload `SharedArrayBuffer` is allowed to grow to.
+
+### Payload buffer behavior
+
+- Defaults:
+  - `payloadMaxBytes = 64 * 1024 * 1024` (`64 MiB`)
+  - `payloadInitialBytes = 4 * 1024 * 1024` (`4 MiB`) when SAB growth is available
+  - If SAB growth is not available, initial size is forced to max size.
+- Validation:
+  - Non-finite or `<= 0` values are ignored (defaults used).
+  - `payloadInitialBytes` is clamped to `payloadMaxBytes`.
+- Scope:
+  - Applied per worker and per direction (request payload + return payload), so each worker allocates two payload buffers with these limits.
 
 ## Example
 
@@ -96,8 +119,7 @@ Controls how calls are routed across lanes (threads, plus the optional inliner).
 
 ## inliner
 
-Adds an extra lane that runs tasks on the main thread (useful for very small
-tasks where worker overhead dominates).
+Adds an extra lane that runs tasks on the main thread.
 
 - `position`: whether the inline lane appears before (`"first"`) or after
   (`"last"`) the worker lanes for balancing purposes.
@@ -108,18 +130,8 @@ tasks where worker overhead dominates).
   plus inline lane are scheduled.
   This option has effect only when `inliner` is enabled.
 
-:::note
-Migration: `host.dispatchThreshold` was removed. Use
-`inliner.dispatchThreshold` instead.
-:::
 
 ## worker
-
-### resolveAfterFinishingAll
-
-When set to `true`, the worker preferentially flushes results after it has
-drained its current work queue. This can improve throughput for some workloads
-at the cost of latency for early results.
 
 ### timers
 
@@ -131,7 +143,7 @@ is no work.
 Busy-spin budget before the worker parks (microseconds). Larger values can
 reduce latency under bursty load but increase CPU usage.
 
-Defaults to `max(1, totalLanes) * 50`, where `totalLanes = threads + (inliner ? 1 : 0)`.
+Defaults to `max(1, totalLanes) * 35`, where `totalLanes = threads + (inliner ? 1 : 0)`.
 
 #### parkMs
 

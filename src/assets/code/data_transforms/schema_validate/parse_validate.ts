@@ -16,6 +16,11 @@ export type ParseValidateResult =
   | { ok: true; value: User }
   | { ok: false; issues: string[] };
 
+export type ValidationSummary = {
+  valid: number;
+  invalid: number;
+};
+
 function toIssues(error: z.ZodError): string[] {
   return error.issues.map((issue) => {
     const path = issue.path.length > 0 ? issue.path.join(".") : "payload";
@@ -40,5 +45,37 @@ export function parseAndValidateHost(rawPayload: string): ParseValidateResult {
 }
 
 export const parseAndValidate = task<string, ParseValidateResult>({
-  f: (rawPayload) => parseAndValidateHost(rawPayload),
+  f: parseAndValidateHost,
+});
+
+export function parseAndValidateFastHost(rawPayload: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPayload) as unknown;
+  } catch {
+    return false;
+  }
+
+  return UserSchema.safeParse(parsed).success;
+}
+
+export function parseAndValidateBatchFastHost(
+  rawPayloads: string[],
+): ValidationSummary {
+  let valid = 0;
+  let invalid = 0;
+
+  for (let i = 0; i < rawPayloads.length; i++) {
+    if (parseAndValidateFastHost(rawPayloads[i]!)) {
+      valid++;
+    } else {
+      invalid++;
+    }
+  }
+
+  return { valid, invalid };
+}
+
+export const parseAndValidateBatchFast = task<string[], ValidationSummary>({
+  f: parseAndValidateBatchFastHost,
 });

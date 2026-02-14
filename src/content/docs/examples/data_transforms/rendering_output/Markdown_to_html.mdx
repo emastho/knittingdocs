@@ -1,6 +1,6 @@
 ---
 title: Markdown to HTML
-description: Convert markdown strings to HTML in workers or on the host.
+description: Markdown-to-HTML rendering with a simple host-vs-worker benchmark.
 hero:
   title: 'Markdown rendering'
 sidebar:
@@ -11,18 +11,25 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
 
-export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_html.ts");
-export const render_markdown = getCode("data_transforms/markdown_to_html/render_markdown.ts");
+export const run = getCode("data_transforms/markdown_to_html/markdown_knitting.ts");
+export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
+export const component = getCode("data_transforms/markdown_to_html/render_markdown.ts");
 
 ## What is this about
 
-This example is a simple rendering pipeline:
+This example is split into three files:
 
-1. Receive markdown strings.
-2. Convert markdown to HTML.
-3. Return rendered output plus lightweight metrics (`bytes`, `headings`, `words`).
+1. `markdown_knitting.ts` runs markdown rendering in host and Knitting modes.
+2. `render_markdown.ts` isolates the parser/render task.
+3. `bench_markdown_to_html.ts` runs a quick benchmark with fixed settings (no flags).
 
 It complements React SSR as another **Rendering & Output** example.
+
+## Technologies used (and why)
+
+- **`marked`**: practical markdown parser for realistic transform workloads.
+- **Knitting tasks**: compares direct host calls and worker task execution for the same renderer.
+- **Brotli (`node:zlib`)**: benchmark path includes compression so byte movement cost is visible.
 
 ## Install
 
@@ -33,49 +40,70 @@ bun add marked
 ```
 :::
 
-## Commands
+## Run
 
 :::info
 Bun
 ```bash
-src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
+bun src/markdown_knitting.ts
 ```
 Deno
 ```bash
-deno run -A src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
+deno run -A src/markdown_knitting.ts
 ```
 
 Node
 ```bash
-npx tsx src/run_markdown_to_html.ts --threads 2 --docs 25000 --mode knitting
-```
-
-Host baseline (no workers)
-```bash
-src/run_markdown_to_html.ts --docs 25000 --mode host
+npx tsx src/markdown_knitting.ts
 ```
 :::
 
-## What happens in this example
+## Quick bench
 
-1. The host generates markdown documents.
-2. Each worker runs `marked.parse(...)` and computes tiny summary stats.
-3. The host aggregates totals and prints throughput.
-4. You compare this against `--mode host` to decide whether workers help.
+:::info
+Bun
+```bash
+bun src/bench_markdown_to_html.ts
+```
+Node
+```bash
+npx tsx src/bench_markdown_to_html.ts
+```
+:::
+
+## What happens in the example
+
+1. Render one markdown document on the host.
+2. Render the same markdown in a worker task.
+3. Compare the HTML output from both paths.
+
+## What the benchmark measures
+
+- `host`: parse + compress `N` markdown docs via direct imports.
+- `knitting`: run the same `N` docs through worker tasks.
+- Benchmark validates host-vs-worker raw bytes before reporting throughput.
+
+:::note
+This benchmark includes both execution paths in one script, so the main variable
+is host import vs worker task path.
+:::
 
 ## Code
 
 <Tabs>
-  <TabItem label="run_markdown_to_html.ts">
-    <Code code={run} lang="ts" title={"run_markdown_to_html.ts"} />
+  <TabItem label="markdown_knitting.ts">
+    <Code code={run} lang="ts" title={"markdown_knitting.ts"} />
+  </TabItem>
+  <TabItem label="bench_markdown_to_html.ts">
+    <Code code={bench} lang="ts" title={"bench_markdown_to_html.ts"} />
   </TabItem>
   <TabItem label="render_markdown.ts">
-    <Code code={render_markdown} lang="ts" title={"render_markdown.ts"} />
+    <Code code={component} lang="ts" title={"render_markdown.ts"} />
   </TabItem>
 </Tabs>
 
 ## Why this pattern matters
 
-- Rendering can become CPU-heavy at high document counts.
-- Returning compact metrics keeps IPC overhead low.
-- The same host-vs-worker pattern used in SSR applies cleanly here.
+- It isolates rendering logic from orchestration and benchmarking.
+- It keeps benchmark commands simple and reproducible.
+- It compares host imports and task execution with one workload shape.

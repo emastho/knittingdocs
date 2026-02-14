@@ -26,8 +26,6 @@ Use it to complement workers, not to avoid them.
 - It can reduce worker pressure by letting the host participate in execution.
 - It can improve throughput for compute-style workloads when tasks are short and
   plentiful.
-- It can reduce overhead for tiny tasks where crossing to worker threads is
-  more expensive than local execution.
 
 ## How It Runs
 
@@ -72,7 +70,7 @@ For event-loop sensitive workloads (for example HTTP), `"last"` is usually safer
 
 Limits how many inline tasks are processed per macro-queue turn.
 
-- Higher values are often good for maths/compute throughput.
+- Higher values are often good for math/compute throughput.
 - Lower values are usually better for HTTP/event-loop responsiveness.
 
 If not set, it defaults to `1` when the inliner is enabled.
@@ -81,15 +79,21 @@ If not set, it defaults to `1` when the inliner is enabled.
 
 Controls when the inline lane becomes eligible for scheduling.
 
-- `1` (default): inline lane is immediately eligible (same behavior as before).
-- Higher values: keep the host lane out of scheduling at light concurrency, then
-  let it join once load bursts.
+`dispatchThreshold` was added mainly for event-loop sensitive producers (HTTP/I/O)
+that can flood a pool with calls. During a traffic spike, the host is already
+busy doing the plumbing: deciding where each call should run and
+encoding/decoding payloads to communicate with workers.
+
+A higher `dispatchThreshold` keeps the host lane out of scheduling at light
+concurrency, then lets it join only once there is a meaningful burst in flight.
+This acts like a pressure-relief valve: the extra lane helps drain backlog, and
+inline executions avoid worker IPC overhead (no worker encode/decode), which can
+leave more room for the event loop and other pools to make progress.
+
+- `1` (default): inline lane is immediately eligible.
+- Higher values: host lane stays excluded until concurrency rises.
 - If `inliner` is not enabled, this option has no effect.
 
-:::note
-Migration: `host.dispatchThreshold` was removed.
-Use `inliner.dispatchThreshold` instead.
-:::
 
 ## Exact Behavior
 
@@ -134,11 +138,6 @@ Existing tests validate both cases:
 For many HTTP systems, separate pools per workload type is usually a better
 choice than aggressive inlining.
 
-## Current Limits
-
-- There is no built-in dynamic rebalance policy tied to event-loop pressure.
-
-Revisit tuning as rebalance strategies land.
 
 ## Examples
 

@@ -1,6 +1,6 @@
 ---
 title: React SSR
-description: "Parse payloads and render HTML in worker threads"
+description: A practical React SSR example with a simple host-vs-worker benchmark.
 hero:
   title: 'React SSR'
 sidebar:
@@ -12,34 +12,24 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
 import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
-import WorkRightFastTip from '../../../../../components/tips/WorkRightFastTip.astro';
 
-export const run = getCode("data_transforms/react_ssr/run_ssr.ts");
-export const render_user_card = getCode("data_transforms/react_ssr/render_user_card.tsx");
+export const run = getCode("data_transforms/react_ssr/react_ssr_knitting.ts");
+export const bench = getCode("data_transforms/react_ssr/bench_react_ssr.ts");
+export const component = getCode("data_transforms/react_ssr/render_user_card.tsx");
 
 ## What is this about
 
-Most data-transform pipelines follow the same shape: parse input, validate it,
-then produce output.
+This example is split into three files:
 
-This example uses a realistic web path:
+1. `react_ssr_knitting.ts` runs parse + SSR in host and Knitting modes.
+2. `render_user_card.tsx` isolates the SSR component and task.
+3. `bench_react_ssr.ts` runs a quick benchmark with fixed settings (no flags).
 
-1. The host receives user payloads (simulated with JSON strings).
-2. A worker parses and validates the payload.
-3. The worker renders an HTML string using **React SSR** (`renderToString`).
-4. The host sends the HTML to the client (or caches it, compresses it, etc.).
+## Technologies used (and why)
 
-To keep the comparison fair, payloads are intentionally tiny (&lt;= 44 bytes of
-JSON). That makes transfer overhead visible.
-
-This is a practical starting point for workloads like:
-
-* parsing lots of JSON
-* validating inputs
-* generating HTML
-* keeping your main thread responsive while CPU work happens elsewhere
-
----
+- **React SSR (`renderToString`)**: models a realistic server render workload.
+- **Knitting tasks**: compares direct host function calls and worker task calls with the same renderer.
+- **JSON payload strings**: keeps parse + normalize cost visible, not just render cost.
 
 ## Install
 
@@ -50,91 +40,74 @@ bun add react react-dom
 ```
 :::
 
-This page uses Bun for simplicity, but the same architecture works in Node and
-Deno: `parse -> validate -> render`, then compare worker mode against host-only.
+This page uses Bun for simplicity, but the same setup also works in Node and
+Deno.
 
-## What happens in this example
-
-1. The host creates a pool with `createPool({ threads })`.
-   (only in `--mode knitting`).
-2. The host queues jobs with `call.*()` in worker mode.
-3. Each worker runs:
-   * `JSON.parse(payload)`
-   * basic validation / defaults
-   * HTML rendering via `react-dom/server`
-4. Workers run `renderUserCardHost` and return `{ html, bytes }`.
-5. In `--mode host`, rendering stays on the host as a baseline.
-6. The host aggregates stats and prints throughput.
-
-<DontDoubleParseTip />
-
-## Commands
+## Run
 
 :::info
 Bun
 ```bash
-src/run_ssr.ts --threads 1 --requests 50000 --batch 64 \
---mode knitting
+bun src/react_ssr_knitting.ts
 ```
-Host baseline (no workers)
+Deno
 ```bash
-src/run_ssr.ts --requests 50000 --batch 64 --mode host
+deno run -A src/react_ssr_knitting.ts
+```
+Node
+```bash
+npx tsx src/react_ssr_knitting.ts
 ```
 :::
 
+## Quick bench
+
+:::info
+Bun
+```bash
+bun src/bench_react_ssr.ts
+```
+Deno
+```bash
+deno run -A src/bench_react_ssr.ts
+```
+Node
+```bash
+npx tsx src/bench_react_ssr.ts
+```
+:::
+
+## What happens in the example
+
+1. The host generates JSON payload strings.
+2. `renderUserCardHost` executes directly on the host for baseline numbers.
+3. `renderUserCard` executes the same logic through worker tasks.
+4. Both paths produce byte counts from rendered HTML.
+5. The benchmark prints host throughput, worker throughput, and uplift.
+
+## What the benchmark measures
+
+- `host`: parse + normalize + render using direct imports.
+- `knitting`: the same payload set through task calls in a worker pool.
+- Byte parity is reported so output equivalence stays visible.
+
+<DontDoubleParseTip />
+
 ## Code
 <Tabs>
-  <TabItem label="run_ssr.ts">
-    <Code code={run} lang="ts" title={"run_ssr.ts"} />
+  <TabItem label="react_ssr_knitting.ts">
+    <Code code={run} lang="ts" title={"react_ssr_knitting.ts"} />
+  </TabItem>
+  <TabItem label="bench_react_ssr.ts">
+    <Code code={bench} lang="ts" title={"bench_react_ssr.ts"} />
   </TabItem>
   <TabItem label="render_user_card.tsx">
-    <Code code={render_user_card} lang="tsx" title={"render_user_card.tsx"} />
+    <Code code={component} lang="tsx" title={"render_user_card.tsx"} />
   </TabItem>
 </Tabs>
 
----
+## Why this pattern matters
 
-## Why this is a good “data transform” example
-
-This pattern generalizes well:
-
-* **Parsing**: JSON, CSV, logs, protobuf, HTML, markdown…
-* **Validation**: type checks, ranges, defaults, schema enforcement
-* **Transformation**: normalize fields, enrich data, extract features, build tokens…
-* **Rendering / output**: HTML strings, token arrays, compressed buffers, indexes...
-
-
-## Practical notes
-
-### Keep return values small
-
-`renderUserCardHost` returns `{ html, bytes }` for convenience.
-In fast loops, extra allocations add up, so keep return payloads small and avoid
-work you do not need.
-
-In this example the object is small, so readability wins. Optimize only after
-you measure.
-
-<WorkRightFastTip />
-
-### Keep worker payloads simple
-
-Send primitives and plain objects/arrays. In SSR workflows, send:
-
-* the parsed data needed to render
-* a template key / component id
-* maybe a small set of feature flags
-
-Don’t try to send live framework objects (React elements, class instances, DB connections).
-
-### JSX / TSX support
-
-The worker uses **TSX** so it can render a real React component. Bun supports `.tsx` directly. (Node and Deno can do the same, but the setup differs.)
-
-### React SSR note
-
-This example uses `renderToString` from `react-dom/server` to keep the output a plain string. For streaming SSR in Bun, the Bun guide uses `renderToReadableStream`.
-
-### Treat HTML like untrusted output until you escape it
-
-If you render from user-provided fields, escape or sanitize them. Avoid `dangerouslySetInnerHTML` unless you fully control the input.
+- It isolates component logic from orchestration and benchmarking.
+- It keeps benchmark commands simple and reproducible.
+- It compares host imports and task execution with one workload shape.

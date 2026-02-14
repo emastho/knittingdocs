@@ -1,31 +1,34 @@
 ---
 title: Data transforms
-description: Topic carpet for parsing, validation, rendering, and output examples.
+description: A quick map of parsing, validation, rendering, and output examples.
 sidebar:
   order: 0
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-This section groups data-transform examples by workflow stage so you can find
-the right pattern quickly.
+This page groups the data-transform examples by workflow stage so you can jump
+straight to the pattern you need.
 
 <CardGrid>
   <Card title="Validation & parsing">
-    Parse incoming strings, validate shape and types, then return safe output.
-    Start with [Schema validate](/examples/data_transforms/validation/Schema_validate)
+    Parse incoming strings, validate shape and types, then return typed output.
+    Start with [Schema validation](/examples/data_transforms/validation/Schema_validate),
+    [JWT revalidation](/examples/data_transforms/validation/Jwt_revalidation),
+    [Salt hashing](/examples/data_transforms/validation/Salt_hashing),
     or [Prompt token budgeting](/examples/data_transforms/validation/Prompt_token_budgeting).
   </Card>
   <Card title="Rendering & output">
-    Convert validated input into final output formats.
-    Try [React SSR](/examples/data_transforms/rendering_output/React_ssr),
+    Take validated input and produce final output formats.
+    Try [Hono server routes](/examples/data_transforms/rendering_output/Hono_server),
+    [React SSR](/examples/data_transforms/rendering_output/React_ssr),
     [React SSR compression](/examples/data_transforms/rendering_output/React_ssr_compress),
     or [Markdown to HTML](/examples/data_transforms/rendering_output/Markdown_to_html).
   </Card>
 </CardGrid>
 
-## Why this carpet exists
+## Why this page exists
 
-- Validation examples focus on correctness and typed outputs.
+- Validation examples focus on correctness and typed output.
 - Rendering examples focus on throughput and output size.
-- Every example includes a host-only baseline so performance comparisons stay honest.
+- Each example includes a host-only baseline so performance comparisons are apples-to-apples.
