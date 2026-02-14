@@ -30,7 +30,7 @@ hero:
 ---
 
 import AshesBackground from "../../components/AshesBackground.astro";
-import { Card, CardGrid } from "@astrojs/starlight/components";
+import { Card, CardGrid, FileTree } from "@astrojs/starlight/components";
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 import nodeIpc from "../../assets/charts/node_ipc.png";
 import denoIpc from "../../assets/charts/deno_ipc.png";
@@ -111,26 +111,24 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       Use this as orientation, then check the benchmark pages for details.
     </Card>
 
+    <Card title="Throughput">
+      These are end-to-end results for `1 MB` payloads
+      using full roundtrip semantics (`host -> worker -> host`, `x2` bytes).
 
-    <Card title="Flexible by default">
-      Built to keep agent-style workflows simple and adaptable.
+      **Hot scoreboard (GB/s, roundtrip):**
 
-      - Promise inputs and async outputs work naturally.
-      - Rich payload support plus explicit serialization behavior.
-      - Tuning knobs for timeout, balancing, inlining, and dispatch.
+      | Runtime | `Uint8Array` | `string` |
+      | --- | ---: | ---: |
+      | **Bun** | **23.85** | **19.48** |
+      | **Deno** | **2.34** | **5.35** |
+      | **Node** | **2.29** | **2.64** |
 
 
+      [Benchmarks overview](/benchmarks/introduction/)
+   
     </Card>
 
 
-    <Card title="Tune for workload shape">
-      Knitting exposes the knobs you usually need in production.
-
-      - Balance lanes with `balancer` strategies.
-      - Add host execution with `inliner` when it helps.
-      - Control spin/park/backoff/timeout and more.
-
-    </Card>
 
     <Card title="One more thread, big impact">
       A common pattern: offload the expensive path (SSR, parsing, crypto, compression) to a worker so the main
@@ -151,13 +149,50 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       There is enough here to copy real patterns, not just toy snippets.
       We keep adding examples as new workflows land.
 
+      <FileTree>
+      - examples/
+        - intro_examples.mdx
+        - data_transforms/
+          - intro_data_transforms.mdx
+          - rendering_output/
+            - React_ssr.mdx
+            - Hono_server.mdx
+            - …
+          - validation/
+            - Schema_validate.mdx
+            - Jwt_revalidation.mdx
+            - …
+        - maths/
+          - Big_prime.mdx
+          - Monte_pi.mdx
+          - Physics_loop.mdx
+          - …
+      </FileTree>
+
       - [Browse examples](/examples/intro_examples)
-      - [Data transforms](/examples/data_transforms/intro_data_transforms)
-      - [Math examples](/examples/maths/Big_prime)
 
     We are fully documentated!
     </Card>
 
+    <Card title="Flexible by default">
+      Built to keep agent-style workflows simple and adaptable.
+
+      - Promise inputs and async outputs work naturally.
+      - Rich payload support plus explicit serialization behavior.
+      - Tuning knobs for timeout, balancing, inlining, and dispatch.
+
+
+    </Card>
+
+
+    <Card title="Tune for workload shape">
+      Knitting exposes the knobs you usually need in production.
+
+      - Balance lanes with `balancer` strategies.
+      - Add host execution with `inliner` when it helps.
+      - Control spin/park/backoff/timeout and more.
+
+    </Card>
   </CardGrid>
 </div>
 

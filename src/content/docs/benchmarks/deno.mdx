@@ -1,6 +1,6 @@
 ---
 title: Deno
-description: Deno benchmark results for Knitting, including IPC latency, worker comparison, heavy-load scaling, and payload type costs.
+description: Deno benchmark results for Knitting, including IPC latency, worker comparison, call-growth transfer throughput, heavy-load scaling, and payload type costs.
 sidebar:
   order: 3
 ---
@@ -13,6 +13,7 @@ import denoTypesBench from '../../../assets/results/deno_types.md?raw';
 import denoTypesOne from '../../../assets/charts/deno_types_types_count1.png';
 import denoTypesHundred from '../../../assets/charts/deno_types_types_count100.png';
 import denoHeavyLoad from '../../../assets/results/deno_withload.md?raw';
+import denoCallGrowth from '../../../assets/results/deno_call-growth.md?raw';
 import denoAllTypes from '../../../assets/results/deno_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
@@ -88,6 +89,22 @@ At `100` messages per iteration, the gap remains strong:
     <Code code={denoTypesBench} lang="md" title={"deno_types.md"} />
   </TabItem>
 </Tabs>
+
+## Call growth throughput (Deno)
+This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports per-call cost.
+
+Using the `1048576 B` row (`avg`), one-way transfer throughput is:
+
+- `string`: `391.93 µs` -> `2.68 GB/s`
+- `Uint8Array`: `895.19 µs` -> `1.17 GB/s`
+
+Interpretation:
+
+- Deno reaches `~2.68 GB/s` for 1 MiB string payloads in this run.
+- For 1 MiB `Uint8Array`, throughput is closer to `~1.17 GB/s`, near Node's binary throughput in this benchmark.
+
+### Data
+<Code code={denoCallGrowth} lang="md" title={"deno_call-growth.md"} />
 
 ## Efficiency under heavy tasks (Deno)
 <HeavyTaskPrimeTransferCaution />

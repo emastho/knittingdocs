@@ -1,6 +1,6 @@
 ---
 title: Node.js
-description: Node.js benchmark results for Knitting, including IPC latency, worker comparison, heavy-load scaling, and payload type costs.
+description: Node.js benchmark results for Knitting, including IPC latency, worker comparison, call-growth transfer throughput, heavy-load scaling, and payload type costs.
 sidebar:
   order: 2
 ---
@@ -13,6 +13,7 @@ import nodeTypesBench from '../../../assets/results/node_types.md?raw';
 import nodeTypesOne from '../../../assets/charts/node_types_types_count1.png';
 import nodeTypesHundred from '../../../assets/charts/node_types_types_count100.png';
 import nodeHeavyLoad from '../../../assets/results/node_withload.md?raw';
+import nodeCallGrowth from '../../../assets/results/node_call-growth.md?raw';
 import nodeAllTypes from '../../../assets/results/node_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
@@ -88,6 +89,22 @@ At `100` messages per iteration, the gap remains strong:
     <Code code={nodeTypesBench} lang="md" title={"node_types.md"} />
   </TabItem>
 </Tabs>
+
+## Call growth throughput (Node)
+This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports per-call cost.
+
+Using the `1048576 B` row (`avg`), one-way transfer throughput is:
+
+- `string`: `793.92 µs` -> `1.32 GB/s`
+- `Uint8Array`: `914.81 µs` -> `1.15 GB/s`
+
+Interpretation:
+
+- Node is roughly in the `~1.1-1.3 GB/s` range for 1 MiB payload transfer in this benchmark shape.
+- At this size, string is slightly faster than `Uint8Array` in the measured averages.
+
+### Data
+<Code code={nodeCallGrowth} lang="md" title={"node_call-growth.md"} />
 
 ## Efficiency under heavy tasks (Node)
 <HeavyTaskPrimeTransferCaution />

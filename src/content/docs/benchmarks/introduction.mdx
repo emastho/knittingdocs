@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: Overall benchmark overview across Node, Deno, and Bun.
+description: Overall benchmark overview across Node, Deno, and Bun, including IPC, latency, payload types, call-growth throughput, and heavy-load scaling.
 sidebar:
   order: 1
 ---
@@ -22,6 +22,7 @@ For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
 - IPC overhead between main and worker threads
 - End-to-end message latency as batch size increases
 - Payload sensitivity (primitive, structured, and binary types)
+- Throughput at growing payload sizes (up to `1 MiB`)
 - Heavy-task scaling and parallel efficiency under CPU-intensive workloads
 
 ## IPC (combined)
@@ -79,6 +80,22 @@ These two charts compare type-dependent overhead at count `1` and count `100`.
   alt="Combined types benchmark chart for count 100"
   loading="lazy"
 />
+
+## Call growth (1 MiB throughput)
+
+From the `1048576 B` row (`avg`) in each runtime's `*_call-growth` result, one-way transfer throughput is:
+
+| Runtime | String (GB/s) | Uint8Array (GB/s) |
+| --- | ---: | ---: |
+| Node | `1.32` | `1.15` |
+| Deno | `2.68` | `1.17` |
+| Bun | `9.74` | `11.93` |
+
+Quick takeaways:
+
+- Bun is clearly fastest at 1 MiB in this benchmark shape, for both text and binary payloads.
+- Deno's 1 MiB string path is notably stronger than Node, while binary (`Uint8Array`) is close between Deno and Node.
+- This complements the IPC/latency charts by showing behavior when payload size, not just call count, grows.
 
 ## Heavy Load: Speedup and Efficiency
 
