@@ -1,121 +1,86 @@
 import { createPool, isMain } from "@vixeny/knitting";
+import { bench, boxplot, run, summary } from "mitata";
 import { renderUserCard, renderUserCardHost } from "./render_user_card.tsx";
+import { buildUserPayloads } from "./utils.ts";
 
-const THREADS = 2;
-const REQUESTS = 50_000;
+const THREADS = 1;
+const REQUESTS = 2_000;
 
-const TAGS = [
-  "react",
-  "ssr",
-  "typescript",
-  "performance",
-  "parallel",
-  "workers",
-  "ui",
-  "web",
-];
-const LOCATIONS = ["Austin, TX", "Seattle, WA", "Brooklyn, NY", "Denver, CO"];
 
-function pickFrom<T>(arr: T[], index: number): T {
-  return arr[index % arr.length]!;
-}
 
-function makePayload(i: number): string {
-  const short = i.toString(36);
-
-  return JSON.stringify({
-    id: `u${short}`,
-    name: `User ${short.toUpperCase()}`,
-    handle: `@${short}`,
-    bio: `Building fast UIs. Coffee + TypeScript. (${short})`,
-    plan: i % 7 === 0 ? "pro" : "free",
-    location: pickFrom(LOCATIONS, i),
-    joinedAt: `202${(i % 4) + 2}-0${(i % 8) + 1}-1${i % 9}`,
-    tags: [
-      pickFrom(TAGS, i),
-      pickFrom(TAGS, i + 1),
-      pickFrom(TAGS, i + 2),
-      pickFrom(TAGS, i + 3),
-    ],
-    stats: {
-      posts: (i % 120) + 1,
-      followers: (i * 13) % 50_000,
-      following: (i * 7) % 5_000,
-      likes: (i * 31) % 250_000,
+async function main() {
+  const payloads = buildUserPayloads(REQUESTS);
+  const pool = createPool({
+    threads: THREADS,
+    inliner: {
+      batchSize: 6,
     },
-    alerts: {
-      unread: i % 25,
-      lastLogin: `2026-0${(i % 8) + 1}-0${(i % 9) + 1}`,
-    },
-  });
-}
-
-function buildPayloads(): string[] {
-  const payloads = new Array<string>(REQUESTS);
-  for (let i = 0; i < REQUESTS; i++) payloads[i] = makePayload(i);
-  return payloads;
-}
-
-function printMetrics(mode: string, ms: number, htmlBytes: number): void {
-  const secs = Math.max(1e-9, ms / 1000);
-  const rps = REQUESTS / secs;
-  console.log(`${mode} took       : ${ms.toFixed(2)} ms`);
-  console.log(`${mode} throughput : ${rps.toFixed(0)} req/s`);
-  console.log(`${mode} html bytes : ${htmlBytes.toLocaleString()}`);
-}
-
-function runHost(payloads: string[]): { ms: number; bytes: number } {
-  let htmlBytes = 0;
-  const started = performance.now();
-  for (let i = 0; i < payloads.length; i++) {
-    const result = renderUserCardHost(payloads[i]!);
-    htmlBytes += result.bytes;
-  }
-  return { ms: performance.now() - started, bytes: htmlBytes };
-}
-
-async function runWorkers(
-  payloads: string[],
-): Promise<{ ms: number; bytes: number }> {
-  const pool = createPool({ threads: THREADS })({ renderUserCard });
-  let htmlBytes = 0;
+  })({ renderUserCard });
+  let sink = 0;
 
   try {
-    const started = performance.now();
-    const jobs: ReturnType<typeof pool.call.renderUserCard>[] = [];
-    for (let i = 0; i < payloads.length; i++) {
-      jobs.push(pool.call.renderUserCard(payloads[i]!));
+    const hostBytes = runHost(payloads);
+    const knittingBytes = await runWorkers(pool.call.renderUserCard, payloads);
+    if (hostBytes !== knittingBytes) {
+      throw new Error("Host and worker HTML byte totals differ.");
     }
 
-    const results = await Promise.all(jobs);
-    for (let i = 0; i < results.length; i++) {
-      htmlBytes += results[i]!.bytes;
-    }
-    return { ms: performance.now() - started, bytes: htmlBytes };
+    console.log("React SSR benchmark (mitata)");
+    console.log("workload: parse + normalize + render to HTML");
+    console.log("requests per iteration:", REQUESTS.toLocaleString());
+    console.log("threads:", THREADS, " + inliner");
+
+    boxplot(() => {
+      summary(() => {
+        bench(`host (${REQUESTS.toLocaleString()} req)`, () => {
+          sink = runHost(payloads);
+        });
+
+        bench(
+          `knitting (${THREADS} thread(s) + main , ${REQUESTS.toLocaleString()} req)`,
+          async () => {
+            sink = await runWorkers(pool.call.renderUserCard, payloads);
+          },
+        );
+      });
+    });
+
+    await run();
+    console.log("last html bytes:", sink.toLocaleString());
   } finally {
     pool.shutdown();
   }
 }
 
-async function main() {
-  const payloads = buildPayloads();
-  const host = runHost(payloads);
-  const knitting = await runWorkers(payloads);
+function runHost(payloads: string[]): number {
+  let htmlBytes = 0;
+  for (let i = 0; i < payloads.length; i++) {
+    const html = renderUserCardHost(payloads[i]!);
+    htmlBytes += html.length;
+  }
+  return htmlBytes;
+}
 
-  const uplift = (host.ms / Math.max(1e-9, knitting.ms) - 1) * 100;
+async function runWorkers(
+  callRender: (payload: string) => Promise<string>,
+  payloads: string[],
+): Promise<number> {
+  const jobs: Promise<string>[] = [];
+  for (let i = 0; i < payloads.length; i++) {
+    jobs.push(callRender(payloads[i]!));
+  }
 
-  console.log("React SSR quick bench");
-  console.log(`requests: ${REQUESTS.toLocaleString()}`);
-  console.log(`threads: ${THREADS}`);
-  console.log("");
-  printMetrics("host", host.ms, host.bytes);
-  printMetrics("knitting", knitting.ms, knitting.bytes);
-  console.log(`uplift         : ${uplift.toFixed(1)}%`);
-  console.log(`byte parity    : ${host.bytes === knitting.bytes}`);
+  const results = await Promise.all(jobs);
+  let htmlBytes = 0;
+  for (let i = 0; i < results.length; i++) {
+    htmlBytes += results[i]!.length;
+  }
+  return htmlBytes;
 }
 
 if (isMain) {
   main().catch((error) => {
+
     console.error(error);
     process.exitCode = 1;
   });

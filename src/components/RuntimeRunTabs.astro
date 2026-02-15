@@ -1,0 +1,50 @@
+---
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+
+type Props = {
+  bunCommand?: string;
+  denoCommand?: string;
+  nodeCommand?: string;
+  bunLabel?: string;
+  denoLabel?: string;
+  nodeLabel?: string;
+};
+
+const {
+  bunCommand,
+  denoCommand,
+  nodeCommand,
+  bunLabel = "Bun",
+  denoLabel = "Deno",
+  nodeLabel = "Node",
+} = Astro.props as Props;
+
+type Entry = { label: string; command: string; title: string };
+const entries: Entry[] = [];
+
+if (bunCommand && bunCommand.trim().length > 0) {
+  entries.push({ label: bunLabel, command: bunCommand.trim(), title: "bun.sh" });
+}
+if (denoCommand && denoCommand.trim().length > 0) {
+  entries.push({
+    label: denoLabel,
+    command: denoCommand.trim(),
+    title: "deno.sh",
+  });
+}
+if (nodeCommand && nodeCommand.trim().length > 0) {
+  entries.push({
+    label: nodeLabel,
+    command: nodeCommand.trim(),
+    title: "node.sh",
+  });
+}
+---
+
+<Tabs>
+  {entries.map((entry) => (
+    <TabItem label={entry.label}>
+      <Code code={entry.command} lang="bash" title={entry.title} />
+    </TabItem>
+  ))}
+</Tabs>

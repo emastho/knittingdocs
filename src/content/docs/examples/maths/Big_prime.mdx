@@ -13,6 +13,8 @@ banner:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("maths/big_prime/run_prime.hunt.ts");
 export const prime_scan = getCode("maths/big_prime/prime_scan.ts");
@@ -52,22 +54,20 @@ This is a great teaching example because it combines:
 5. If any worker finds a probable prime, it reports it for that window.
 6. The process continues forever until the user stops it with **Ctrl+C**.
 
+## Install
+
+:::info
+<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
+:::
+
 ## Commands
 
 :::info
-Bun
-```bash 
-src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8
-```
-Deno
-```bash
-deno run -A src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8
-```
-
-Node
-```bash
-npx tsx  src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8
-```
+<RuntimeRunTabs
+  bunCommand="bun src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
+  denoCommand="deno run -A src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
+  nodeCommand="npx tsx src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
+/>
 :::
 
 ## Code
@@ -168,4 +168,3 @@ This guarantees:
    * twin primes (p and p+2)
    * Sophie Germain primes (p and 2p+1 prime)
    * safe primes (q prime and p=2q+1 prime)
-

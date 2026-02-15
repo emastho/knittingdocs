@@ -10,6 +10,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/schema_validate/schema_knitting.ts");
 export const bench = getCode("data_transforms/schema_validate/bench_schema_validate.ts");
@@ -32,40 +34,30 @@ This example is split into three files:
 ## Install
 
 :::info
-Bun
-```bash
-bun add zod
-```
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["zod"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 ## Run
 
 :::info
-Bun
-```bash
-bun src/schema_knitting.ts
-```
-Deno
-```bash
-deno run -A src/schema_knitting.ts
-```
-Node
-```bash
-npx tsx src/schema_knitting.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/schema_knitting.ts"
+  denoCommand="deno run -A src/schema_knitting.ts"
+  nodeCommand="npx tsx src/schema_knitting.ts"
+/>
 :::
 
 ## Quick bench
 
 :::info
-Bun
-```bash
-bun src/bench_schema_validate.ts
-```
-Node
-```bash
-npx tsx src/bench_schema_validate.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_schema_validate.ts"
+  nodeCommand="npx tsx src/bench_schema_validate.ts"
+/>
 :::
 
 ## What happens in this example

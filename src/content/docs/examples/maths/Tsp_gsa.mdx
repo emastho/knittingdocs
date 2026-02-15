@@ -11,6 +11,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("maths/gravity/run_tsp.ts");
 export const tsp_gsa = getCode("maths/gravity/tsp_gsa.ts");
@@ -37,22 +39,20 @@ We use Knitting to run many **parallel heuristic searches** (restarts) and keep 
    * `bestTour`: a permutation of city indices
 6. The host selects the global best tour, validates it, and recomputes its length for correctness.
 
+## Install
+
+:::info
+<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
+:::
+
 ## Commands
 
 :::info
-Bun
-```bash
-src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
-```
-Deno
-```bash
-deno run -A src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
-```
-
-Node
-```bash
-npx tsx src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456
-```
+<RuntimeRunTabs
+  bunCommand="bun src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
+  denoCommand="deno run -A src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
+  nodeCommand="npx tsx src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
+/>
 :::
 
 ## Code

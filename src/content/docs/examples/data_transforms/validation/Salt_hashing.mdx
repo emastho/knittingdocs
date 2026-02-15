@@ -10,6 +10,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
 export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
@@ -32,10 +34,7 @@ This example is split into three files:
 ## Install
 
 :::info
-Bun
-```bash
-bun add @vixeny/knitting
-```
+<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
 :::
 
 This example uses built-in Web Crypto APIs, so no extra crypto package is required.
@@ -43,31 +42,20 @@ This example uses built-in Web Crypto APIs, so no extra crypto package is requir
 ## Run
 
 :::info
-Bun
-```bash
-bun src/salt_knitting.ts
-```
-Deno
-```bash
-deno run -A src/salt_knitting.ts
-```
-Node
-```bash
-npx tsx src/salt_knitting.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/salt_knitting.ts"
+  denoCommand="deno run -A src/salt_knitting.ts"
+  nodeCommand="npx tsx src/salt_knitting.ts"
+/>
 :::
 
 ## Quick bench
 
 :::info
-Bun
-```bash
-bun src/bench_salt_hashing.ts
-```
-Node
-```bash
-npx tsx src/bench_salt_hashing.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_salt_hashing.ts"
+  nodeCommand="npx tsx src/bench_salt_hashing.ts"
+/>
 :::
 
 ## What happens in this example

@@ -10,90 +10,64 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/markdown_to_html/markdown_knitting.ts");
 export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
 export const component = getCode("data_transforms/markdown_to_html/render_markdown.ts");
 
 ## What is this about
 
-This example is split into three files:
+This example focuses on two files:
 
-1. `markdown_knitting.ts` runs markdown rendering in host and Knitting modes.
-2. `render_markdown.ts` isolates the parser/render task.
-3. `bench_markdown_to_html.ts` runs a quick benchmark with fixed settings (no flags).
+1. `bench_markdown_to_html.ts` runs a host-vs-worker `mitata` benchmark.
+2. `render_markdown.ts` isolates markdown rendering and compression tasks.
 
-It complements React SSR as another **Rendering & Output** example.
+Shared markdown builders and byte helpers live in `utils.ts` so benchmark code stays focused.
 
 ## Technologies used (and why)
 
 - **`marked`**: practical markdown parser for realistic transform workloads.
 - **Knitting tasks**: compares direct host calls and worker task execution for the same renderer.
 - **Brotli (`node:zlib`)**: benchmark path includes compression so byte movement cost is visible.
+- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
 
 ## Install
 
 :::info
-Bun
-```bash
-bun add marked
-```
-:::
-
-## Run
-
-:::info
-Bun
-```bash
-bun src/markdown_knitting.ts
-```
-Deno
-```bash
-deno run -A src/markdown_knitting.ts
-```
-
-Node
-```bash
-npx tsx src/markdown_knitting.ts
-```
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["marked", "mitata"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 ## Quick bench
 
 :::info
-Bun
-```bash
-bun src/bench_markdown_to_html.ts
-```
-Node
-```bash
-npx tsx src/bench_markdown_to_html.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_markdown_to_html.ts"
+  denoCommand="deno run -A src/bench_markdown_to_html.ts"
+/>
 :::
 
 ## What happens in the example
 
-1. Render one markdown document on the host.
-2. Render the same markdown in a worker task.
-3. Compare the HTML output from both paths.
+1. The host generates markdown documents.
+2. The host path parses markdown, renders HTML, then compresses with Brotli.
+3. The worker path runs the same compression task via `markdownToHtmlCompressed`.
+4. Host and worker compressed-byte totals are compared for parity.
+5. `mitata` reports timing and relative speed for host and worker runs.
 
 ## What the benchmark measures
 
-- `host`: parse + compress `N` markdown docs via direct imports.
-- `knitting`: run the same `N` docs through worker tasks.
-- Benchmark validates host-vs-worker raw bytes before reporting throughput.
-
-:::note
-This benchmark includes both execution paths in one script, so the main variable
-is host import vs worker task path.
-:::
+- `host`: parse + render + Brotli compress via direct imports.
+- `knitting`: the same document set through compression task calls.
+- Byte parity is checked before benchmark sampling starts.
 
 ## Code
 
 <Tabs>
-  <TabItem label="markdown_knitting.ts">
-    <Code code={run} lang="ts" title={"markdown_knitting.ts"} />
-  </TabItem>
   <TabItem label="bench_markdown_to_html.ts">
     <Code code={bench} lang="ts" title={"bench_markdown_to_html.ts"} />
   </TabItem>
@@ -104,6 +78,7 @@ is host import vs worker task path.
 
 ## Why this pattern matters
 
-- It isolates rendering logic from orchestration and benchmarking.
+- It isolates markdown transform logic from benchmark orchestration.
+- It centralizes repetitive markdown builders and byte helpers in `utils.ts`.
 - It keeps benchmark commands simple and reproducible.
 - It compares host imports and task execution with one workload shape.

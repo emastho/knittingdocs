@@ -112,16 +112,21 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
     </Card>
 
     <Card title="Throughput">
-      These are end-to-end results for `1 MB` payloads
-      using full roundtrip semantics (`host -> worker -> host`, `x2` bytes).
+      These are end-to-end results for `1 MB` payloads with a full echo path:
+      host writes `1 MB` into the worker, then the worker writes `1 MB` back to host.
+      That means each call creates two `1 MB` objects and moves `2 MB` total.
+      To keep this conservative and non-misleading, the table below shows
+      **one-way equivalent throughput** (half of roundtrip GB/s).
 
-      **Hot scoreboard (GB/s, roundtrip):**
+      Even with that strict view, Bun still delivers double-digit GB/s.
+
+      **Hot scoreboard (GB/s, one-way equivalent):**
 
       | Runtime | `Uint8Array` | `string` |
       | --- | ---: | ---: |
-      | **Bun** | **23.85** | **19.48** |
-      | **Deno** | **2.34** | **5.35** |
-      | **Node** | **2.29** | **2.64** |
+      | **Bun** | **11.93** | **9.74** |
+      | **Deno** | **1.17** | **2.68** |
+      | **Node** | **1.15** | **1.32** |
 
 
       [Benchmarks overview](/benchmarks/introduction/)

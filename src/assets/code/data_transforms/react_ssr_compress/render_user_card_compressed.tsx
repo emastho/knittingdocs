@@ -8,8 +8,8 @@ function compressHtml(html: string) {
 
 export const renderUserCardCompressed = task({
   f: (payload: string) => {
-    const card = renderUserCardHost(payload);
-    const compressed = compressHtml(card.html);
+    const html = renderUserCardHost(payload);
+    const compressed = compressHtml(html);
     return compressed;
   },
 });

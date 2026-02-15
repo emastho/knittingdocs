@@ -10,6 +10,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
 export const bench = getCode("data_transforms/jwt_revalidation/bench_jwt_revalidation.ts");
@@ -32,10 +34,7 @@ This example is split into three files:
 ## Install
 
 :::info
-Bun
-```bash
-bun add @vixeny/knitting
-```
+<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
 :::
 
 This example uses built-in Web Crypto APIs and does not require a JWT package.
@@ -43,31 +42,20 @@ This example uses built-in Web Crypto APIs and does not require a JWT package.
 ## Run
 
 :::info
-Bun
-```bash
-bun src/jwt_knitting.ts
-```
-Deno
-```bash
-deno run -A src/jwt_knitting.ts
-```
-Node
-```bash
-npx tsx src/jwt_knitting.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/jwt_knitting.ts"
+  denoCommand="deno run -A src/jwt_knitting.ts"
+  nodeCommand="npx tsx src/jwt_knitting.ts"
+/>
 :::
 
 ## Quick bench
 
 :::info
-Bun
-```bash
-bun src/bench_jwt_revalidation.ts
-```
-Node
-```bash
-npx tsx src/bench_jwt_revalidation.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_jwt_revalidation.ts"
+  nodeCommand="npx tsx src/bench_jwt_revalidation.ts"
+/>
 :::
 
 ## What happens in this example

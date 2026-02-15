@@ -10,6 +10,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const server = getCode("data_transforms/hono_server/hono_knitting.ts");
 export const renderSsrPage = getCode("data_transforms/hono_server/hono_componets_ssr.tsx");
@@ -40,34 +42,45 @@ This example is split into three files:
 ## Install
 
 :::info
-Bun
-```bash
-bun add hono @hono/node-server react react-dom zod
-```
-Bun (Knitting mode only)
-```bash
-bun add @vixeny/knitting
-```
-Node
-```bash
-npm i hono @hono/node-server react react-dom zod
-```
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["hono", "@hono/node-server", "react", "react-dom", "zod"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 The JWT route uses `hono/jwt` and signs with HS256.
 Set `JWT_SECRET` in production.
 
+## Deno setup (TSX + npm)
+
+This example imports TSX and npm packages. For Deno, keep a root `deno.json`
+like this:
+
+```json
+{
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  }
+}
+```
+
+Without this, TSX files can fail with:
+
+```txt
+Uncaught SyntaxError: Unexpected token '<'
+```
+
 ## Run
 
 :::info
-Bun (Knitting)
-```bash
-JWT_SECRET="replace-me" bun src/hono_knitting.ts
-```
-Node
-```bash
-JWT_SECRET="replace-me" npx tsx src/hono_knitting.ts
-```
+<RuntimeRunTabs
+  bunLabel="Bun (Knitting)"
+  bunCommand='JWT_SECRET="replace-me" bun src/hono_knitting.ts'
+  denoCommand='JWT_SECRET="replace-me" deno run -A src/hono_knitting.ts'
+/>
 :::
 
 ## Route quick checks
@@ -113,13 +126,13 @@ One important wording detail: you do not need JWT itself to be offloaded for `/j
 ## Code
 
 <Tabs>
-  <TabItem label="hono_knitting.ts (server)">
+  <TabItem label="hono_knitting.ts">
     <Code code={server} lang="ts" title={"hono_knitting.ts"} />
   </TabItem>
-  <TabItem label="hono_componets_ssr.tsx (SSR task)">
+  <TabItem label="hono_componets_ssr.tsx">
     <Code code={renderSsrPage} lang="tsx" title={"hono_componets_ssr.tsx"} />
   </TabItem>
-  <TabItem label="hono_components_jwt.ts (JWT task)">
+  <TabItem label="hono_components_jwt.ts">
     <Code code={issueJwt} lang="ts" title={"hono_components_jwt.ts"} />
   </TabItem>
 </Tabs>

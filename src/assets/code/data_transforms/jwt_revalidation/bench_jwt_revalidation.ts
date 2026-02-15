@@ -129,9 +129,7 @@ async function main() {
     console.log(`uplift         : ${uplift.toFixed(1)}%`);
     console.log(
       "verified bytes :",
-      `${hostTotals.outputBytes.toLocaleString()} / ${
-        workerTotals.outputBytes.toLocaleString()
-      }`,
+      `${hostTotals.outputBytes.toLocaleString()} / ${workerTotals.outputBytes.toLocaleString()}`,
     );
   } finally {
     pool.shutdown();

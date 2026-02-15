@@ -1,0 +1,85 @@
+---
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+
+type Props = {
+  jsrPackages: string[];
+  npmPackages?: string[];
+  denoUseNpmInterop?: boolean;
+};
+
+const {
+  jsrPackages = [],
+  npmPackages = [],
+  denoUseNpmInterop = false,
+} = Astro.props as Props;
+
+function join(values: string[]): string {
+  return values.filter(Boolean).join(" ");
+}
+
+const jsrSpecs = jsrPackages.map((pkg) => `jsr:${pkg}`);
+const npmSpecsForDeno = npmPackages.map((pkg) => `npm:${pkg}`);
+
+const denoCommands: string[] = [];
+if (jsrSpecs.length > 0) {
+  denoCommands.push(
+    `deno add${denoUseNpmInterop ? " --npm" : ""} ${join(jsrSpecs)}`,
+  );
+}
+if (npmSpecsForDeno.length > 0) {
+  denoCommands.push(`deno add ${join(npmSpecsForDeno)}`);
+}
+
+const npmCommands: string[] = [];
+if (jsrPackages.length > 0) npmCommands.push(`npx jsr add ${join(jsrPackages)}`);
+if (npmPackages.length > 0) npmCommands.push(`npm i ${join(npmPackages)}`);
+
+const pnpmCommands: string[] = [];
+if (jsrSpecs.length > 0) {
+  pnpmCommands.push(`# pnpm 10.9+`, `pnpm add ${join(jsrSpecs)}`);
+  pnpmCommands.push(
+    "",
+    "# fallback (older pnpm)",
+    `pnpm dlx jsr add ${join(jsrPackages)}`,
+  );
+}
+if (npmPackages.length > 0) pnpmCommands.push("", `pnpm add ${join(npmPackages)}`);
+
+const yarnCommands: string[] = [];
+if (jsrSpecs.length > 0) {
+  yarnCommands.push(`# yarn 4.9+`, `yarn add ${join(jsrSpecs)}`);
+  yarnCommands.push(
+    "",
+    "# fallback (older yarn)",
+    `yarn dlx jsr add ${join(jsrPackages)}`,
+  );
+}
+if (npmPackages.length > 0) yarnCommands.push("", `yarn add ${join(npmPackages)}`);
+
+const bunCommands: string[] = [];
+if (jsrPackages.length > 0) bunCommands.push(`bunx jsr add ${join(jsrPackages)}`);
+if (npmPackages.length > 0) bunCommands.push(`bun add ${join(npmPackages)}`);
+---
+
+<Tabs>
+  <TabItem label="Deno">
+    <Code
+      code={denoCommands.join("\n")}
+      lang="bash"
+      title={"deno.sh"}
+      mark={denoUseNpmInterop ? ["--npm"] : []}
+    />
+  </TabItem>
+  <TabItem label="npm">
+    <Code code={npmCommands.join("\n")} lang="bash" title={"npm.sh"} />
+  </TabItem>
+  <TabItem label="pnpm">
+    <Code code={pnpmCommands.join("\n")} lang="bash" title={"pnpm.sh"} />
+  </TabItem>
+  <TabItem label="yarn">
+    <Code code={yarnCommands.join("\n")} lang="bash" title={"yarn.sh"} />
+  </TabItem>
+  <TabItem label="bun">
+    <Code code={bunCommands.join("\n")} lang="bash" title={"bun.sh"} />
+  </TabItem>
+</Tabs>

@@ -12,77 +12,59 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
 import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/react_ssr_compress/react_ssr_compress_knitting.ts");
 export const bench = getCode("data_transforms/react_ssr_compress/bench_react_ssr_compress.ts");
 export const component = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
+export const utils = getCode("data_transforms/react_ssr_compress/utils.ts");
+
 
 ## What is this about
 
-This example is split into three files:
+This example focuses on two files:
 
-1. `react_ssr_compress_knitting.ts` runs SSR+compression in host and Knitting modes.
-2. `render_user_card_compressed.tsx` isolates compression task logic.
-3. `bench_react_ssr_compress.ts` runs a quick benchmark with fixed settings (no flags).
+1. `bench_react_ssr_compress.ts` runs a host-vs-worker `mitata` benchmark with fixed settings.
+2. `render_user_card_compressed.tsx` isolates the compression task.
+
+Shared payload/compression helpers live in `utils.ts` so benchmark and task files stay focused.
 
 ## Technologies used (and why)
 
 - **React SSR (`renderToString`)**: generates real HTML workload before compression.
 - **Brotli (`node:zlib`)**: models CPU-heavy response compression on the server path.
 - **Knitting tasks**: compares direct host compression and worker task compression.
+- **JSON payload strings**: keeps parse + normalize cost visible, not just compression cost.
+- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
 
 ## Install
 
 :::info
-Bun
-```bash
-bun add react react-dom
-```
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["react", "react-dom", "mitata"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 Compression uses the built-in `node:zlib` APIs (no extra packages required).
 
-## Run
-
-:::info
-Bun
-```bash
-bun src/react_ssr_compress_knitting.ts
-```
-Deno
-```bash
-deno run -A src/react_ssr_compress_knitting.ts
-```
-Node
-```bash
-npx tsx src/react_ssr_compress_knitting.ts
-```
-:::
-
 ## Quick bench
 
 :::info
-Bun
-```bash
-bun src/bench_react_ssr_compress.ts
-```
-Deno
-```bash
-deno run -A src/bench_react_ssr_compress.ts
-```
-Node
-```bash
-npx tsx src/bench_react_ssr_compress.ts
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_react_ssr_compress.ts"
+  denoCommand="deno run -A src/bench_react_ssr_compress.ts"
+/>
 :::
 
 ## What happens in this example
 
 1. The host generates JSON payload strings.
-2. The host path renders HTML then compresses with Brotli.
+2. The host path renders HTML and compresses with Brotli.
 3. The worker path runs the same compression logic via `renderUserCardCompressed`.
-4. Both paths report compressed output bytes.
-5. The benchmark prints throughput and uplift.
+4. Host and worker compressed-byte totals are compared for parity.
+5. `mitata` reports timing and relative speed for host and worker runs.
 
 ## What the benchmark measures
 
@@ -96,19 +78,22 @@ npx tsx src/bench_react_ssr_compress.ts
 ## Code
 
 <Tabs>
-  <TabItem label="react_ssr_compress_knitting.ts">
-    <Code code={run} lang="ts" title={"react_ssr_compress_knitting.ts"} />
-  </TabItem>
   <TabItem label="bench_react_ssr_compress.ts">
     <Code code={bench} lang="ts" title={"bench_react_ssr_compress.ts"} />
   </TabItem>
   <TabItem label="render_user_card_compressed.tsx">
     <Code code={component} lang="tsx" title={"render_user_card_compressed.tsx"} />
   </TabItem>
+    <TabItem label="utils.ts">
+    <Code code={utils} lang="tsx" title={"utils.ts"} />
+  </TabItem>
 </Tabs>
+
+
 
 ## Why this pattern matters
 
-- It isolates compression logic from runner orchestration.
+- It isolates card-compression logic from benchmark orchestration.
+- It centralizes repetitive payload/compression helpers in `utils.ts`.
 - It keeps benchmark commands simple and reproducible.
 - It compares host imports and task execution with one workload shape.

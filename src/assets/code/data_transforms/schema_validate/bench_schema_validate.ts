@@ -158,9 +158,7 @@ async function main() {
     console.log(`uplift         : ${uplift.toFixed(1)}%`);
     console.log(
       "verified counts:",
-      `${hostTotals.valid}/${hostTotals.invalid} / ${
-        workerTotals.valid
-      }/${workerTotals.invalid}`,
+      `${hostTotals.valid}/${hostTotals.invalid} / ${workerTotals.valid}/${workerTotals.invalid}`,
     );
   } finally {
     pool.shutdown();

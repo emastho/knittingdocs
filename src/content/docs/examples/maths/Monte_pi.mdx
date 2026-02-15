@@ -11,6 +11,8 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("maths/monte_carlo/pi.ts");
 export const pi_chunk = getCode("maths/monte_carlo/montecarlo_pi.ts");
@@ -48,22 +50,20 @@ This structure mirrors real scientific workloads:
 * **embarrassingly parallel**: each chunk can run independently
 * **reduce step**: results are combined at the end
 
+## Install
+
+:::info
+<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
+:::
+
 ## Commands
 
 :::info
-Bun
-```bash
-src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
-```
-Deno
-```bash
-deno run -A src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
-```
-
-Node
-```bash
-npx tsx src/pi.ts --threads 6 --samples 50000000 --chunk 1000000
-```
+<RuntimeRunTabs
+  bunCommand="bun src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
+  denoCommand="deno run -A src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
+  nodeCommand="npx tsx src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
+/>
 :::
 
 ## Code
