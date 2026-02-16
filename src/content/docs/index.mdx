@@ -79,11 +79,7 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
     
     Each call creates two `1 MB` objects and transfers `2 MB` total.
 
-    To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
-
-    Even with this strict measure, Bun reaches double-digit GB/s.
-
-      **Hot scoreboard (GB/s, one-way equivalent):**
+          **Hot scoreboard (GB/s, one-way equivalent):**
 
       | Runtime | `Uint8Array` | `string` |
       | --- | ---: | ---: |
@@ -91,8 +87,11 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       | **Deno** | **1.17** | **2.68** |
       | **Node** | **1.15** | **1.32** |
 
+    To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
 
-      [Benchmarks overview](/benchmarks/introduction/)
+    Even with this strict measure, Bun reaches double-digit GB/s.
+
+    [Benchmarks overview](/benchmarks/introduction/)
    
     </Card>
 

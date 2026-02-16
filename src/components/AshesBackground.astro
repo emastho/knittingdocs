@@ -59,12 +59,6 @@
     const existingCleanup = container[CLEANUP_KEY];
     if (typeof existingCleanup === 'function') existingCleanup();
 
-    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (motionQuery.matches) {
-      container.style.display = 'none';
-      return () => {};
-    }
-
     const canvas = container.querySelector('[data-ashes-main]');
     if (!(canvas instanceof HTMLCanvasElement)) return () => {};
 
