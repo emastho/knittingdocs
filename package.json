@@ -13,7 +13,7 @@
     "@astrojs/starlight": "^0.34.4",
     "@hono/node-server": "^1.19.9",
     "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.8",
-    "astro": "^5.6.1",
+    "astro": "^5.17.1",
     "hono": "^4.11.9",
     "katex": "^0.16.28",
     "mitata": "^1.0.34",
@@ -22,7 +22,7 @@
     "remark-math": "^6.0.0",
     "sharp": "^0.34.2",
     "tiktoken": "^1.0.22",
-    "zod": "^4.3.6"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
