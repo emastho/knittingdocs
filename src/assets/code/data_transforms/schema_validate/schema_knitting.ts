@@ -1,9 +1,10 @@
 import { createPool, isMain } from "@vixeny/knitting";
 import {
+  buildPayloads,
   parseAndValidate,
   parseAndValidateHost,
   type ParseValidateResult,
-} from "./parse_validate.ts";
+} from "./utils.ts";
 
 const THREADS = 2;
 const REQUESTS = 20_000;
@@ -14,53 +15,6 @@ type Summary = {
   invalid: number;
   sampleIssues: string[];
 };
-
-function makeValidPayload(i: number): string {
-  const short = i.toString(36);
-  const role = i % 9 === 0 ? "admin" : "user";
-
-  return JSON.stringify({
-    id: `u_${short}`,
-    email: `${short}@knitting.dev`,
-    displayName: `User ${short.toUpperCase()}`,
-    age: 18 + (i % 60),
-    roles: [role],
-    marketingOptIn: i % 2 === 0,
-  });
-}
-
-function makePayload(i: number): string {
-  if (i % 100 >= INVALID_PERCENT) return makeValidPayload(i);
-
-  switch (i % 4) {
-    case 0:
-      return '{"id":"broken"';
-    case 1:
-      return JSON.stringify({
-        id: `u_${i}`,
-        displayName: `User ${i}`,
-        age: 33,
-        roles: ["user"],
-        marketingOptIn: true,
-      });
-    case 2:
-      return JSON.stringify({
-        id: `u_${i}`,
-        email: `u_${i}@knitting.dev`,
-        displayName: "x",
-        age: "unknown",
-        roles: ["user"],
-      });
-    default:
-      return JSON.stringify({
-        id: `u_${i}`,
-        email: `u_${i}@knitting.dev`,
-        displayName: `User ${i}`,
-        age: 31,
-        roles: ["owner"],
-      });
-  }
-}
 
 function summarize(results: ParseValidateResult[]): Summary {
   let valid = 0;
@@ -122,8 +76,7 @@ function printSummary(mode: string, summary: Summary, ms: number): void {
 }
 
 async function main() {
-  const payloads = new Array<string>(REQUESTS);
-  for (let i = 0; i < REQUESTS; i++) payloads[i] = makePayload(i);
+  const payloads = buildPayloads(REQUESTS, INVALID_PERCENT);
 
   const hostStart = performance.now();
   const hostSummary = runHost(payloads);

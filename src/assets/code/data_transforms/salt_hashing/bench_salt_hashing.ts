@@ -1,17 +1,82 @@
 import { createPool, isMain } from "@vixeny/knitting";
+import { bench, boxplot, run, summary } from "mitata";
 import {
   buildDemoHashPackets,
   type HashBatchSummary,
   hashPasswordPacketBatchFast,
   hashPasswordPacketBatchFastHost,
-} from "./salt_hashing.ts";
+} from "./utils.ts";
 
 const THREADS = 2;
-const REQUESTS = 2_000;
+const REQUESTS = 500;
 const BATCH = 32;
-const ITERATIONS = 120_000;
+const ITERATIONS = 1_200;
 const KEY_BYTES = 32;
 const SALT_BYTES = 16;
+
+
+
+async function main() {
+  const packets = buildDemoHashPackets({
+    count: REQUESTS,
+    iterations: ITERATIONS,
+    keyBytes: KEY_BYTES,
+    saltBytes: SALT_BYTES,
+  });
+  const batches = makeBatches(packets, BATCH);
+
+  const pool = createPool({ threads: THREADS })({
+    hashPasswordPacketBatchFast,
+  });
+  let sink = 0;
+
+  try {
+    const hostCheck = await runHostBatches(batches);
+    const workerCheck = await runWorkerBatches(
+      pool.call.hashPasswordPacketBatchFast,
+      batches,
+    );
+
+    if (!same(hostCheck, workerCheck)) {
+      throw new Error("Host and worker hashing summaries differ.");
+    }
+
+    console.log("Salt hashing benchmark (mitata)");
+    console.log("workload: PBKDF2-SHA256 on Uint8Array request packets");
+    console.log("requests per iteration:", REQUESTS.toLocaleString());
+    console.log("iterations:", ITERATIONS.toLocaleString());
+    console.log("batch size:", BATCH);
+    console.log("threads:", THREADS);
+
+    boxplot(() => {
+      summary(() => {
+        bench(`host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`, async () => {
+          const totals = await runHostBatches(batches);
+          sink = totals.outputBytes ^ totals.digestXor;
+        });
+
+        bench(
+          `knitting (${THREADS} thread${
+            THREADS === 1 ? "" : "s"
+          }, ${REQUESTS.toLocaleString()} req, batch ${BATCH})`,
+          async () => {
+            const totals = await runWorkerBatches(
+              pool.call.hashPasswordPacketBatchFast,
+              batches,
+            );
+            sink = totals.outputBytes ^ totals.digestXor;
+          },
+        );
+      });
+    });
+
+    await run();
+    console.log("last sink:", sink.toLocaleString());
+  } finally {
+    pool.shutdown();
+  }
+}
+
 
 function makeBatches(packets: Uint8Array[], batchSize: number): Uint8Array[][] {
   const out: Uint8Array[][] = [];
@@ -56,65 +121,6 @@ function same(a: HashBatchSummary, b: HashBatchSummary): boolean {
   return a.count === b.count &&
     a.outputBytes === b.outputBytes &&
     a.digestXor === b.digestXor;
-}
-
-function printMetrics(name: string, ms: number): void {
-  const seconds = Math.max(1e-9, ms / 1000);
-  const rps = REQUESTS / seconds;
-  console.log(`${name} took       : ${ms.toFixed(2)} ms`);
-  console.log(`${name} throughput : ${rps.toFixed(0)} req/s`);
-}
-
-async function main() {
-  const packets = buildDemoHashPackets({
-    count: REQUESTS,
-    iterations: ITERATIONS,
-    keyBytes: KEY_BYTES,
-    saltBytes: SALT_BYTES,
-  });
-  const batches = makeBatches(packets, BATCH);
-
-  const pool = createPool({ threads: THREADS })({
-    hashPasswordPacketBatchFast,
-  });
-
-  try {
-    const hostStart = performance.now();
-    const hostTotals = await runHostBatches(batches);
-    const hostMs = performance.now() - hostStart;
-
-    const workerStart = performance.now();
-    const workerTotals = await runWorkerBatches(
-      pool.call.hashPasswordPacketBatchFast,
-      batches,
-    );
-    const workerMs = performance.now() - workerStart;
-
-    if (!same(hostTotals, workerTotals)) {
-      throw new Error("Host and worker hashing summaries differ.");
-    }
-
-    const uplift = (hostMs / Math.max(1e-9, workerMs) - 1) * 100;
-
-    console.log("Salt+hash quick bench");
-    console.log("workload: PBKDF2-SHA256 on Uint8Array request packets");
-    console.log("requests:", REQUESTS.toLocaleString());
-    console.log("iterations:", ITERATIONS.toLocaleString());
-    console.log("batch:", BATCH);
-    console.log("threads:", THREADS);
-    console.log("");
-    printMetrics("host", hostMs);
-    printMetrics("knitting", workerMs);
-    console.log(`uplift         : ${uplift.toFixed(1)}%`);
-    console.log(
-      "verified sink  :",
-      `${hostTotals.outputBytes ^ hostTotals.digestXor} / ${
-        workerTotals.outputBytes ^ workerTotals.digestXor
-      }`,
-    );
-  } finally {
-    pool.shutdown();
-  }
 }
 
 if (isMain) {

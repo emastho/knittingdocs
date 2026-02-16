@@ -15,26 +15,31 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
 export const bench = getCode("data_transforms/jwt_revalidation/bench_jwt_revalidation.ts");
-export const component = getCode("data_transforms/jwt_revalidation/jwt_revalidation.ts");
+export const utils = getCode("data_transforms/jwt_revalidation/utils.ts");
 
 ## What is this about
 
 This example is split into three files:
 
 1. `jwt_knitting.ts` runs JWT revalidation in host and Knitting modes.
-2. `jwt_revalidation.ts` isolates token validation + renewal logic and exports tasks.
-3. `bench_jwt_revalidation.ts` runs a quick benchmark with fixed settings (no flags).
+2. `utils.ts` isolates token validation + renewal logic and exports tasks.
+3. `bench_jwt_revalidation.ts` runs a host-vs-worker benchmark with `mitata`.
 
 ## Technologies used (and why)
 
 - **Web Crypto (`HMAC SHA-256`)**: performs JWT signature verification/issuance without extra JWT dependencies.
 - **Knitting tasks**: lets you benchmark the same logic via direct host import vs worker task call.
 - **JSON string payloads**: keeps transfer overhead visible so benchmark results reflect real route behavior.
+- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
 
 ## Install
 
 :::info
-<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["mitata"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 This example uses built-in Web Crypto APIs and does not require a JWT package.
@@ -86,13 +91,13 @@ This script includes both so the difference is only execution path.
   <TabItem label="bench_jwt_revalidation.ts">
     <Code code={bench} lang="ts" title={"bench_jwt_revalidation.ts"} />
   </TabItem>
-  <TabItem label="jwt_revalidation.ts">
-    <Code code={component} lang="ts" title={"jwt_revalidation.ts"} />
+  <TabItem label="utils.ts">
+    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 
 ## Why this pattern matters
 
-- It isolates core JWT logic in one component file.
-- It keeps the benchmark simple and reproducible with fixed settings.
+- It isolates core JWT logic in one reusable utility module.
+- It keeps the benchmark simple and reproducible.
 - It compares host imports and worker tasks using the same workload shape.

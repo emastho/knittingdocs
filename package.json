@@ -12,7 +12,7 @@
   "dependencies": {
     "@astrojs/starlight": "^0.34.4",
     "@hono/node-server": "^1.19.9",
-    "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.7",
+    "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.8",
     "astro": "^5.6.1",
     "hono": "^4.11.9",
     "katex": "^0.16.28",
@@ -21,7 +21,8 @@
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
     "sharp": "^0.34.2",
-    "tiktoken": "^1.0.22"
+    "tiktoken": "^1.0.22",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

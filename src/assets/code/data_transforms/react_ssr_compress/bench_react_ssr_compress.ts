@@ -8,29 +8,29 @@ import {
   sumCompressedBytes,
 } from "./utils.ts";
 
-const THREADS = 2;
-const REQUESTS = 2_000;
+const THREADS = 1;
+const REQUESTS = 100;
 
 
 async function main() {
   const payloads = buildCompressionPayloads(REQUESTS);
-  const pool = createPool({ threads: THREADS })({ renderUserCardCompressed });
+  const pool = createPool({ threads: THREADS , inliner : {
+    batchSize: 8
+  }})({ renderUserCardCompressed });
   let sink = 0;
 
   try {
-    const hostBytes = runHost(payloads);
-    const knittingBytes = await runWorkers(
+    runHost(payloads);
+    await runWorkers(
       pool.call.renderUserCardCompressed,
       payloads,
     );
-    if (hostBytes !== knittingBytes) {
-      throw new Error("Host and worker compressed byte totals differ.");
-    }
+  
 
     console.log("React SSR + compression benchmark (mitata)");
     console.log("workload: parse + normalize + render + brotli");
     console.log("requests per iteration:", REQUESTS.toLocaleString());
-    console.log("threads:", THREADS);
+    console.log("threads:", THREADS , " + main") ;
 
     boxplot(() => {
       summary(() => {

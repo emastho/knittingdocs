@@ -15,26 +15,31 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
 export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
-export const component = getCode("data_transforms/salt_hashing/salt_hashing.ts");
+export const utils = getCode("data_transforms/salt_hashing/utils.ts");
 
 ## What is this about
 
 This example is split into three files:
 
 1. `salt_knitting.ts` runs salting + hashing checks in host and Knitting modes.
-2. `salt_hashing.ts` isolates hashing, verification, and packet fast-path functions.
-3. `bench_salt_hashing.ts` runs a quick benchmark with fixed settings (no flags).
+2. `utils.ts` isolates hashing, verification, and packet fast-path functions.
+3. `bench_salt_hashing.ts` runs a host-vs-worker benchmark with `mitata`.
 
 ## Technologies used (and why)
 
 - **Web Crypto (`PBKDF2` + `SHA-256`)**: standard password derivation path with explicit iteration cost.
 - **Knitting tasks**: lets you compare host imports and worker execution with the same function logic.
 - **`Uint8Array` packets**: benchmark path uses typed-array payloads to reduce serialization noise in hot loops.
+- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
 
 ## Install
 
 :::info
-<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["mitata"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
 This example uses built-in Web Crypto APIs, so no extra crypto package is required.
@@ -80,8 +85,8 @@ This example uses built-in Web Crypto APIs, so no extra crypto package is requir
   <TabItem label="bench_salt_hashing.ts">
     <Code code={bench} lang="ts" title={"bench_salt_hashing.ts"} />
   </TabItem>
-  <TabItem label="salt_hashing.ts">
-    <Code code={component} lang="ts" title={"salt_hashing.ts"} />
+  <TabItem label="utils.ts">
+    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 

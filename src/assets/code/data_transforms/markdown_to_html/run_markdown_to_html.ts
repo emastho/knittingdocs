@@ -1,5 +1,5 @@
 import { createPool, isMain } from "@vixeny/knitting";
-import { markdownToHtml, markdownToHtmlHost } from "./render_markdown.ts";
+import { markdownToHtml, markdownToHtmlHost } from "./utils.ts";
 
 function intArg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);

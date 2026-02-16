@@ -1,32 +1,19 @@
 import { createPool, isMain } from "@vixeny/knitting";
+import { bench, boxplot, run, summary } from "mitata";
 import {
   buildDemoRevalidateRequests,
+  makeBatches,
+  mergeRenewalSummary,
   type RenewalSummary,
   revalidateTokenBatchFast,
   revalidateTokenBatchFastHost,
-} from "./jwt_revalidation.ts";
+  sameRenewalSummary,
+} from "./utils.ts";
 
 const THREADS = 2;
-const REQUESTS = 50_000;
+const REQUESTS = 25_000;
 const INVALID_PERCENT = 10;
 const BATCH = 64;
-
-function makeBatches(rawRequests: string[], batchSize: number): string[][] {
-  const batches: string[][] = [];
-  for (let i = 0; i < rawRequests.length; i += batchSize) {
-    batches.push(rawRequests.slice(i, i + batchSize));
-  }
-  return batches;
-}
-
-function mergeSummary(a: RenewalSummary, b: RenewalSummary): RenewalSummary {
-  return {
-    ok: a.ok + b.ok,
-    renewed: a.renewed + b.renewed,
-    rejected: a.rejected + b.rejected,
-    outputBytes: a.outputBytes + b.outputBytes,
-  };
-}
 
 async function runHostBatches(rawBatches: string[][]): Promise<RenewalSummary> {
   let totals: RenewalSummary = {
@@ -37,7 +24,7 @@ async function runHostBatches(rawBatches: string[][]): Promise<RenewalSummary> {
   };
 
   for (let i = 0; i < rawBatches.length; i++) {
-    totals = mergeSummary(
+    totals = mergeRenewalSummary(
       totals,
       await revalidateTokenBatchFastHost(rawBatches[i]!),
     );
@@ -64,23 +51,9 @@ async function runWorkerBatches(
     outputBytes: 0,
   };
   for (let i = 0; i < results.length; i++) {
-    totals = mergeSummary(totals, results[i]!);
+    totals = mergeRenewalSummary(totals, results[i]!);
   }
   return totals;
-}
-
-function sameSummary(a: RenewalSummary, b: RenewalSummary): boolean {
-  return a.ok === b.ok &&
-    a.renewed === b.renewed &&
-    a.rejected === b.rejected &&
-    a.outputBytes === b.outputBytes;
-}
-
-function printMetrics(name: string, ms: number): void {
-  const seconds = Math.max(1e-9, ms / 1000);
-  const rps = REQUESTS / seconds;
-  console.log(`${name} took       : ${ms.toFixed(2)} ms`);
-  console.log(`${name} throughput : ${rps.toFixed(0)} req/s`);
 }
 
 async function main() {
@@ -91,6 +64,7 @@ async function main() {
   const rawBatches = makeBatches(rawRequests, BATCH);
 
   const pool = createPool({ threads: THREADS })({ revalidateTokenBatchFast });
+  let sink = 0;
 
   try {
     const hostCheck = await runHostBatches(rawBatches);
@@ -98,39 +72,43 @@ async function main() {
       pool.call.revalidateTokenBatchFast,
       rawBatches,
     );
-    if (!sameSummary(hostCheck, workerCheck)) {
+    if (!sameRenewalSummary(hostCheck, workerCheck)) {
       throw new Error("Host and worker JWT summaries differ.");
     }
 
-    const hostStart = performance.now();
-    const hostTotals = await runHostBatches(rawBatches);
-    const hostMs = performance.now() - hostStart;
-
-    const workerStart = performance.now();
-    const workerTotals = await runWorkerBatches(
-      pool.call.revalidateTokenBatchFast,
-      rawBatches,
-    );
-    const workerMs = performance.now() - workerStart;
-
-    const uplift = (hostMs / Math.max(1e-9, workerMs) - 1) * 100;
-
-    console.log("JWT revalidation quick bench");
+    console.log("JWT revalidation benchmark (mitata)");
     console.log(
       "workload: verify token -> renew when allowed -> JSON.stringify",
     );
-    console.log("requests:", REQUESTS.toLocaleString());
+    console.log("requests per iteration:", REQUESTS.toLocaleString());
     console.log("invalid rate:", `${INVALID_PERCENT}%`);
-    console.log("batch:", BATCH);
+    console.log("batch size:", BATCH);
     console.log("threads:", THREADS);
-    console.log("");
-    printMetrics("host", hostMs);
-    printMetrics("knitting", workerMs);
-    console.log(`uplift         : ${uplift.toFixed(1)}%`);
-    console.log(
-      "verified bytes :",
-      `${hostTotals.outputBytes.toLocaleString()} / ${workerTotals.outputBytes.toLocaleString()}`,
-    );
+
+    boxplot(() => {
+      summary(() => {
+        bench(`host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`, async () => {
+          const totals = await runHostBatches(rawBatches);
+          sink = totals.outputBytes;
+        });
+
+        bench(
+          `knitting (${THREADS} thread${
+            THREADS === 1 ? "" : "s"
+          }, ${REQUESTS.toLocaleString()} req, batch ${BATCH})`,
+          async () => {
+            const totals = await runWorkerBatches(
+              pool.call.revalidateTokenBatchFast,
+              rawBatches,
+            );
+            sink = totals.outputBytes;
+          },
+        );
+      });
+    });
+
+    await run();
+    console.log("last output bytes:", sink.toLocaleString());
   } finally {
     pool.shutdown();
   }

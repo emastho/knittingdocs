@@ -15,28 +15,29 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/schema_validate/schema_knitting.ts");
 export const bench = getCode("data_transforms/schema_validate/bench_schema_validate.ts");
-export const component = getCode("data_transforms/schema_validate/parse_validate.ts");
+export const utils = getCode("data_transforms/schema_validate/utils.ts");
 
 ## What is this about
 
 This example is split into three files:
 
 1. `schema_knitting.ts` runs parse+validate in host and Knitting modes.
-2. `parse_validate.ts` isolates schema logic and exports tasks.
-3. `bench_schema_validate.ts` runs a quick benchmark with fixed settings (no flags).
+2. `utils.ts` isolates schema logic, payload builders, and task exports.
+3. `bench_schema_validate.ts` runs a host-vs-worker benchmark with `mitata`.
 
 ## Technologies used (and why)
 
 - **Zod**: schema-first validation with typed outputs and predictable error paths.
 - **Knitting tasks**: compares direct host imports and worker task execution for the same validator.
 - **Batched payloads**: benchmark path batches JSON strings so dispatch overhead is controlled.
+- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
 
 ## Install
 
 :::info
 <LibraryInstallTabs
   jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["zod"]}
+  npmPackages={["zod", "mitata"]}
   denoUseNpmInterop={true}
 />
 :::
@@ -88,13 +89,13 @@ host import vs worker task path.
   <TabItem label="bench_schema_validate.ts">
     <Code code={bench} lang="ts" title={"bench_schema_validate.ts"} />
   </TabItem>
-  <TabItem label="parse_validate.ts">
-    <Code code={component} lang="ts" title={"parse_validate.ts"} />
+  <TabItem label="utils.ts">
+    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 
 ## Why this pattern matters
 
-- It isolates schema logic in one reusable component file.
+- It isolates schema logic and payload builders in one reusable utility module.
 - It keeps benchmark commands simple and reproducible.
 - It compares host imports and task execution with one workload shape.

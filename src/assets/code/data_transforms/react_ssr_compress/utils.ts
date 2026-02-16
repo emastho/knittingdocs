@@ -11,7 +11,7 @@ export function buildCompressionPayloads(count: number): string[] {
   return buildUserPayloads(count);
 }
 
-export function compressHtml(html: string): Uint8Array {
+export function compressHtml(html: string) {
   return brotliCompressSync(html);
 }
 

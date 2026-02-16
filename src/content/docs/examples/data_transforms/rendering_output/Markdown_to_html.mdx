@@ -14,16 +14,14 @@ import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.ast
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
-export const component = getCode("data_transforms/markdown_to_html/render_markdown.ts");
+export const utils = getCode("data_transforms/markdown_to_html/utils.ts");
 
 ## What is this about
 
 This example focuses on two files:
 
 1. `bench_markdown_to_html.ts` runs a host-vs-worker `mitata` benchmark.
-2. `render_markdown.ts` isolates markdown rendering and compression tasks.
-
-Shared markdown builders and byte helpers live in `utils.ts` so benchmark code stays focused.
+2. `utils.ts` contains markdown rendering, compression tasks, and shared helpers.
 
 ## Technologies used (and why)
 
@@ -71,8 +69,8 @@ Shared markdown builders and byte helpers live in `utils.ts` so benchmark code s
   <TabItem label="bench_markdown_to_html.ts">
     <Code code={bench} lang="ts" title={"bench_markdown_to_html.ts"} />
   </TabItem>
-  <TabItem label="render_markdown.ts">
-    <Code code={component} lang="ts" title={"render_markdown.ts"} />
+  <TabItem label="utils.ts">
+    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 

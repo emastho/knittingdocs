@@ -74,51 +74,14 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       This is intentionally simple. You can add batching and balancing later.
     </Card>
 
-    <Card title="How fast?" >
-      A quick look at runtime behavior across Bun, Deno, and Node.
-      Switch tabs to compare how each runtime responds under the same benchmark shape.
-
-      <Tabs>
-        <TabItem label="Node">
-          <img
-            src={nodeIpc.src}
-            width={nodeIpc.width}
-            height={nodeIpc.height}
-            alt="Node IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-        <TabItem label="Bun">
-          <img
-            src={bunIpc.src}
-            width={bunIpc.width}
-            height={bunIpc.height}
-            alt="Bun IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-        <TabItem label="Deno">
-          <img
-            src={denoIpc.src}
-            width={denoIpc.width}
-            height={denoIpc.height}
-            alt="Deno IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-      </Tabs>
-
-      Use this as orientation, then check the benchmark pages for details.
-    </Card>
-
     <Card title="Throughput">
-      These are end-to-end results for `1 MB` payloads with a full echo path:
-      host writes `1 MB` into the worker, then the worker writes `1 MB` back to host.
-      That means each call creates two `1 MB` objects and moves `2 MB` total.
-      To keep this conservative and non-misleading, the table below shows
-      **one-way equivalent throughput** (half of roundtrip GB/s).
+    These results measure a full `1 MB` echo roundtrip: the host sends `1 MB` to a worker, and the worker sends `1 MB` back.
+    
+    Each call creates two `1 MB` objects and transfers `2 MB` total.
 
-      Even with that strict view, Bun still delivers double-digit GB/s.
+    To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
+
+    Even with this strict measure, Bun reaches double-digit GB/s.
 
       **Hot scoreboard (GB/s, one-way equivalent):**
 
@@ -133,21 +96,61 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
    
     </Card>
 
+    <Card title="How fast?" >
+      A quick look at runtime behavior across Bun, Deno, and Node.
+      Switch tabs to compare how each runtime responds under the same benchmark shape.
+
+      <Tabs>
+        <TabItem label="Node" icon="node">
+          <img
+            src={nodeIpc.src}
+            width={nodeIpc.width}
+            height={nodeIpc.height}
+            alt="Node IPC benchmark"
+            loading="lazy"
+          />
+        </TabItem>
+        <TabItem label="Bun" icon="bun">
+          <img
+            src={bunIpc.src}
+            width={bunIpc.width}
+            height={bunIpc.height}
+            alt="Bun IPC benchmark"
+            loading="lazy"
+          />
+        </TabItem>
+        <TabItem label="Deno" icon="deno">
+          <img
+            src={denoIpc.src}
+            width={denoIpc.width}
+            height={denoIpc.height}
+            alt="Deno IPC benchmark"
+            loading="lazy"
+          />
+        </TabItem>
+      </Tabs>
+
+      Use this as orientation, then check the benchmark pages for details.
+    </Card>
+
+
+
 
 
     <Card title="One more thread, big impact">
-      A common pattern: offload the expensive path (SSR, parsing, crypto, compression) to a worker so the main
-      route loop stays responsive under mixed load.
+      The simplest win: move the "heavy" part of your route (SSR, parsing, crypto, compression) into a worker
+      pool so the main request loop stays snappy.
 
-      This is an 80/20 problem: a small fraction of work often dominates latency and throughput. Fix the dominant
-      path first, then measure again.
+      In the Hono server example, one run shows:
+      - SSR-only throughput: **~+90%** (about **1.9x**).
+      - Mixed load (ping + jwt + ssr together): `/ping` **~+59%**, `/jwt` **~+57%**, `/ssr` **~+58%**.
 
-      Taguchi-style thinking helps here: run small, controlled experiments (same request mix, same concurrency),
-      change one factor (like worker threads), and pick the setting that is robust across noise (GC, CPU contention,
-      bursty traffic).
+      Why it works: without workers, an expensive request can monopolize the main thread and create
+      head-of-line blocking. Adding even a single worker thread lets that heavy work run in parallel,
+      so cheap routes keep flowing and tail latency stops spiking.
 
       Try it in the Hono server example:
-      - [Hono + SSR + JWT](/examples/data_transforms/rendering_output/Hono_server)
+      - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/Hono_server)
     </Card>
 
         <Card title="10+ diverse examples (and growing)">
@@ -183,21 +186,17 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       Built to keep agent-style workflows simple and adaptable.
 
       - Promise inputs and async outputs work naturally.
-      - Rich payload support plus explicit serialization behavior.
-      - Tuning knobs for timeout, balancing, inlining, and dispatch.
+      - Rich payload support plus explicit serialization behavior..
+      - Uses `seralize` if something is not in the list.  
 
-
-    </Card>
-
-
-    <Card title="Tune for workload shape">
-      Knitting exposes the knobs you usually need in production.
+      **Knitting exposes the knobs you usually need in production.**
 
       - Balance lanes with `balancer` strategies.
       - Add host execution with `inliner` when it helps.
-      - Control spin/park/backoff/timeout and more.
+      - Control `spin`/`park`/`backoff`/`timeout` and more.
 
     </Card>
+
   </CardGrid>
 </div>
 

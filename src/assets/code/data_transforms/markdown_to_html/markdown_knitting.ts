@@ -2,11 +2,12 @@ import { createPool, isMain } from "@vixeny/knitting";
 import {
   markdownToHtmlCompressed,
   markdownToHtmlCompressedHost,
-} from "./render_markdown.ts";
-import { buildMarkdownDocs, sumChunkBytes } from "./utils.ts";
+  buildMarkdownDocs,
+  sumChunkBytes,
+} from "./utils.ts";
 
 const THREADS = 2;
-const DOCS = 10_000;
+const DOCS = 100;
 
 function runHost(markdowns: string[]): { ms: number; bytes: number } {
   const started = performance.now();

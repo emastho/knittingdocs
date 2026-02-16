@@ -7,7 +7,7 @@ import {
   makeHashPacketForIndex,
   verifyPassword,
   verifyPasswordHost,
-} from "./salt_hashing.ts";
+} from "./utils.ts";
 
 const THREADS = 2;
 const REQUESTS = 2_000;

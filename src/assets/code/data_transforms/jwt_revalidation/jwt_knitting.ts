@@ -5,7 +5,7 @@ import {
   revalidateToken,
   revalidateTokenHost,
   summarizeJsonResponses,
-} from "./jwt_revalidation.ts";
+} from "./utils.ts";
 
 const THREADS = 2;
 const REQUESTS = 25_000;

@@ -64,6 +64,37 @@ export type DemoRequestOptions = {
   renewWindowSec?: number;
 };
 
+export function makeBatches<T>(values: T[], batchSize: number): T[][] {
+  const size = Math.max(1, Math.floor(batchSize));
+  const batches: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    batches.push(values.slice(i, i + size));
+  }
+  return batches;
+}
+
+export function mergeRenewalSummary(
+  a: RenewalSummary,
+  b: RenewalSummary,
+): RenewalSummary {
+  return {
+    ok: a.ok + b.ok,
+    renewed: a.renewed + b.renewed,
+    rejected: a.rejected + b.rejected,
+    outputBytes: a.outputBytes + b.outputBytes,
+  };
+}
+
+export function sameRenewalSummary(
+  a: RenewalSummary,
+  b: RenewalSummary,
+): boolean {
+  return a.ok === b.ok &&
+    a.renewed === b.renewed &&
+    a.rejected === b.rejected &&
+    a.outputBytes === b.outputBytes;
+}
+
 function clampInt(
   value: unknown,
   fallback: number,

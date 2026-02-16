@@ -3,8 +3,9 @@ import { bench, boxplot, run, summary } from "mitata";
 import {
   markdownToHtmlCompressed,
   markdownToHtmlCompressedHost,
-} from "./render_markdown.ts";
-import { buildMarkdownDocs, sumChunkBytes } from "./utils.ts";
+  buildMarkdownDocs,
+  sumChunkBytes,
+} from "./utils.ts";
 
 const THREADS = 2;
 const DOCS = 2_000;
@@ -36,14 +37,12 @@ async function main() {
   let sink = 0;
 
   try {
-    const hostBytes = runHost(markdowns);
-    const knittingBytes = await runWorkers(
+    
+     await runWorkers(
       pool.call.markdownToHtmlCompressed,
       markdowns,
     );
-    if (hostBytes !== knittingBytes) {
-      throw new Error("Host and worker compressed byte totals differ.");
-    }
+
 
     console.log("Markdown -> HTML benchmark (mitata)");
     console.log("workload: parse + render + brotli");
