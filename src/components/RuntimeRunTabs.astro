@@ -19,17 +19,18 @@ const {
   nodeLabel = "Node",
 } = Astro.props as Props;
 
-type Entry = { label: string; command: string; title: string };
+type Entry = { label: string; command: string; title: string; icon: string };
 const entries: Entry[] = [];
 
 if (bunCommand && bunCommand.trim().length > 0) {
-  entries.push({ label: bunLabel, command: bunCommand.trim(), title: "bun.sh" });
+  entries.push({ label: bunLabel, command: bunCommand.trim(), title: "bun.sh", icon: "bun" });
 }
 if (denoCommand && denoCommand.trim().length > 0) {
   entries.push({
     label: denoLabel,
     command: denoCommand.trim(),
     title: "deno.sh",
+    icon: "deno",
   });
 }
 if (nodeCommand && nodeCommand.trim().length > 0) {
@@ -37,13 +38,14 @@ if (nodeCommand && nodeCommand.trim().length > 0) {
     label: nodeLabel,
     command: nodeCommand.trim(),
     title: "node.sh",
+    icon: "node",
   });
 }
 ---
 
 <Tabs>
   {entries.map((entry) => (
-    <TabItem label={entry.label}>
+    <TabItem label={entry.label} icon={entry.icon}>
       <Code code={entry.command} lang="bash" title={entry.title} />
     </TabItem>
   ))}

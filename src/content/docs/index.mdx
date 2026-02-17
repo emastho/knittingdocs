@@ -21,17 +21,26 @@ hero:
     alt: A glittering, brightly colored logo
     dark: ../../assets/logo.svg
     light: ../../assets/light_logo.svg
-  tagline: Real nanosecond-scale overhead and ultra-low-latency roundtrips for JavaScript.
+  tagline: Shared-memory worker pools for Node.js, Deno, and Bun — call tasks like functions with predictable low-latency coordination.
   actions:
-    - text: Welcome
-      link: /start/welcome/
+    - text: Quick Start
+      link: /start/quick-start/
     - text: Benchmarks
       link: /benchmarks/introduction/
+    - text: Examples
+      link: /examples/intro_examples/
 ---
 
 import AshesBackground from "../../components/AshesBackground.astro";
-import { Card, CardGrid, FileTree } from "@astrojs/starlight/components";
-import { Tabs, TabItem } from "@astrojs/starlight/components";
+import KnittingArchitectureDiagram from "../../components/KnittingArchitectureDiagram.astro";
+import {
+  Card,
+  CardGrid,
+  FileTree,
+  LinkCard,
+  Tabs,
+  TabItem,
+} from "@astrojs/starlight/components";
 import nodeIpc from "../../assets/charts/node_ipc.png";
 import denoIpc from "../../assets/charts/deno_ipc.png";
 import bunIpc from "../../assets/charts/bun_ipc.png";
@@ -45,9 +54,49 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
     { label: "Knitting", speed: 2030869, color: "#336244ff" },
     { label: "PostMessage", speed: 573394, color: "#58523bff" },
     { label: "WebSockets", speed: 178603, color: "#A78BFA" },
-    { label: "HTTP", speed: 17483,  color: "#60A5FA" },
+    { label: "HTTP", speed: 17483, color: "#60A5FA" },
   ]}
 />
+
+Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-thread parallelism feel like normal function calls. If you’re evaluating it for real workloads, start with the architecture + tradeoffs, then look at benchmarks.
+
+## Start here
+
+<CardGrid>
+  <LinkCard
+    title="Quick start"
+    href="/start/quick-start/"
+    description="Define tasks, create a pool, call it, shut it down."
+  />
+  <LinkCard
+    title="How Knitting works"
+    href="#how-knitting-works"
+    description="Shared-memory mailboxes, wakeups, payload buffers."
+  />
+  <LinkCard
+    title="Creating pools"
+    href="/guides/creating-pools/"
+    description="Threads, balancer strategies, inliner, and timers."
+  />
+  <LinkCard
+    title="Supported payloads"
+    href="/guides/payloads/"
+    description="What you can send and how it’s encoded."
+  />
+  <LinkCard
+    title="Performance model"
+    href="/guides/performance/"
+    description="Header-only vs payload paths, batching tips."
+  />
+  <LinkCard
+    title="Examples"
+    href="/examples/intro_examples/"
+    description="SSR, validation, transforms, maths, and servers."
+  />
+</CardGrid>
+
+## Highlights
+
 <div class="home-cards">
   <CardGrid stagger>
     <Card title="Multi-threading in 10 lines">
@@ -75,11 +124,11 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
     </Card>
 
     <Card title="Throughput">
-    These results measure a full `1 MB` echo roundtrip: the host sends `1 MB` to a worker, and the worker sends `1 MB` back.
-    
-    Each call creates two `1 MB` objects and transfers `2 MB` total.
+      These results measure a full `1 MB` echo roundtrip: the host sends `1 MB` to a worker, and the worker sends `1 MB` back.
 
-          **Hot scoreboard (GB/s, one-way equivalent):**
+      Each call creates two `1 MB` objects and transfers `2 MB` total.
+
+      **Hot scoreboard (GB/s, one-way equivalent):**
 
       | Runtime | `Uint8Array` | `string` |
       | --- | ---: | ---: |
@@ -87,15 +136,12 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       | **Deno** | **1.17** | **2.68** |
       | **Node** | **1.15** | **1.32** |
 
-    To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
+      To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
 
-    Even with this strict measure, Bun reaches double-digit GB/s.
-
-    [Benchmarks overview](/benchmarks/introduction/)
-   
+      [Benchmarks overview](/benchmarks/introduction/)
     </Card>
 
-    <Card title="How fast?" >
+    <Card title="How fast?">
       A quick look at runtime behavior across Bun, Deno, and Node.
       Switch tabs to compare how each runtime responds under the same benchmark shape.
 
@@ -149,10 +195,10 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
       so cheap routes keep flowing and tail latency stops spiking.
 
       Try it in the Hono server example:
-      - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/Hono_server)
+      - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/hono_server)
     </Card>
 
-        <Card title="10+ diverse examples (and growing)">
+    <Card title="10+ diverse examples (and growing)">
       There is enough here to copy real patterns, not just toy snippets.
       We keep adding examples as new workflows land.
 
@@ -178,21 +224,22 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 
       - [Browse examples](/examples/intro_examples)
 
-    We are fully documentated!
+      Use the sidebar for guides + benchmarks, and the examples for copy/paste-ready patterns.
     </Card>
 
     <Card title="Flexible by default">
-      Built to keep agent-style workflows simple and adaptable.
+      Built to keep real workloads simple and adaptable.
 
       - Promise inputs and async outputs work naturally.
-      - Rich payload support plus explicit serialization behavior..
-      - Uses `seralize` if something is not in the list.  
+      - Clear payload rules (and explicit serialization behavior).
+      - Great performance when you batch and keep payloads simple.
 
       **Knitting exposes the knobs you usually need in production.**
 
       - Balance lanes with `balancer` strategies.
       - Add host execution with `inliner` when it helps.
       - Control `spin`/`park`/`backoff`/`timeout` and more.
+      - See: [Creating pools](/guides/creating-pools/), [Supported payloads](/guides/payloads/), [Performance model](/guides/performance/)
 
     </Card>
 
@@ -200,11 +247,97 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 </div>
 
 
+## How Knitting Works
+
+<KnittingArchitectureDiagram caption="Shared-memory request/response mailboxes keep the control path cheap; payload buffers and batching keep the data path fast." />
+
+Knitting’s core idea is simple: move the coordination path into shared memory so a task call doesn’t need a full message protocol or expensive hops through a runtime message queue.
+
+<CardGrid>
+  <Card title="Control path: shared mailboxes">
+    Knitting uses a full-duplex transport: one mailbox for requests and one for responses.
+
+    - Calls claim a slot, write a small header, then notify a worker.
+    - Workers execute the task, write the result, then notify the host.
+    - Slot ownership is tracked via bitsets so state transitions stay lock-free.
+  </Card>
+
+  <Card title="Data path: payload buffers">
+    Values that don’t fit in a tiny header are encoded into reusable payload buffers.
+
+    - Each worker allocates two payload `SharedArrayBuffer`s (request + return).
+    - Sizes are explicit (`payloadInitialBytes`, `payloadMaxBytes`) so you can trade memory for throughput.
+    - Payload types and serialization rules are documented: [Supported payloads](/guides/payloads/).
+  </Card>
+
+  <Card title="Scheduling: explicit knobs">
+    Latency and throughput are shaped by policy, not hidden heuristics.
+
+    - Distribute work across lanes with `balancer` strategies.
+    - Optionally add an inline “host lane” with `inliner` for mixed workloads.
+    - Tune idle behavior with `spinMicroseconds`, `pauseNanoseconds`, and `parkMs`.
+  </Card>
+</CardGrid>
+
+If you want the cost model (header-only vs payload paths) and batching advice, start here: [Performance model](/guides/performance/).
+
+## When Knitting Helps (and When It Doesn’t)
+
+<CardGrid>
+  <Card title="Knitting helps when">
+    - The work is CPU-heavy or bursty (SSR, parsing, validation, crypto, compression).
+    - You have lots of small-to-medium calls where IPC overhead matters.
+    - Tail latency matters and you want to avoid head-of-line blocking on the main thread.
+    - You can batch calls to amortize overhead.
+  </Card>
+
+  <Card title="Knitting doesn’t help when">
+    - The workload is mostly I/O bound (network waits, DB waits).
+    - Calls are rare, or each job is huge enough that coordination overhead is irrelevant.
+    - You need a general-purpose message bus (use `postMessage` / MessagePort).
+    - You need cross-machine scheduling (Knitting is local, in-process).
+  </Card>
+</CardGrid>
+
+## How Knitting Compares
+
+Knitting is not “workers, but faster.” It’s “task execution, but cheaper to coordinate.”
+
+| | Knitting | `postMessage` / MessagePort | `child_process` / `cluster` |
+| --- | --- | --- | --- |
+| Primary goal | Low-overhead task calls | General messaging | Isolation + scaling out |
+| Typical API | `call.*()` promises | Custom protocol | Custom protocol |
+| Coordination path | Shared memory + wakeups | Message queue | OS IPC |
+| Best fit | High-frequency CPU work | Event-style messages | Multi-process services |
+
+Benchmarks show the impact of the coordination path across runtimes: [Benchmarks overview](/benchmarks/introduction/).
+
+## Safety & correctness (what to expect)
+
+- **Deterministic call boundary:** promise inputs are resolved on the host; workers only receive plain values.  
+  If an input promise rejects, the task is not executed. ([Defining tasks](/guides/defining-tasks/))
+- **Clear payload rules:** supported types are explicit; functions are not payloads. ([Supported payloads](/guides/payloads/))
+- **Timeouts are a race:** a timeout can resolve/reject the *promise* early; the underlying work may still finish. ([Defining tasks](/guides/defining-tasks/#timeout))
+- **Shutdown is explicit:** after `shutdown()`, in-flight and future calls reject (reason: `"Thread closed"`). ([Creating pools](/guides/creating-pools/))
+
+:::caution
+Knitting is not a sandbox. Tasks run in your process with your permissions. If you need to execute untrusted code, use process-level isolation.
+:::
+
+## Runtime support & constraints
+
+- Supported runtimes: Node.js, Deno, and Bun.
+- No browser / Web Worker support (intentionally).
+- Edge runtimes are not currently targeted.
+- Remote imports and `href` overrides expand trust boundaries; avoid them in production unless you really need them.
+
 ## Why Knitting
+
+Traditional worker APIs are great at message passing. Knitting is built around a different thesis: **make parallel code cheap enough to write** by minimizing coordination overhead and keeping the programming model close to normal function calls.
 
 - Function-call workflow instead of manual message routing.
 - Lower IPC overhead for high-frequency workloads.
-- Same model across Node, Deno, and Bun.
+- Same model across Node.js, Deno, and Bun.
 - Explicit control over batching, inlining, and shutdown behavior.
 
 

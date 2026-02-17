@@ -62,7 +62,7 @@ if (npmPackages.length > 0) bunCommands.push(`bun add ${join(npmPackages)}`);
 ---
 
 <Tabs>
-  <TabItem label="Deno">
+  <TabItem label="Deno" icon="deno">
     <Code
       code={denoCommands.join("\n")}
       lang="bash"
@@ -70,16 +70,16 @@ if (npmPackages.length > 0) bunCommands.push(`bun add ${join(npmPackages)}`);
       mark={denoUseNpmInterop ? ["--npm"] : []}
     />
   </TabItem>
-  <TabItem label="npm">
+  <TabItem label="npm" icon="npm">
     <Code code={npmCommands.join("\n")} lang="bash" title={"npm.sh"} />
   </TabItem>
-  <TabItem label="pnpm">
+  <TabItem label="pnpm" icon="pnpm">
     <Code code={pnpmCommands.join("\n")} lang="bash" title={"pnpm.sh"} />
   </TabItem>
-  <TabItem label="yarn">
+  <TabItem label="yarn" icon="seti:yarn">
     <Code code={yarnCommands.join("\n")} lang="bash" title={"yarn.sh"} />
   </TabItem>
-  <TabItem label="bun">
+  <TabItem label="bun" icon="bun">
     <Code code={bunCommands.join("\n")} lang="bash" title={"bun.sh"} />
   </TabItem>
 </Tabs>
