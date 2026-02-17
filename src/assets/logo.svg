@@ -12,96 +12,85 @@
       stroke-linecap: round;
       stroke-linejoin: round;
     }
-    .badge {
-      fill: #0b0b10;
-      opacity: 0.06;
-    }
 
     .ringBack {
       fill: none;
       stroke: #0b0b10;
       stroke-width: 6.6;
-      opacity: 0.85;
+      opacity: 0.78;
     }
+
     .ringLip {
       fill: none;
       stroke: #0b0b10;
       stroke-width: 6.6;
       stroke-linecap: round;
+      opacity: 0.90;
     }
 
-    /* "Cut" lines to create underpasses */
+    /* underpass cut — now independent of background */
     .gap {
       fill: none;
       stroke: #ffffff;
       stroke-width: 6.0;
       stroke-linecap: round;
-      opacity: 0.92;
     }
     </style>
+
+    <!-- soft shadow for body -->
+<!-- stronger soft shadow -->
+<filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+  <feDropShadow
+    dx="0"
+    dy="2.4"
+    stdDeviation="2"
+    flood-color="#000"
+    flood-opacity="0.50"
+  />
+</filter>
+
   </defs>
 
-  <!-- Badge -->
-  <rect x="6" y="6" width="88" height="88" rx="18" class="badge" />
+  <!-- everything wrapped in shadow -->
+  <g filter="url(#softShadow)">
 
   <!-- Ring behind -->
   <circle cx="46" cy="50" r="9.0" class="ringBack" />
 
-  <!-- =========================
-       TOP-LEFT: 3 intertwined rails (perfectly horizontal at y=22)
-       ========================= -->
-
-  <!-- Orange rail + into body -->
-  <path
-    class="t"
-    stroke="#FF7A00"
+  <!-- TOP-LEFT: 3 intertwined rails -->
+  <path class="t" stroke="#FF7A00"
     d="M 10 22 L 22 22
-           C 30 22, 34 28, 40 38
-           C 43 43, 44.8 46.5, 46 50"
-  />
+       C 30 22, 34 28, 40 38
+       C 43 43, 44.8 46.5, 46 50" />
 
-  <!-- Purple rail + into body -->
-  <path
-    class="t"
-    stroke="#7C3AED"
+  <path class="t" stroke="#7C3AED"
     d="M 12 22 L 24 22
-           C 32 22, 36 28, 41 37
-           C 43.5 41.5, 45.0 46.0, 46 50"
-  />
+       C 32 22, 36 28, 41 37
+       C 43.5 41.5, 45.0 46.0, 46 50" />
 
-  <!-- Blue rail + into body -->
-  <path
-    class="t"
-    stroke="#06B6D4"
+  <path class="t" stroke="#06B6D4"
     d="M 14 22 L 26 22
-           C 34 22, 38 28, 42 36
-           C 44.0 40.0, 45.2 45.2, 46 50"
-  />
+       C 34 22, 38 28, 42 36
+       C 44.0 40.0, 45.2 45.2, 46 50" />
 
-  <!-- ===== TOP-LEFT braid window (make the three rails feel knitted) ===== -->
-  <!-- Crossover A: purple over orange -->
+  <!-- braid window -->
   <path class="gap" d="M 18.5 22.0 L 23.5 22.0" />
   <path class="t" stroke="#7C3AED" d="M 18.5 22.0 L 23.5 22.0" />
 
-  <!-- Crossover B: orange over blue -->
   <path class="gap" d="M 21.0 22.0 L 26.0 22.0" />
   <path class="t" stroke="#FF7A00" d="M 21.0 22.0 L 26.0 22.0" />
 
-  <!-- Crossover C: blue over purple -->
   <path class="gap" d="M 23.5 22.0 L 28.0 22.0" />
   <path class="t" stroke="#06B6D4" d="M 23.5 22.0 L 28.0 22.0" />
-  <!-- ===== end top-left braid window ===== -->
 
-  <!-- =========================
-       Outgoing tails (bottom parallel line at y=74)
-       ========================= -->
+  <!-- Bottom tails -->
   <path class="t" stroke="#FF7A00" d="M 46 50 L 46 74 L 14 74" />
   <path class="t" stroke="#06B6D4" d="M 46 50 L 72 74 L 88 74" />
 
-  <!-- Top-right tail (perfectly horizontal at y=22, parallel to bottom) -->
+  <!-- Top-right tail -->
   <path class="t" stroke="#7C3AED" d="M 46 50 L 72 22 L 88 22" />
 
-  <!-- ===== Junction micro-braid zone (your existing vibe) ===== -->
+  <!-- Junction braid -->
   <path class="gap" d="M 42.8 46.2 L 47.0 44.0" />
   <path class="t" stroke="#7C3AED" d="M 42.8 46.2 L 47.0 44.0" />
 
@@ -111,11 +100,12 @@
   <path class="gap" d="M 43.0 47.8 L 47.2 49.2" />
   <path class="t" stroke="#06B6D4" d="M 43.0 47.8 L 47.2 49.2" />
 
-  <!-- One clean intertwine at the junction -->
   <path class="gap" d="M 41.5 48.0 L 51.0 52.0" />
   <path class="t" stroke="#7C3AED" d="M 41.5 48.0 L 51.0 52.0" />
 
-  <!-- Ring lips in front -->
+  <!-- ring front -->
   <path class="ringLip" d="M 38.6 45.2 A 9.0 9.0 0 0 1 40.8 43.0" />
   <path class="ringLip" d="M 51.2 57.6 A 9.0 9.0 0 0 1 53.4 55.4" />
+
+  </g>
 </svg>

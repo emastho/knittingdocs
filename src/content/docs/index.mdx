@@ -314,9 +314,13 @@ Benchmarks show the impact of the coordination path across runtimes: [Benchmarks
 
 ## Safety & correctness (what to expect)
 
-- **Deterministic call boundary:** promise inputs are resolved on the host; workers only receive plain values.  
-  If an input promise rejects, the task is not executed. ([Defining tasks](/guides/defining-tasks/))
-- **Clear payload rules:** supported types are explicit; functions are not payloads. ([Supported payloads](/guides/payloads/))
+- **Deterministic async boundary:** promise inputs are resolved on the host before dispatch, and async task results are awaited in the worker before returning.  
+  Workers only receive plain values, and callers only receive resolved values (or rejections). ([Promise inputs and awaited outputs](/guides/defining-tasks/#promise-inputs-and-awaited-outputs))
+- **Throws don’t poison the pool:** a task that throws (sync) or rejects (async) simply rejects that one `call.*()`; workers keep processing later calls.
+- **Hands-off idle behavior (no busy-waiting by default):** when lanes have no work, workers spin briefly, then pause/park (via `Atomics.wait`) until woken; the host dispatcher also backs off under stall.  
+  Tune with `worker.timers` (`spinMicroseconds`, `pauseNanoseconds`, `parkMs`) and `host` (`stallFreeLoops`, `maxBackoffMs`). ([Creating pools](/guides/creating-pools/))
+- **Fairness is explicit (not magic):** lane selection is controlled by `balancer` (default: round-robin) to reduce starvation across lanes, but Knitting does not preempt long-running tasks. ([Creating pools](/guides/creating-pools/))
+- **Clear payload rules:** supported types are explicit; functions are not payloads (fail fast on the sending side before dispatch). ([Supported payloads](/guides/payloads/))
 - **Timeouts are a race:** a timeout can resolve/reject the *promise* early; the underlying work may still finish. ([Defining tasks](/guides/defining-tasks/#timeout))
 - **Shutdown is explicit:** after `shutdown()`, in-flight and future calls reject (reason: `"Thread closed"`). ([Creating pools](/guides/creating-pools/))
 

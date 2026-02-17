@@ -437,12 +437,53 @@ function barWidthPercent(speed: number) {
 <script is:inline>
   // Initializes each BenchmarkBalls instance once.
   const sections = document.querySelectorAll(".bench[data-benchmark-balls]");
+  const MODE_EVENT = "benchmarkballs:modechange";
+  const GLOBAL_KEY = "__benchmarkBallsControl__";
+  const MODES = {
+    AUTO: "auto",
+    MOTION: "motion",
+    BARS: "bars",
+  };
+  // Tuned to be noticeably more permissive before falling back to bars mode.
+  const LOW_END_MEMORY_GB = 1;
+  const LOW_END_CORES = 1;
+  const normalizeMode = (value) => {
+    if (value === MODES.MOTION || value === MODES.BARS) return value;
+    return MODES.AUTO;
+  };
+  const getGlobalControl = () => {
+    const existing = window[GLOBAL_KEY];
+    if (
+      existing &&
+      typeof existing.getMode === "function" &&
+      typeof existing.setMode === "function"
+    ) {
+      if (!window.BenchmarkBalls) window.BenchmarkBalls = existing;
+      return existing;
+    }
+
+    let mode = MODES.AUTO;
+    const api = {
+      getMode: () => mode,
+      setMode: (nextMode) => {
+        mode = normalizeMode(nextMode);
+        window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: { mode } }));
+        return mode;
+      },
+      on: () => api.setMode(MODES.MOTION),
+      off: () => api.setMode(MODES.BARS),
+      auto: () => api.setMode(MODES.AUTO),
+    };
+
+    window[GLOBAL_KEY] = api;
+    window.BenchmarkBalls = api;
+    return api;
+  };
+  const control = getGlobalControl();
   const getConnectionInfo = () =>
     navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
   const shouldPreferBarsFallback = () => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) return true;
-
     const connection = getConnectionInfo();
     const effectiveType = String(connection?.effectiveType || "");
     if (connection?.saveData || /2g|slow-2g/i.test(effectiveType)) return true;
@@ -450,8 +491,16 @@ function barWidthPercent(speed: number) {
     const memory = typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : null;
     const cores =
       typeof navigator.hardwareConcurrency === "number" ? navigator.hardwareConcurrency : null;
+    const lowMemory = memory !== null && memory <= LOW_END_MEMORY_GB;
+    const lowCores = cores !== null && cores <= LOW_END_CORES;
 
-    return (memory !== null && memory <= 2) || (cores !== null && cores <= 2);
+    // Be more generous: reduced-motion alone no longer hard-switches to bars.
+    // We only force bars if reduced-motion appears alongside an actual low-end signal.
+    if (reducedMotion) return lowMemory || lowCores;
+
+    // Be more generous for auto mode: when both signals exist, require both to be low-end.
+    if (memory !== null && cores !== null) return lowMemory && lowCores;
+    return lowMemory || lowCores;
   };
 
   sections.forEach((section) => {
@@ -470,6 +519,7 @@ function barWidthPercent(speed: number) {
     let stopTimer = 0;
     let noMotionTimer = 0;
     let ro = null;
+    let hasWindowResizeListeners = false;
 
     const parseCssTimeMs = (value) => {
       const str = String(value).trim();
@@ -542,6 +592,32 @@ function barWidthPercent(speed: number) {
 
     const onResize = () => updateTravel();
 
+    const attachMotionRuntime = () => {
+      if ("ResizeObserver" in window) {
+        if (!ro) {
+          ro = new ResizeObserver(updateTravel);
+          ro.observe(section);
+        }
+      } else if (!hasWindowResizeListeners) {
+        window.addEventListener("resize", onResize);
+        window.addEventListener("orientationchange", onResize);
+        hasWindowResizeListeners = true;
+      }
+
+      if (!finishListeners.length) {
+        balls.forEach((ball) => {
+          if (!(ball instanceof HTMLElement)) return;
+          const onFinish = (event) => {
+            if (!(event instanceof AnimationEvent)) return;
+            if (event.animationName !== "race") return;
+            ball.classList.add("is-finished");
+          };
+          ball.addEventListener("animationend", onFinish);
+          finishListeners.push([ball, onFinish]);
+        });
+      }
+    };
+
     const teardownMotionRuntime = () => {
       window.clearTimeout(stopTimer);
       clearNoMotionWatchdog();
@@ -549,8 +625,11 @@ function barWidthPercent(speed: number) {
         ro.disconnect();
         ro = null;
       }
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
+      if (hasWindowResizeListeners) {
+        window.removeEventListener("resize", onResize);
+        window.removeEventListener("orientationchange", onResize);
+        hasWindowResizeListeners = false;
+      }
       removeFinishListeners();
     };
 
@@ -577,9 +656,20 @@ function barWidthPercent(speed: number) {
       if (infiniteToggle instanceof HTMLButtonElement) infiniteToggle.disabled = true;
     };
 
+    const disableBarsMode = () => {
+      if (!isBarsMode) return;
+      isBarsMode = false;
+      section.dataset.benchMode = "motion";
+      section.classList.remove("is-bars");
+      if (restart instanceof HTMLButtonElement) restart.disabled = false;
+      if (infiniteToggle instanceof HTMLButtonElement) infiniteToggle.disabled = false;
+      attachMotionRuntime();
+    };
+
     const scheduleNoMotionFallback = () => {
       clearNoMotionWatchdog();
       if (isBarsMode) return;
+      if (control.getMode() === MODES.MOTION) return;
       const ref = getReferencePair();
       if (!ref) return;
       const startOffset = readOffset(ref.ball, ref.track);
@@ -630,24 +720,31 @@ function barWidthPercent(speed: number) {
       startRace();
     };
 
-    if ('ResizeObserver' in window) {
-      ro = new ResizeObserver(updateTravel);
-      ro.observe(section);
-    } else {
-      window.addEventListener('resize', onResize);
-      window.addEventListener('orientationchange', onResize);
-    }
+    const applyMode = () => {
+      const mode = control.getMode();
+      if (mode === MODES.BARS) {
+        enableBarsMode();
+        return;
+      }
 
-    balls.forEach((ball) => {
-      if (!(ball instanceof HTMLElement)) return;
-      const onFinish = (event) => {
-        if (!(event instanceof AnimationEvent)) return;
-        if (event.animationName !== "race") return;
-        ball.classList.add("is-finished");
-      };
-      ball.addEventListener("animationend", onFinish);
-      finishListeners.push([ball, onFinish]);
-    });
+      disableBarsMode();
+      updateTravel();
+
+      if (mode === MODES.MOTION) {
+        startRace();
+        return;
+      }
+
+      if (shouldPreferBarsFallback()) {
+        enableBarsMode();
+      } else {
+        startRace();
+      }
+    };
+
+    const onModeChange = () => applyMode();
+
+    attachMotionRuntime();
 
     if (restart instanceof HTMLButtonElement) {
       restart.addEventListener("click", startRace);
@@ -658,11 +755,8 @@ function barWidthPercent(speed: number) {
 
     syncInfiniteUi();
     updateTravel();
-    if (shouldPreferBarsFallback()) {
-      enableBarsMode();
-    } else {
-      startRace();
-    }
+    applyMode();
+    window.addEventListener(MODE_EVENT, onModeChange);
 
     const cleanup = () => {
       teardownMotionRuntime();
@@ -672,6 +766,7 @@ function barWidthPercent(speed: number) {
       if (infiniteToggle instanceof HTMLButtonElement) {
         infiniteToggle.removeEventListener("click", toggleInfinite);
       }
+      window.removeEventListener(MODE_EVENT, onModeChange);
     };
 
     window.addEventListener("pagehide", cleanup, { once: true });
