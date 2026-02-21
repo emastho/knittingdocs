@@ -1,12 +1,12 @@
 ---
 title: "Knitting"
-description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun, built for low-latency worker tasks and high-throughput parallel JavaScript."
+description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun. Build worker pools where tasks feel like normal function calls."
 template: splash
 head:
   - tag: meta
     attrs:
       name: keywords
-      content: "shared-memory IPC, Node.js worker threads, Deno workers, Bun workers, JavaScript parallelism, Knitting"
+      content: "shared-memory IPC, worker pools, worker threads, Node.js, Deno, Bun, parallel JavaScript, Knitting"
   - tag: meta
     attrs:
       property: og:type
@@ -21,7 +21,7 @@ hero:
     alt: A glittering, brightly colored logo
     dark: ../../assets/logo.svg
     light: ../../assets/light_logo.svg
-  tagline: Shared-memory worker pools for Node.js, Deno, and Bun — call tasks like functions with predictable low-latency coordination.
+  tagline: Shared-memory worker pools for Node.js, Deno, and Bun — function-call ergonomics on the shared-memory fast path.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -49,7 +49,7 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 <AshesBackground />
 
 <BenchmarkBalls
-  sourceLabel="based on node.js ipc graph (50 msg)"
+  sourceLabel="based on node.js ipc graph (50 msg) rountrip of a JSON 12 Bytes"
   items={[
     { label: "Knitting", speed: 2030869, color: "#336244ff" },
     { label: "PostMessage", speed: 573394, color: "#58523bff" },
@@ -270,13 +270,6 @@ Knitting’s core idea is simple: move the coordination path into shared memory 
     - Payload types and serialization rules are documented: [Supported payloads](/guides/payloads/).
   </Card>
 
-  <Card title="Scheduling: explicit knobs">
-    Latency and throughput are shaped by policy, not hidden heuristics.
-
-    - Distribute work across lanes with `balancer` strategies.
-    - Optionally add an inline “host lane” with `inliner` for mixed workloads.
-    - Tune idle behavior with `spinMicroseconds`, `pauseNanoseconds`, and `parkMs`.
-  </Card>
 </CardGrid>
 
 If you want the cost model (header-only vs payload paths) and batching advice, start here: [Performance model](/guides/performance/).
@@ -315,14 +308,11 @@ Benchmarks show the impact of the coordination path across runtimes: [Benchmarks
 ## Safety & correctness (what to expect)
 
 - **Deterministic async boundary:** promise inputs are resolved on the host before dispatch, and async task results are awaited in the worker before returning.  
-  Workers only receive plain values, and callers only receive resolved values (or rejections). ([Promise inputs and awaited outputs](/guides/defining-tasks/#promise-inputs-and-awaited-outputs))
+  Workers only receive plain values, and callers only receive resolved values (or rejections).
 - **Throws don’t poison the pool:** a task that throws (sync) or rejects (async) simply rejects that one `call.*()`; workers keep processing later calls.
-- **Hands-off idle behavior (no busy-waiting by default):** when lanes have no work, workers spin briefly, then pause/park (via `Atomics.wait`) until woken; the host dispatcher also backs off under stall.  
-  Tune with `worker.timers` (`spinMicroseconds`, `pauseNanoseconds`, `parkMs`) and `host` (`stallFreeLoops`, `maxBackoffMs`). ([Creating pools](/guides/creating-pools/))
-- **Fairness is explicit (not magic):** lane selection is controlled by `balancer` (default: round-robin) to reduce starvation across lanes, but Knitting does not preempt long-running tasks. ([Creating pools](/guides/creating-pools/))
-- **Clear payload rules:** supported types are explicit; functions are not payloads (fail fast on the sending side before dispatch). ([Supported payloads](/guides/payloads/))
-- **Timeouts are a race:** a timeout can resolve/reject the *promise* early; the underlying work may still finish. ([Defining tasks](/guides/defining-tasks/#timeout))
-- **Shutdown is explicit:** after `shutdown()`, in-flight and future calls reject (reason: `"Thread closed"`). ([Creating pools](/guides/creating-pools/))
+- **Hands-off idle behavior (no busy-waiting by default):** when lanes have no work, workers spin briefly, then pause/park until woken; the host dispatcher also backs off under stall.  
+- **Fairness is default (not magic):** lane selection is controlled by `balancer` (default: round-robin) to reduce starvation across lanes, but Knitting does not preempt long-running tasks.
+- **Clear payload rules:** supported types are explicit; functions are not payloads (fail fast on the sending side before dispatch).
 
 :::caution
 Knitting is not a sandbox. Tasks run in your process with your permissions. If you need to execute untrusted code, use process-level isolation.

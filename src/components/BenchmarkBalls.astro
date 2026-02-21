@@ -60,9 +60,9 @@ function speedAriaText(speed: number) {
   return `${speedFormatter.format(speed)} ${noun} per second`;
 }
 
-function barWidthPercent(speed: number) {
+function barScale(speed: number) {
   const ratio = Math.max(0, speed) / maxSpeed;
-  return Math.max(8, ratio * 100);
+  return Math.min(1, Math.max(0.08, ratio));
 }
 ---
 
@@ -77,6 +77,7 @@ function barWidthPercent(speed: number) {
     --label-w:${labelWidth}px;
     --stagger:${stagger}s;
     --race-window:${raceDuration}s;
+    --dir:${infinite ? "alternate" : "normal"};
     --iter:${infinite ? "infinite" : "1"};
   `}
   aria-label="Benchmark balls animation"
@@ -96,7 +97,7 @@ function barWidthPercent(speed: number) {
           --dur:${durationFor(it.speed)}s;
           --delay:${(i * stagger).toFixed(3)}s;
           --c:${it.color ?? "currentColor"};
-          --bar-w:${barWidthPercent(it.speed).toFixed(2)}%;
+          --bar-scale:${barScale(it.speed).toFixed(4)};
         `}
         aria-label={`${it.label}, speed ${speedAriaText(it.speed)}`}
       >
@@ -134,11 +135,12 @@ function barWidthPercent(speed: number) {
   </div>
 </section>
 
-<style>
+  <style>
   .bench{
     --fg: #1f2937;
     --muted: #4b5563;
     --line: rgba(15, 23, 42, 0.18);
+    --gutter: clamp(4px, calc(var(--ball) * 0.18), 10px);
     color: var(--fg);
     padding: 14px;
     border-radius: 14px;
@@ -304,9 +306,9 @@ function barWidthPercent(speed: number) {
 
   .bar{
     position: absolute;
-    left: 0;
+    left: var(--gutter);
     top: 50%;
-    width: var(--bar-w);
+    width: calc((100% - (2 * var(--gutter))) * var(--bar-scale));
     height: clamp(8px, calc(var(--ball) * 0.42), 14px);
     transform: translateY(-50%);
     border-radius: 999px;
@@ -319,7 +321,7 @@ function barWidthPercent(speed: number) {
 
   .ball{
     position:absolute;
-    left: 0;
+    left: var(--gutter);
     top: 50%;
     width: var(--ball);
     height: var(--ball);
@@ -339,7 +341,8 @@ function barWidthPercent(speed: number) {
     /* Default travel, replaced by JS with exact pixels */
     --travel: calc(100% - var(--ball));
 
-    animation: race calc(var(--dur) * 2) linear var(--delay) var(--iter) both;
+    animation: race var(--dur) linear var(--delay) var(--iter) both;
+    animation-direction: var(--dir, normal);
     animation-play-state: paused;
   }
 
@@ -371,27 +374,12 @@ function barWidthPercent(speed: number) {
 
   @keyframes race{
     from { transform: translate3d(0,-50%,0); }
-    50% { transform: translate3d(var(--travel),-50%,0); }
-    to { transform: translate3d(0,-50%,0); }
+    to { transform: translate3d(var(--travel),-50%,0); }
   }
 
   @media (max-width: 640px){
     .bench{
       padding: 12px;
-    }
-
-    .bench .ball{
-      animation: none;
-      display: none;
-    }
-
-    .bench .bar{
-      opacity: 1;
-    }
-
-    .bench .restart,
-    .bench .toggle-loop{
-      display: none;
     }
 
     .row{
@@ -521,6 +509,10 @@ function barWidthPercent(speed: number) {
     let ro = null;
     let hasWindowResizeListeners = false;
 
+    let finishRunId = 0;
+    let finishActiveRunId = 0;
+    const finishRunByBall = new WeakMap();
+
     const parseCssTimeMs = (value) => {
       const str = String(value).trim();
       if (!str) return 0;
@@ -529,15 +521,16 @@ function barWidthPercent(speed: number) {
       return Number.parseFloat(str) || 0;
     };
 
-    const getRaceCycleMs = () => {
-      let maxMs = 0;
+    const getWinnerEndMs = () => {
+      let minMs = Number.POSITIVE_INFINITY;
       balls.forEach((ball) => {
         if (!(ball instanceof HTMLElement)) return;
         const styles = getComputedStyle(ball);
         const total = parseCssTimeMs(styles.animationDuration) + parseCssTimeMs(styles.animationDelay);
-        maxMs = Math.max(maxMs, total);
+        if (total <= 0) return;
+        minMs = Math.min(minMs, total);
       });
-      return maxMs;
+      return Number.isFinite(minMs) ? minMs : 0;
     };
 
     const readOffset = (ball, track) => {
@@ -581,11 +574,13 @@ function barWidthPercent(speed: number) {
     const updateTravel = () => {
       const raw = parseFloat(getComputedStyle(section).getPropertyValue("--ball"));
       const ballSize = Number.isFinite(raw) ? raw : 16;
+      const rawGutter = parseFloat(getComputedStyle(section).getPropertyValue("--gutter"));
+      const gutter = Number.isFinite(rawGutter) ? rawGutter : 0;
 
       tracks.forEach((track, index) => {
         const ball = balls[index];
         if (!(track instanceof HTMLElement) || !(ball instanceof HTMLElement)) return;
-        const fullTravel = Math.max(0, track.clientWidth - ballSize);
+        const fullTravel = Math.max(0, track.clientWidth - ballSize - gutter * 2);
         ball.style.setProperty("--travel", `${fullTravel}px`);
       });
     };
@@ -611,6 +606,14 @@ function barWidthPercent(speed: number) {
             if (!(event instanceof AnimationEvent)) return;
             if (event.animationName !== "race") return;
             ball.classList.add("is-finished");
+
+            // Non-infinite races stop when the first ball finishes, freezing the rest in place.
+            if (!finishActiveRunId || isInfinite) return;
+            if (finishRunByBall.get(ball) !== finishActiveRunId) return;
+            finishActiveRunId = 0;
+            window.clearTimeout(stopTimer);
+            clearNoMotionWatchdog();
+            section.classList.remove("is-running");
           };
           ball.addEventListener("animationend", onFinish);
           finishListeners.push([ball, onFinish]);
@@ -621,6 +624,7 @@ function barWidthPercent(speed: number) {
     const teardownMotionRuntime = () => {
       window.clearTimeout(stopTimer);
       clearNoMotionWatchdog();
+      finishActiveRunId = 0;
       if (ro) {
         ro.disconnect();
         ro = null;
@@ -686,6 +690,7 @@ function barWidthPercent(speed: number) {
 
     const syncInfiniteUi = () => {
       section.dataset.benchInfinite = isInfinite ? "1" : "0";
+      section.style.setProperty("--dir", isInfinite ? "alternate" : "normal");
       section.style.setProperty("--iter", isInfinite ? "infinite" : "1");
       if (infiniteToggle instanceof HTMLButtonElement) {
         infiniteToggle.setAttribute("aria-pressed", isInfinite ? "true" : "false");
@@ -695,19 +700,35 @@ function barWidthPercent(speed: number) {
 
     const startRace = () => {
       if (isBarsMode) return;
-      const raceMs = isInfinite ? 0 : getRaceCycleMs();
-
       window.clearTimeout(stopTimer);
       clearNoMotionWatchdog();
       resetRace();
 
+      finishRunId += 1;
+      finishActiveRunId = isInfinite ? 0 : finishRunId;
+      if (finishActiveRunId) {
+        balls.forEach((ball) => {
+          if (!(ball instanceof HTMLElement)) return;
+          finishRunByBall.set(ball, finishActiveRunId);
+        });
+      }
+
       requestAnimationFrame(() => {
         if (isBarsMode) return;
         section.classList.add("is-running");
+        // Safety net: if animationend doesn't fire, stop after the computed race time.
         if (!isInfinite) {
-          stopTimer = window.setTimeout(() => {
-            section.classList.remove("is-running");
-          }, raceMs || 1);
+          const winMs = getWinnerEndMs();
+          if (winMs > 0) {
+            const runId = finishActiveRunId;
+            stopTimer = window.setTimeout(() => {
+              if (isBarsMode) return;
+              if (!runId || finishActiveRunId !== runId) return;
+              finishActiveRunId = 0;
+              clearNoMotionWatchdog();
+              section.classList.remove("is-running");
+            }, winMs + 250);
+          }
         }
         scheduleNoMotionFallback();
       });

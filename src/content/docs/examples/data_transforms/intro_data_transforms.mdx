@@ -10,6 +10,13 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 This page groups the data-transform examples by workflow stage so you can jump
 straight to the pattern you need.
 
+:::info
+These examples use payload-carrying workloads on purpose. Primitive-only tasks
+are often near-instant, which can hide coordination and transfer costs. Payload
+transforms are closer to production traffic, so host-vs-worker comparisons are
+more realistic.
+:::
+
 <CardGrid>
   <Card title="Validation & parsing">
     Parse incoming strings, validate shape and types, then return typed output.

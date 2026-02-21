@@ -12,7 +12,7 @@
   "dependencies": {
     "@astrojs/starlight": "^0.34.4",
     "@hono/node-server": "^1.19.9",
-    "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.8",
+    "@vixeny/knitting": "npm:@jsr/vixeny__knitting@0.1.9",
     "astro": "^5.17.1",
     "hono": "^4.11.9",
     "katex": "^0.16.28",
