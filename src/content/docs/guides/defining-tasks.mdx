@@ -10,8 +10,9 @@ it. Tasks should be defined at module scope and exported.
 
 ```ts
 type Task = {
-  f: (uknown) => uknown,
-  createPool?: (options: CreatePool) => SingleTaskPool,
+  f: (args: Awaited<A>, toolkit?: AbortSignalToolkit) => B | Promise<B>,
+  abortSignal?: true | { hasAborted: true },
+  createPool?: (options?: CreatePool) => SingleTaskPool,
   href?: string,
   timeout?: number | {
     time: number;
@@ -20,7 +21,6 @@ type Task = {
     error?: unknown;
   }
 }
-
 ```
 
 ## Guidelines
@@ -28,11 +28,11 @@ type Task = {
 - Define tasks at module scope (no conditional exports).
 - Export tasks from the module where they are defined.
 - Use a single argument; use a tuple or object for multiple values.
-- Better to be on it's own file
+- Better to keep each task in its own file.
 
 ### Simple task
 
-Tasks are basically a fix point where the worker can import them with all the context of the file
+Tasks are a fixed point where the worker can import them with all the context of the file.
 
 ```ts
 import { task } from "@vixeny/knitting";
@@ -44,15 +44,15 @@ export const hello = task({
 
 ### Task with arguments
 
-Return type can be infer by used but the arguments has to be typed.
+Return type can be inferred by use but the arguments must be typed.
 
 ```ts
 export const add = task({
-  f: async ([a, b] : [number, number]) => a + b,
+  f: async ([a, b]: [number, number]) => a + b,
 });
 ```
 
-Or:
+Or with explicit generic parameters:
 
 ```ts
 export const add = task<[number, number], number>({
@@ -62,7 +62,7 @@ export const add = task<[number, number], number>({
 
 ### Promise inputs and awaited outputs
 
-Knitting accepts promise-like task inputs and always returns awaited task
+Knitting accepts promise task inputs and always returns awaited task
 results from `call.*()`.
 
 #### What this means
@@ -83,15 +83,15 @@ APIs.
 
 #### Type guarantees
 
-- Task inputs support `PromiseLike` values.
+- Task inputs accept native `Promise` values (not arbitrary `PromiseLike`/thenables).
 - Task handlers receive awaited input types (`Awaited<A>`).
-- Task handlers can return `R` or `PromiseLike<R>`.
+- Task handlers can return `R` or `Promise<R>`.
 - `call.*()` returns `Promise<Awaited<R>>`, so callers receive the final
   resolved value type (not `Promise<Promise<...>>`).
 
 ```ts
-type TaskInput<A> = A | PromiseLike<A>;
-type TaskHandler<A, R> = (args: Awaited<A>) => R | PromiseLike<R>;
+type TaskInput = NoBlob<Args> | Promise<NoBlob<Args>>;
+type TaskHandler<A, R> = (args: Awaited<A>) => R | Promise<R>;
 type CallResult<R> = Promise<Awaited<R>>;
 ```
 
@@ -126,9 +126,94 @@ if (isMain) {
 | Async task result | Host call resolves/rejects with the awaited task outcome. |
 
 
-## Optionals
+## Options
 
-You can easily modify the behaivour adding options to a task.
+You can modify the behaviour by adding options to a task.
+
+### Abort signal
+
+Tasks can opt in to cooperative abort signaling. When enabled, the host can
+reject the returned promise and the worker can check whether the caller has
+abandoned the task.
+
+There are two forms:
+
+**`abortSignal: true`** makes the task abort-aware. On `shutdown()`, all
+in-flight abort-aware calls reject with `"Thread closed"`. This is the
+minimal form when you just need clean cancellation on pool teardown.
+
+```ts
+import { task } from "@vixeny/knitting";
+
+export const longJob = task({
+  abortSignal: true,
+  f: async (data: string) => {
+    // long running work...
+    return data.length;
+  },
+});
+```
+
+**`abortSignal: { hasAborted: true }`** additionally injects an abort toolkit
+as the second argument to the task function. The toolkit has a `hasAborted()`
+method you can poll during long-running work to bail out early.
+
+```ts
+import { task } from "@vixeny/knitting";
+
+export const cpuWork = task({
+  abortSignal: { hasAborted: true },
+  f: (items: number[], toolkit) => {
+    let sum = 0;
+    for (const item of items) {
+      if (toolkit.hasAborted()) throw new Error("Task aborted");
+      sum += item;
+    }
+    return sum;
+  },
+});
+```
+
+:::note
+Abort signals use a shared-memory bitset pool. The default capacity is 258
+concurrent abort-aware calls. You can tune this with `abortSignalCapacity` in
+`createPool`. When all slots are exhausted, subsequent abort-aware calls reject
+immediately with the `AbortSignalPoolExhausted` symbol.
+:::
+
+#### Host-side rejection
+
+The promise returned by `call.*()` for abort-aware tasks exposes a `.reject()`
+method. Calling it rejects the promise from the host side. The worker task may
+still complete in the background, but the caller receives an immediate
+rejection.
+
+```ts
+import { createPool, isMain, task } from "@vixeny/knitting";
+
+export const slow = task({
+  abortSignal: true,
+  f: async () => {
+    await new Promise((r) => setTimeout(r, 10_000));
+    return "done";
+  },
+});
+
+const pool = createPool({ threads: 1 })({ slow });
+
+if (isMain) {
+  const promise = pool.call.slow();
+  // Cancel from the host after 100ms
+  setTimeout(() => promise.reject?.("cancelled by host"), 100);
+
+  try {
+    await promise;
+  } catch (e) {
+    console.log(e); // "cancelled by host"
+  }
+  await pool.shutdown();
+}
+```
 
 ### `href` override behavior (unsafe / experimental)
 
@@ -201,10 +286,8 @@ export const maybeSlow = task<string, string>({
 });
 ```
 
-
 :::note
-
-Timeouts race the task result; the underlying work may still complete even if
-its promise resolves or rejects early.
-
+Timeouts race the task result on the worker side using the remaining budget
+(wall time minus dispatch latency). The underlying work may still complete even
+if its promise resolves or rejects early.
 :::

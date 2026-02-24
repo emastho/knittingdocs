@@ -1,0 +1,251 @@
+---
+title: Permissions
+description: Lock down worker file-system access with the permission protocol.
+sidebar:
+  order: 5
+---
+
+Workers run your code, and code that touches the file system should only reach
+what it actually needs. The permission protocol tells Knitting which paths are
+allowed, which are denied, and how strict you want the isolation to be.
+
+Pass `permission` when creating a pool:
+
+```ts
+import { createPool, isMain, task } from "@vixeny/knitting";
+
+export const work = task({
+  f: async (x: number) => x * 2,
+});
+
+const pool = createPool({
+  threads: 2,
+  permission: "strict",
+})({ work });
+```
+
+That single string is the shorthand. You can also pass `"unsafe"` or an object
+for full control.
+
+## Modes
+
+| Mode | What happens |
+| --- | --- |
+| `"strict"` | Hardened defaults. Sensitive paths are denied, console is off, lock files are read. This is the recommended mode. |
+| `"unsafe"` | Full access. No deny lists, console enabled, all Node.js sub-capabilities allowed. Use only for trusted code or development. |
+
+If you omit `mode`, strict is the default.
+
+## Full options
+
+```ts
+createPool({
+  threads: 2,
+  permission: {
+    mode: "strict",
+    console: false,
+    cwd: ".",
+    read: ["./data"],
+    write: ["./output"],
+    denyRead: ["./secrets"],
+    denyWrite: ["./frozen-dir"],
+    env: {
+      files: [".env.production"],
+    },
+    node: {
+      allowWorker: false,
+      allowChildProcess: false,
+      allowAddons: false,
+      allowWasi: false,
+    },
+    deno: {
+      lock: true,
+      frozen: true,
+    },
+    bun: {
+      lock: true,
+    },
+  },
+})({ work });
+```
+
+### console
+
+Controls whether worker task code can use `console.*`. Defaults to `false` in
+strict mode and `true` in unsafe mode. Set it explicitly if you need logging
+during development but strict everywhere else:
+
+```ts
+permission: { mode: "strict", console: true }
+```
+
+### cwd
+
+Base directory used to resolve every relative path in the config. Defaults to
+the shell working directory.
+
+### read / write
+
+Extra allow-list entries. Paths can be strings (absolute or relative to `cwd`),
+`file://` URLs, or `~` for home-relative:
+
+```ts
+permission: {
+  read: ["./data", "~/shared-assets"],
+  write: ["./output"],
+}
+```
+
+In strict mode, `cwd` and `node_modules` are always added to the read list
+automatically, and `cwd` is always added to the write list.
+
+### denyRead / denyWrite
+
+Extra deny entries, added on top of the defaults. Use these to block specific
+paths even if they fall inside an allowed parent:
+
+```ts
+permission: {
+  denyRead: ["./private-data", "~/.my-secrets"],
+  denyWrite: ["./config"],
+}
+```
+
+### env
+
+Controls which `.env` files workers can read. Defaults to `[".env"]` in the
+project root. If the resolved path falls inside a denied-read zone, it is
+silently excluded.
+
+```ts
+permission: {
+  env: { files: [".env.production", ".env.local"] },
+}
+```
+
+### node / deno / bun
+
+Runtime-specific settings. These only apply when running on the matching
+runtime.
+
+**Node.js** exposes sub-capability toggles:
+
+```ts
+node: {
+  allowWorker: true,       // nested worker_threads
+  allowChildProcess: true, // child_process.spawn etc.
+  allowAddons: true,       // native addons
+  allowWasi: true,         // WASI
+}
+```
+
+All default to `false` in strict mode and `true` in unsafe mode.
+
+**Deno** supports lock file and frozen lockfile:
+
+```ts
+deno: {
+  lock: true,    // resolve deno.lock (default: true)
+  frozen: true,  // pass --frozen=true (default: true in strict)
+}
+```
+
+**Bun** supports lock file resolution:
+
+```ts
+bun: {
+  lock: true,  // resolve bun.lockb / bun.lock
+}
+```
+
+## Strict-mode defaults
+
+When `mode` is `"strict"`, these paths are denied automatically so you do not
+need to list them yourself.
+
+**Project-relative (deny read and write):**
+`.env`, `.git`, `.npmrc`, `.docker`, `.secrets`
+
+**Home-relative (deny read and write):**
+`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`
+
+**System paths on POSIX (deny read):**
+`/proc`, `/proc/self`, `/proc/self/environ`, `/proc/self/mem`, `/sys`, `/dev`, `/etc`
+
+**Always deny-write:**
+`node_modules`
+
+:::note
+These defaults are merged with any custom deny entries you provide. You can add
+to them but you cannot remove them in strict mode.
+:::
+
+## How flags are generated
+
+Knitting detects the current runtime and produces CLI flags automatically.
+
+On **Node.js**, `toRuntimePermissionFlags()` returns flags like:
+
+```
+--permission
+--allow-fs-read=/your/project
+--allow-fs-write=/your/project
+--env-file-if-exists=/your/project/.env
+```
+
+On **Deno**, the resolved protocol produces:
+
+```
+--allow-read=/your/project,/your/project/node_modules
+--allow-write=/your/project
+--deny-read=/your/project/.env,/your/project/.git
+--deny-write=/your/project/node_modules
+--lock=/your/project/deno.lock
+--frozen=true
+```
+
+On **Bun**, only env-file flags are generated.
+
+:::caution
+Node.js permission flags require Node 20+. On older versions the flags are
+still generated but the runtime may not enforce them.
+:::
+
+## Examples
+
+### Minimal strict
+
+```ts
+const pool = createPool({
+  threads: 2,
+  permission: "strict",
+})({ work });
+```
+
+Workers can read the project and `node_modules`, write to the project root,
+and nothing else.
+
+### Strict with extra paths
+
+```ts
+const pool = createPool({
+  threads: 4,
+  permission: {
+    read: ["~/shared-data", "./vendor"],
+    write: ["./dist"],
+    env: { files: [".env.ci"] },
+  },
+})({ work });
+```
+
+### Development / unsafe
+
+```ts
+const pool = createPool({
+  threads: 1,
+  permission: "unsafe",
+})({ work });
+```
+
+Full access, console enabled, no deny lists. Good for local dev; do not ship
+this to production.

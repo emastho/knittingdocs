@@ -1,18 +1,19 @@
 ---
 title: Inliner
-description: Run tasks on the main thread as an extra lane.
+description: Run pure compute on the host thread as an extra lane.
 sidebar:
   order: 3
 ---
 
 The `inliner` option adds the host (main thread) as one extra lane in the pool.
-It helps distribute queued work across workers plus the host, instead of sending
-everything to workers only.
+Instead of sending everything to workers, the host participates in execution
+too -- useful when every task is pure computation and you want to squeeze one
+more core out of the machine.
 
 ```ts
 const pool = createPool({
   threads: 4,
-  inliner: { position: "last" },
+  inliner: { position: "last", batchSize: 16 },
 })({ add });
 ```
 
@@ -21,27 +22,49 @@ The inliner is a lane, not a replacement for worker threads.
 Use it to complement workers, not to avoid them.
 :::
 
-## Why It Exists
+## When to use it
 
-- It can reduce worker pressure by letting the host participate in execution.
-- It can improve throughput for compute-style workloads when tasks are short and
-  plentiful.
+The inliner shines for **math and pure-compute workloads** that run on the host
+without touching the network or filesystem:
 
-## How It Runs
+- Number crunching, scoring, hashing, matrix ops.
+- Batch transforms over arrays of primitives.
+- Short, synchronous functions where IPC overhead matters more than the work itself.
+- Bursty queues where one extra lane helps drain work faster.
+
+Because inline tasks skip worker IPC entirely (no encode/decode round-trip),
+they can be significantly faster for tiny payloads.
+
+## When NOT to use it
+
+- **HTTP / networking** -- inline tasks run on the main thread, so any I/O blocks
+  the event loop and defeats the isolation that workers provide. If you need
+  request handling, keep it in workers.
+- **File system or database calls** -- same problem. Anything that awaits external
+  I/O will stall timers, sockets, and other pools sharing the host.
+- **Long-running async work** -- the inliner is designed around fast, ideally
+  synchronous functions. Async tasks that take tens of milliseconds or more
+  will block the batch loop and starve other inline slots.
+- **Isolation-sensitive code** -- if a task can throw or corrupt shared state, run
+  it in a worker where a crash stays contained.
+
+:::warning
+Inline tasks run on the main thread. Anything that blocks -- network calls, disk
+reads, heavy async chains -- will freeze the event loop. Stick to pure math
+and transforms.
+:::
+
+## How it runs
 
 Inline execution is not immediate in the `call.*()` path.
-Calls are queued, then processed when the macro queue turn runs.
+Calls are queued, then processed when the macro-queue turn runs.
 
 This delay is intentional: by that point, the dispatcher has had a chance to
 send/receive worker tasks first, then the host drains inline work.
 
 `batchSize` controls how many inline tasks run per macro-queue turn.
-
-:::warning
-Inline tasks run on the main thread. CPU-heavy work will block the event loop
-(timers, I/O callbacks, HTTP handlers, etc.).
-The macro-queue loop is useful, but not free.
-:::
+For compute workloads, higher values let the host churn through more work
+per tick without yielding back to the event loop unnecessarily.
 
 ## Options
 
@@ -53,49 +76,44 @@ createPool({
     batchSize?: number,
     dispatchThreshold?: number,
   },
-  balancer?: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
+  balancer?: "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
 })
 ```
 
 ### position
 
-Controls where the inline lane appears relative to worker lanes.
+Controls where the inline lane sits relative to worker lanes.
 
-- `"first"`: host lane is considered early.
-- `"last"`: host lane is considered after workers.
+- `"first"` -- host lane is considered before workers. Good when inline work is
+  cheaper than IPC and you want the host to grab tasks first.
+- `"last"` -- host lane is considered after workers. Workers get priority; the
+  host only picks up overflow.
 
-For event-loop sensitive workloads (for example HTTP), `"last"` is usually safer.
+For most compute pools, `"last"` is the safe default.
 
 ### batchSize
 
-Limits how many inline tasks are processed per macro-queue turn.
+How many inline tasks are processed per macro-queue turn.
 
-- Higher values are often good for math/compute throughput.
-- Lower values are usually better for HTTP/event-loop responsiveness.
+- Higher values = better throughput for pure math (fewer yields to the event loop).
+- Lower values = more responsive host (other timers and callbacks get a chance
+  to run between batches).
 
-If not set, it defaults to `1` when the inliner is enabled.
+Defaults to `1` when the inliner is enabled. For compute-heavy pools you
+typically want a much higher value (16, 64, 128+).
 
 ### dispatchThreshold
 
-Controls when the inline lane becomes eligible for scheduling.
+Minimum in-flight calls before the inline lane becomes eligible for scheduling.
 
-`dispatchThreshold` was added mainly for event-loop sensitive producers (HTTP/I/O)
-that can flood a pool with calls. During a traffic spike, the host is already
-busy doing the plumbing: deciding where each call should run and
-encoding/decoding payloads to communicate with workers.
+- `1` (default) -- inline lane is immediately eligible.
+- Higher values -- host lane stays excluded until concurrency rises past the
+  threshold, then joins to help drain the burst.
 
-A higher `dispatchThreshold` keeps the host lane out of scheduling at light
-concurrency, then lets it join only once there is a meaningful burst in flight.
-This acts like a pressure-relief valve: the extra lane helps drain backlog, and
-inline executions avoid worker IPC overhead (no worker encode/decode), which can
-leave more room for the event loop and other pools to make progress.
+This is a pressure-relief valve: at low concurrency, workers handle everything;
+once a burst builds up, the host pitches in.
 
-- `1` (default): inline lane is immediately eligible.
-- Higher values: host lane stays excluded until concurrency rises.
-- If `inliner` is not enabled, this option has no effect.
-
-
-## Exact Behavior
+## Exact behavior
 
 - The scheduler tracks `inFlight` calls per task invoker.
 - On each call, `inFlight` increments before lane selection.
@@ -104,62 +122,79 @@ leave more room for the event loop and other pools to make progress.
 - If `inFlight >= dispatchThreshold`, scheduling uses all lanes (workers +
   inline lane).
 - `inFlight` decrements on resolve, reject, or synchronous throw.
-- The configured balancer strategy (`robinRound`, `firstIdle`, `randomLane`,
-  `firstIdleOrRandom`) applies to whichever lane set is currently active.
+- The configured balancer strategy applies to whichever lane set is currently
+  active.
 
-## Behavior Checks
+## Internals
 
-Existing tests validate both cases:
+The inline executor uses typed arrays (`Int32Array`, `Int8Array`) to manage
+execution slots and a `RingQueue` for pending work. It coordinates with the
+event loop through a `MessageChannel` (macro-task boundary) and
+`queueMicrotask` (micro-task fast path). The first dispatch in a burst
+resolves in microtasks; overflow beyond `batchSize` defers to the next
+macro-task turn.
 
-- Below threshold: inline lane stays unused.
-- At/above threshold: inline lane becomes eligible and is used.
+Promise arguments are awaited before execution (unlike thenables, which are
+passed through as-is). Timeout specs from `task()` are applied via a
+`Promise.race` wrapper only when the task returns a `Promise`.
 
-## Balancer Guidance
+Abort signals on inline tasks use a static toolkit where `hasAborted()` always
+returns `false` -- inline tasks cannot be individually aborted since they share
+the host thread.
 
-- For HTTP-style workloads:
-  use `inliner.position: "last"` with `balancer: "firstIdle"` so workers are
-  prioritized before the host lane. Add a higher `dispatchThreshold` to keep
-  host scheduling out of low-load traffic.
-- For pools with many registered tasks or uneven load:
-  `randomLane` or `firstIdleOrRandom` can help spread pressure.
+## Balancer guidance
 
-## When To Use It
-
-- Compute-heavy and batch-oriented workloads (math pipelines, simulations).
-- Bursty queues where one extra lane helps drain work.
-- Tasks that are short enough that host participation is worth it.
-
-## When Not To Use It
-
-- Request/response HTTP hot paths where event-loop latency matters.
-- Blocking tasks that can delay timers, sockets, or callbacks on the host.
-- Cases where isolation is more important than squeezing one extra lane.
-
-For many HTTP systems, separate pools per workload type is usually a better
-choice than aggressive inlining.
-
+- `roundRobin` -- simple rotation across all lanes. Works well when tasks are
+  uniform.
+- `firstIdle` -- picks the first idle lane. Prioritizes workers when
+  `position: "last"`.
+- `firstIdleOrRandom` or `randomLane` -- useful for pools with many registered
+  tasks or uneven load.
 
 ## Examples
 
-### Compute-oriented
+### Math pipeline
+
+High batch size, host joins after workers:
 
 ```ts
 const { call, shutdown } = createPool({
   threads: 4,
-  inliner: { position: "last", batchSize: 20 },
+  inliner: { position: "last", batchSize: 64 },
   balancer: "firstIdleOrRandom",
 })({ scoreChunk });
+
+const results = await Promise.all(
+  chunks.map((chunk) => call.scoreChunk(chunk)),
+);
+await shutdown();
 ```
 
-### HTTP-friendly fallback
+### Burst drain with threshold
+
+Host stays out until concurrency spikes:
 
 ```ts
 const { call, shutdown } = createPool({
   threads: 2,
   inliner: {
     position: "last",
+    batchSize: 32,
     dispatchThreshold: 16,
   },
-  balancer: "firstIdle",
-})({ routeTask });
+  balancer: "roundRobin",
+})({ hash });
+```
+
+### Single-thread + inliner
+
+Useful when you want one worker for isolation but the host can handle the easy
+math too:
+
+```ts
+const { call, shutdown } = createPool({
+  threads: 1,
+  inliner: { position: "first", batchSize: 8 },
+  balancer: "roundRobin",
+})({ add });
 ```
