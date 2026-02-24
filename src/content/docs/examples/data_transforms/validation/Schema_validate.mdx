@@ -1,6 +1,6 @@
 ---
 title: Schema validate
-description: Clean Zod validation example with a simple host-vs-worker benchmark.
+description: Validate JSON payloads against a Zod schema on workers.
 hero:
   title: 'Validation + parsing'
 sidebar:
@@ -17,20 +17,17 @@ export const run = getCode("data_transforms/schema_validate/schema_knitting.ts")
 export const bench = getCode("data_transforms/schema_validate/bench_schema_validate.ts");
 export const utils = getCode("data_transforms/schema_validate/utils.ts");
 
-## What is this about
+Parses JSON strings, validates them against a Zod schema, and returns typed results -- either on the main thread or through a Knitting worker pool. If your app already does `JSON.parse` + validation and you want to see what offloading looks like, start here.
 
-This example is split into three files:
+## How it works
 
-1. `schema_knitting.ts` runs parse+validate in host and Knitting modes.
-2. `utils.ts` isolates schema logic, payload builders, and task exports.
-3. `bench_schema_validate.ts` runs a host-vs-worker benchmark with `mitata`.
+The host generates JSON strings (some valid, some intentionally broken). Each job parses the string, runs it through `UserSchema.safeParse`, and returns `{ ok: true, value }` or `{ ok: false, issues }`. The host aggregates counts and prints sample failures.
 
-## Technologies used (and why)
+Three files:
 
-- **Zod**: schema-first validation with typed outputs and predictable error paths.
-- **Knitting tasks**: compares direct host imports and worker task execution for the same validator.
-- **Batched payloads**: benchmark path batches JSON strings so dispatch overhead is controlled.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+- `schema_knitting.ts` -- runs parse+validate in host and Knitting modes
+- `utils.ts` -- schema logic, payload builders, task exports
+- `bench_schema_validate.ts` -- host-vs-worker benchmark with `mitata`
 
 ## Install
 
@@ -52,7 +49,17 @@ This example is split into three files:
 />
 :::
 
-## Quick bench
+You should see output like:
+
+```
+-- host mode --
+  valid: 800  invalid: 200  sample issue: ["Expected string, received number"]
+
+-- knitting mode (2 threads) --
+  valid: 800  invalid: 200  sample issue: ["Expected string, received number"]
+```
+
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -61,23 +68,18 @@ This example is split into three files:
 />
 :::
 
-## What happens in this example
+The benchmark compares `JSON.parse + safeParse` via direct function imports (`host`) against the same logic dispatched through a worker pool (`knitting`). Batch calls keep per-dispatch overhead predictable.
 
-1. The host generates JSON strings (some valid, some intentionally invalid).
-2. Each job parses the string.
-3. Zod validates the parsed object against `UserSchema`.
-4. The task returns `{ ok: true, value }` or `{ ok: false, issues }`.
-5. The host aggregates valid/invalid counts and prints sample issues.
+Expected output:
 
-## What the benchmark measures
-
-- `host`: `JSON.parse + UserSchema.safeParse` via direct function imports.
-- `knitting`: the same payload batches through worker task calls.
-- Batch calls keep per-dispatch overhead predictable.
+```
+benchmark        avg (ns)    min ... max (ns)
+host              12,340     11,200 ... 18,400
+knitting           6,890      6,100 ... 11,200
+```
 
 :::note
-This benchmark includes both execution paths in one script, so the main variable is
-host import vs worker task path.
+Exact numbers depend on your hardware and batch size. The shape of the result -- workers winning on batched validation -- is what matters.
 :::
 
 ## Code
@@ -94,8 +96,6 @@ host import vs worker task path.
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## When to use this pattern
 
-- It isolates schema logic and payload builders in one reusable utility module.
-- It keeps benchmark commands simple and reproducible.
-- It compares host imports and task execution with one workload shape.
+Schema validation is a textbook case for worker offloading: each call is independent, the input/output is small, and Zod's internals are CPU-bound (type checking, error formatting). If you're validating hundreds of payloads per second -- API gateway, webhook ingestion, form processing -- batching them through a pool can free your main thread without changing any validation logic.

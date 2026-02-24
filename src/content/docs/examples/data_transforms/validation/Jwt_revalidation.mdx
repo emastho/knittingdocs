@@ -1,6 +1,6 @@
 ---
 title: JWT revalidation
-description: Validate JWTs, renew when policy allows, and run a simple host-vs-worker benchmark.
+description: Verify JWTs and optionally reissue them using Web Crypto -- no external JWT library needed.
 hero:
   title: 'JWT validation + renewal'
 sidebar:
@@ -17,20 +17,17 @@ export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
 export const bench = getCode("data_transforms/jwt_revalidation/bench_jwt_revalidation.ts");
 export const utils = getCode("data_transforms/jwt_revalidation/utils.ts");
 
-## What is this about
+Verifies JWT signatures with HMAC SHA-256, checks expiry, and optionally reissues tokens -- all using built-in Web Crypto, no external JWT package. This example shows what it looks like to offload auth-related crypto work to a worker pool.
 
-This example is split into three files:
+## How it works
 
-1. `jwt_knitting.ts` runs JWT revalidation in host and Knitting modes.
-2. `utils.ts` isolates token validation + renewal logic and exports tasks.
-3. `bench_jwt_revalidation.ts` runs a host-vs-worker benchmark with `mitata`.
+The host builds a batch of JWTs (mix of valid and expired). Each job verifies the signature, checks the renewal window (`renewWindowSec`, `renewUntil`), and either returns the validated claims or issues a fresh token. The result comes back as a stringified JSON response -- keeping structured-clone overhead low.
 
-## Technologies used (and why)
+Three files:
 
-- **Web Crypto (`HMAC SHA-256`)**: performs JWT signature verification/issuance without extra JWT dependencies.
-- **Knitting tasks**: lets you benchmark the same logic via direct host import vs worker task call.
-- **JSON string payloads**: keeps transfer overhead visible so benchmark results reflect real route behavior.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+- `jwt_knitting.ts` -- runs revalidation in host and Knitting modes
+- `utils.ts` -- token verification, renewal logic, task exports
+- `bench_jwt_revalidation.ts` -- host-vs-worker benchmark with `mitata`
 
 ## Install
 
@@ -42,7 +39,7 @@ This example is split into three files:
 />
 :::
 
-This example uses built-in Web Crypto APIs and does not require a JWT package.
+Uses built-in Web Crypto APIs -- no extra JWT package required.
 
 ## Run
 
@@ -54,7 +51,17 @@ This example uses built-in Web Crypto APIs and does not require a JWT package.
 />
 :::
 
-## Quick bench
+Expected output:
+
+```
+-- host mode --
+  verified: 900  renewed: 80  rejected: 20
+
+-- knitting mode (2 threads) --
+  verified: 900  renewed: 80  rejected: 20
+```
+
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -63,23 +70,10 @@ This example uses built-in Web Crypto APIs and does not require a JWT package.
 />
 :::
 
-## What happens in this example
-
-1. The host builds repeatable payloads with valid and invalid JWTs.
-2. `revalidateTokenHost` runs directly on the main thread.
-3. `revalidateToken` runs through Knitting workers with the same logic.
-4. Renewal policy is checked with `renewWindowSec` and `renewUntil`.
-5. The benchmark prints host throughput, worker throughput, and uplift.
-
-## What the benchmark measures
-
-- `host`: verify + optional renewal + `JSON.stringify` via direct function import.
-- `knitting`: the same workload via task calls in a worker pool.
-- Batch calls are used to reduce per-dispatch overhead and keep comparison stable.
+Compares verify + optional renewal + `JSON.stringify` via direct imports (`host`) against the same workload through worker task calls (`knitting`). Batched dispatch keeps the comparison stable.
 
 :::note
-You can benchmark using either direct imports (host path) or task calls (worker path).
-This script includes both so the difference is only execution path.
+Both paths use the same logic. The only variable is whether execution happens on the main thread or in a worker.
 :::
 
 ## Code
@@ -96,8 +90,6 @@ This script includes both so the difference is only execution path.
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## Why offload JWT work
 
-- It isolates core JWT logic in one reusable utility module.
-- It keeps the benchmark simple and reproducible.
-- It compares host imports and worker tasks using the same workload shape.
+HMAC verification and key derivation are CPU-bound. On a busy API server handling hundreds of authenticated requests per second, that crypto work competes with route handling on the main thread. Moving it to a pool keeps your event loop responsive -- especially under mixed traffic where some routes are cheap and others hit the auth path hard.

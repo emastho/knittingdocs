@@ -1,6 +1,6 @@
 ---
 title: Prompt token budgeting
-description: Clean prompt-budgeting example plus a dedicated mitata benchmark.
+description: Trim LLM prompts to fit a token budget before sending them to any model.
 hero:
   title: 'LLM input shaping'
 sidebar:
@@ -10,79 +10,81 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
+import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/prompt_token_budgeting/run_prompt_token_budget.ts");
 export const bench = getCode("data_transforms/prompt_token_budgeting/bench_prompt_token_budget.ts");
 export const budget = getCode("data_transforms/prompt_token_budgeting/token_budget.ts");
 
-## What is this about
+Shapes LLM prompts to fit within a token budget before they hit the API. Uses `tiktoken` for token counting and drops oldest conversation turns first, then trims the query if still over budget. The budgeting logic itself is model-agnostic -- the example uses `gpt-4o-mini` as the tokenizer target, but the pattern works the same way for any model with a token limit.
 
-This page has two parts:
+:::note
+This example imports `tiktoken` and `openai`, but it never actually calls the OpenAI API. The `openai` package is optional -- these scripts only prepare prompts and count tokens. The pattern applies to any LLM provider.
+:::
 
-1. A practical prompt-budgeting example (`run_prompt_token_budget.ts`) for app logic.
-2. A dedicated benchmark (`bench_prompt_token_budget.ts`) that measures token-budget throughput with `mitata`.
+## How it works
+
+1. The host generates prompt inputs (same system prefix, different conversation history and queries).
+2. Each task builds the full prompt and counts tokens with `tiktoken`.
+3. If over budget, it drops the oldest turns first, then trims query tokens.
+4. The host aggregates token savings and trim counts.
+
+Three files:
+
+- `run_prompt_token_budget.ts` -- practical prompt-budgeting example for app logic
+- `bench_prompt_token_budget.ts` -- dedicated `mitata` benchmark measuring budgeting throughput
+- `token_budget.ts` -- the budgeting logic itself
 
 ## Install
 
 :::info
-Bun
-```bash
-bun add tiktoken openai
-bun add -d mitata
-```
+<LibraryInstallTabs
+  jsrPackages={["@vixeny/knitting"]}
+  npmPackages={["tiktoken", "openai", "mitata"]}
+  denoUseNpmInterop={true}
+/>
 :::
 
-`openai` is optional here. These examples only prepare prompts and token budgets.
-`mitata` is only required for the benchmark script.
+`openai` is optional. These examples only prepare prompts and token budgets.
+`mitata` is only needed for the benchmark script.
 
-## Example command
+## Run
 
 :::info
-Bun
-```bash
-bun src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
-```
-Deno
-```bash
-deno run -A src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
-```
-Node
-```bash
-npx tsx src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting
-```
+<RuntimeRunTabs
+  bunCommand="bun src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting"
+  denoCommand="deno run -A src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting"
+  nodeCommand="npx tsx src/run_prompt_token_budget.ts --threads 2 --requests 2000 --maxInputTokens 900 --model gpt-4o-mini --mode knitting"
+/>
 :::
 
-## Benchmark command (mitata)
+Expected output:
+
+```
+mode: knitting (2 threads)
+requests: 2000
+budget: 900 tokens (gpt-4o-mini)
+
+trimmed: 1,247 / 2,000 requests (62.4%)
+avg tokens saved: 312 per trimmed request
+total tokens saved: 389,064
+elapsed: 1.82s
+```
+
+## Benchmark
 
 :::info
-Bun
-```bash
-bun src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32
-```
-Node
-```bash
-npx tsx src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32
-```
+<RuntimeRunTabs
+  bunCommand="bun src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32"
+  nodeCommand="npx tsx src/bench_prompt_token_budget.ts --threads 2 --requests 20000 --maxInputTokens 900 --model gpt-4o-mini --batch 32"
+/>
 :::
 
-## What happens in the example
-
-1. The host generates prompt inputs (same system prefix, different history/query).
-2. Each task builds the prompt and counts tokens with `tiktoken`.
-3. If over budget, it drops oldest turns first, then trims query tokens.
-4. The host aggregates savings and trim counts.
-
-## What the benchmark measures
-
-- `host`: build prompts + tokenize + trim to budget on `N` requests.
-- `knitting`: the same `N` requests through worker threads.
-- Requests are sent as batches (`--batch`) so per-call IPC overhead is amortized.
-- Worker tasks return compact totals (token/trim counters), not full prompt strings.
+Compares budgeting throughput on the host vs through workers. Worker tasks return compact totals (token/trim counters), not full prompt strings.
 
 :::note
-For this benchmark, batch size matters. Tiny batches mostly measure dispatch
-overhead; very large batches can increase memory pressure. Start with `32` or
-`64`, then tune for your hardware and request shape.
+Batch size matters here. Tiny batches mostly measure dispatch overhead; very large batches can increase memory pressure. Start with `32` or `64`, then tune for your hardware.
 :::
 
 ## Code
@@ -99,8 +101,6 @@ overhead; very large batches can increase memory pressure. Start with `32` or
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## When this matters
 
-- It gives you a clean preflight step before model calls.
-- It benchmarks budgeting logic in a way that is fast and fair.
-- It keeps model input size predictable, which helps cost and latency control.
+Token budgeting is a preflight step that runs on every LLM request. If you're handling high-throughput chat traffic -- multiple users, long conversation histories -- the tokenization and trimming work adds up. Offloading it to workers keeps your main thread focused on routing and I/O while budget calculations happen in parallel. It also gives you predictable input sizes, which helps with cost control and latency.

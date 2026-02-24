@@ -1,41 +1,50 @@
 ---
 title: Data transforms
-description: A quick map of parsing, validation, rendering, and output examples.
+description: Validation, rendering, and output examples -- pick the one closest to your workload.
 sidebar:
   order: 0
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-This page groups the data-transform examples by workflow stage so you can jump
-straight to the pattern you need.
+These examples use real payload-carrying workloads on purpose. Primitive-only tasks are often near-instant, which hides coordination and transfer costs. Payload transforms are closer to production traffic, so the host-vs-worker comparisons are more honest.
 
-:::info
-These examples use payload-carrying workloads on purpose. Primitive-only tasks
-are often near-instant, which can hide coordination and transfer costs. Payload
-transforms are closer to production traffic, so host-vs-worker comparisons are
-more realistic.
-:::
+## Which example should you start with?
+
+**If you're validating incoming data** -- API payloads, form submissions, webhook bodies -- start with [Schema validation](/examples/data_transforms/validation/schema_validate). It's the simplest validation pattern and uses Zod, which you're probably already familiar with.
+
+**If you're doing auth work** -- token verification, renewal, signature checking -- [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) shows how to offload HMAC crypto to workers using built-in Web Crypto (no external JWT library).
+
+**If you're hashing passwords** -- [Salt hashing](/examples/data_transforms/validation/salt_hashing) is the heaviest per-call example. PBKDF2 is intentionally slow, making it the ideal candidate for offloading.
+
+**If you're calling an LLM** -- [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) trims prompts to fit a token budget. The budgeting itself is model-agnostic.
+
+**If you're rendering HTML** -- [React SSR](/examples/data_transforms/rendering_output/react_ssr) for basic server rendering, [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) to also test Brotli placement, or [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) for a simpler pipeline without React.
+
+**If you handle file uploads** -- [Image processing API](/examples/data_transforms/rendering_output/image_processing) offloads resize, thumbnail, and watermark operations to workers using sharp. It's the binary payload counterpart to the Hono SSR example.
+
+**If you want the full picture** -- [Hono server routes](/examples/data_transforms/rendering_output/hono_server) is a real HTTP server that combines SSR, JWT, and health checks. It's the closest to a production setup.
 
 <CardGrid>
   <Card title="Validation & parsing">
-    Parse incoming strings, validate shape and types, then return typed output.
-    Start with [Schema validation](/examples/data_transforms/validation/schema_validate),
+    Parse incoming strings, validate shape and types, return typed output.
+    [Schema validation](/examples/data_transforms/validation/schema_validate),
     [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation),
     [Salt hashing](/examples/data_transforms/validation/salt_hashing),
-    or [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting).
+    [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting).
   </Card>
   <Card title="Rendering & output">
     Take validated input and produce final output formats.
-    Try [Hono server routes](/examples/data_transforms/rendering_output/hono_server),
+    [Hono server routes](/examples/data_transforms/rendering_output/hono_server),
+    [Image processing API](/examples/data_transforms/rendering_output/image_processing),
     [React SSR](/examples/data_transforms/rendering_output/react_ssr),
     [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress),
-    or [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html).
+    [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html).
   </Card>
 </CardGrid>
 
-## Why this page exists
+## What all these examples have in common
 
-- Validation examples focus on correctness and typed output.
-- Rendering examples focus on throughput and output size.
-- Each example includes a host-only baseline so performance comparisons are apples-to-apples.
+- Each includes a host-only baseline so performance comparisons are apples-to-apples.
+- Worker tasks return compact results (counts, compressed buffers, status flags) -- not large raw payloads.
+- The same code runs in both host and worker mode, so you can compare behavior without changing logic.

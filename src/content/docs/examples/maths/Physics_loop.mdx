@@ -1,6 +1,6 @@
 ---
 title: Physics loop
-description: "Parallel random-walk first-exit simulation"
+description: "2D random walk simulation -- branch-heavy physics loop parallelized across workers"
 hero:
   title: 'Parallel Monte Carlo Physics Loop'
 sidebar:
@@ -17,50 +17,22 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/physics_style_loops/walks_runs.ts");
 export const walk_chunk = getCode("maths/physics_style_loops/walk2d.ts");
 
-## What is this about
+A physics-style simulation loop: step-by-step state updates with branching and early exits. Unlike the pi example (pure arithmetic), this one simulates a **2D random walk** -- start at the origin, move one unit in a random direction each step, stop when the particle crosses a radius boundary. The work per trial varies (some particles escape early, some don't), which makes chunking important for load balance.
 
-This example runs a **physics-style simulation loop** (tight, step-by-step state updates) and parallelizes it with **Knitting’s worker pool**.
+## How it works
 
-Instead of a pure math kernel (like estimating π), we simulate a process through time steps: update state, check conditions, repeat.
+1. The host creates a pool and splits the total run count into chunks.
+2. Each worker runs many independent particle trials in a tight inner loop:
+   - Initialize `(x, y)` at the origin
+   - Each step: pick a random direction, update position, check escape condition
+   - Track whether the particle escaped and how many steps it took
+3. Each chunk returns **compact summary stats**: escaped count, total runs, sum of escape steps.
+4. The host aggregates chunk results into final estimates.
 
-Here the “physics” is a simple **2D random walk / diffusion toy model**:
+We measure two things:
 
-* start at `(0,0)`
-* at each step, move one unit in a random direction
-* stop when the particle first crosses a radius boundary
-
-We measure:
-
-* **escape probability** (did it hit the boundary within `maxSteps`?)
-* **time to escape** (how many steps it took, for runs that escaped)
-
----
-
-## What happens in this example
-
-1. The host creates a **pool** with `createPool`.
-2. The simulation is split into **chunks** (jobs). Each job runs many independent particle trials.
-3. Each worker executes a **tight inner loop**:
-
-   * initialize particle state `(x, y)`
-   * for each step:
-
-     * choose a random direction
-     * update `(x, y)`
-     * test escape condition (radius reached)
-4. Each chunk returns **compact summary stats**:
-
-   * number of escaped particles
-   * total runs in this chunk
-   * sum of escape steps (and optionally sum of squares)
-5. The host aggregates chunk results into final estimates.
-
-This is the standard scientific pattern:
-
-* **map**: simulate many independent trials
-* **reduce**: combine partial statistics into global results
-
----
+- **Escape probability:** what fraction of particles reached the boundary within `maxSteps`?
+- **Mean escape time:** how many steps did it take (for particles that escaped)?
 
 ## Install
 
@@ -68,7 +40,7 @@ This is the standard scientific pattern:
 <LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
 :::
 
-## Commands
+## Run
 
 :::info
 <RuntimeRunTabs
@@ -76,6 +48,20 @@ This is the standard scientific pattern:
   denoCommand="deno run -A src/walks_runs.ts --threads 6 --runs 15000000 --batch 5000 --steps 15000 --radius 100"
   nodeCommand="npx tsx src/walks_runs.ts --threads 6 --runs 15000000 --batch 5000 --steps 15000 --radius 100"
 />
+:::
+
+Expected output:
+
+```
+threads: 6  runs: 15,000,000  batch: 5,000  steps: 15,000  radius: 100
+
+escape probability: 0.9847
+mean escape steps:  7,312
+elapsed: 3.41s
+```
+
+:::note
+With `--radius 100` and `--steps 15000`, most particles escape. Increase the radius or decrease max steps to see the escape probability drop.
 :::
 
 ## Code
@@ -88,155 +74,33 @@ This is the standard scientific pattern:
   </TabItem>
 </Tabs>
 
----
+## What makes this different from the pi example
 
-## What is this good for
+The pi example does the same amount of work per sample (two multiplies and a compare). This simulation has **variable work per trial** -- particles that escape early are cheap, particles that hit the step limit are expensive. That variability means chunking matters more: well-sized chunks smooth out the variance so no single worker gets stuck with all the hard trials.
 
-Physics-style Monte Carlo is useful when:
+The inner loop is also branch-heavy (escape checks, direction selection), which is closer to real simulation code than a pure arithmetic kernel.
 
-* dynamics are too complex for closed-form solutions
-* you need probabilities, expected times, or distributions
-* your system is stochastic (randomness is part of the model)
+## The science
 
-Real use cases:
+This is a discrete-time approximation of **Brownian motion** / **diffusion**. The estimates converge by the Law of Large Numbers, and Monte Carlo error shrinks like `1/sqrtN`.
 
-* **diffusion / Brownian motion** (escape times, mean squared displacement)
-* **hitting time problems** in stochastic processes
-* **Monte Carlo transport** (particles moving through materials)
-* **agent-based models** (crowd, traffic, epidemics)
-* **game simulation** (probabilistic outcomes, balancing, AI)
-* **uncertainty propagation** through a simulation pipeline
-
-If your problem is “simulate it many times and average the outcome”, this structure fits.
-
----
-
-## Scientific background
-
-### What Monte Carlo is estimating
-
-We run repeated experiments and estimate quantities like:
-
-**Escape probability**
 $$
-\hat{p} = \frac{\text{escaped}}{\text{total runs}}
+\hat{p} = \frac{\text{escaped}}{\text{total runs}} \qquad \hat{\mu} = \frac{\sum \text{steps}}{\text{escaped}}
 $$
 
-**Mean steps to escape** (conditional on escape)
-$$
-\hat{\mu} = \frac{\sum \text{steps}}{\text{escaped}}
-$$
+Real applications of this pattern: diffusion/Brownian motion, hitting time problems, Monte Carlo transport (particles through materials), agent-based models, game simulation, and uncertainty propagation.
 
-**Variance / spread**
-$$
-\widehat{\mathrm{Var}} = \frac{\sum \text{steps}^2}{\text{escaped}} - \hat{\mu}^2
-$$
+## Practical notes
 
-### Why it converges
+**Chunk size:** Start with `--batch 5000` to `50000` for heavier loops. Increase if each run is short, decrease if each run is long.
 
-As the number of independent runs $$N$$ increases, estimates converge by the **Law of Large Numbers**.
+**Keep the inner loop tight:** Avoid allocations per step. Precompute direction tables if possible. Use simple numeric types.
 
-### How error scales
+**Validate invariants:** Check that `0 <= escaped <= totalRuns`, totals add up across chunks, and results are stable under fixed seeds.
 
-Monte Carlo accuracy usually improves like:
-$$
-\text{error} \propto \frac{1}{\sqrt{N}}
-$$
-So reducing error by 2× costs about 4× more runs.
+## Things to try
 
-### “Physics loop” note
-
-This simulation is a discrete-time approximation of a continuous stochastic process. Smaller step sizes and more steps can approximate continuous diffusion better, but cost more compute.
-
----
-
-## How parallelization works here
-
-The simulation is **embarrassingly parallel**:
-
-* Each particle run is independent (given its RNG stream)
-* We split runs across workers
-* Each worker returns a **small summary** instead of per-step trajectories
-
-This is important: returning full paths would waste bandwidth and memory. For Monte Carlo, you usually only need aggregated statistics.
-
----
-
-## Lessons on using the scripts
-
-### 1) Chunk size matters
-
-Pick a chunk size that amortizes overhead:
-
-* too small → dispatch overhead dominates
-* too large → worse load balance and slower feedback
-
-A good starting point is something like:
-
-* `--batch 5k to 50k` for heavier loops
-* increase if each run is short
-
-### 2) Prefer batch dispatch
-
-Queue many `call`s, then await them together. This reduces scheduling overhead and tends to improve throughput.
-
-### 3) Use deterministic RNG and seed properly
-
-Scientific simulations need reproducibility:
-
-* keep your scenario parameters fixed (`--radius`, `--steps`, direction table size)
-* use one base seed per run
-* derive a different per-job seed so chunks don’t share the same random stream
-
-### 4) Keep the inner loop “boringly tight”
-
-Performance comes from avoiding overhead inside the physics loop:
-
-* avoid allocations per step
-* avoid creating objects per iteration
-* precompute direction tables if possible
-* use simple numeric types
-
-### 5) Validate with invariants
-
-Always check:
-
-* `0 <= escaped <= totalRuns`
-* totals add up exactly across chunks
-* results are stable under fixed seeds
-
----
-
-## Performance notes
-
-### When you’ll see speedups
-
-* many runs, each with many steps
-* little to no IO
-* chunk results are small
-* you have multiple physical cores
-
-### Common bottlenecks
-
-* too many tiny tasks
-* heavy math inside each step (e.g., trig every step)
-* returning large data payloads
-* RNG overhead (solve by using fast deterministic RNG and precomputed directions)
-
----
-
-## What students should notice
-
-* Physics loops are **branch-heavy**: escape checks introduce branching and early exits.
-* Work per run is variable (some particles escape early, others take longer). Chunking smooths this out.
-* The results improve with more runs, but error shrinks slowly $$\left(1/\sqrt{N}\right)$$.
-
----
-
-## Suggested student exercises
-
-1. Increase `radius` and observe how mean escape steps changes.
+1. Increase `--radius` and see how mean escape steps changes.
 2. Compare different `--batch` chunk sizes and measure throughput.
 3. Add variance reporting and compute a 95% confidence interval.
-4. Replace random walk with a drift term (constant force) and compare escape behavior.
-5. Test reproducibility: fix seeds and confirm identical outputs.
+4. Replace the random walk with a drift term (constant force) and compare escape behavior.

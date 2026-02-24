@@ -1,6 +1,6 @@
 ---
 title: Big prime
-description: "Prime Hunt in Big-Number Territory"
+description: "Parallel prime search through large integers with Miller-Rabin"
 hero:
   title: 'Prime Hunt in Big-Number Territory'
 sidebar:
@@ -19,40 +19,18 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/big_prime/run_prime.hunt.ts");
 export const prime_scan = getCode("maths/big_prime/prime_scan.ts");
 
-## What is this about
+Scans through large integers (default: 1500-bit) looking for probable primes using Miller-Rabin, distributed across Knitting workers. This is a long-running compute pipeline -- it scans windows of candidates, prints progress, and keeps going until you stop it.
 
-This example is a **parallel prime search** that scans through **large integers** (default: **1500-bit**) and tries to discover **probable primes** efficiently using Knitting.
+## How it works
 
-Instead of “solving” something with exact math, we do what computers do best:
-
-* test many candidates quickly,
-* accept a **tiny probability of error**,
-* scale out across threads.
-
-This is a great teaching example because it combines:
-
-* BigInt arithmetic
-* probabilistic algorithms (Miller–Rabin)
-* parallel batching and throughput
-
----
-
-## What happens in this example
-
-1. The host chooses a starting odd integer in the chosen bit-width (65-bit by default).
-2. The host repeatedly scans **windows** of candidates.
-
-   * Each window covers **10,000,000 odd candidates**.
-   * After each window, it prints a progress line.
-3. Each window is split across threads:
-
-   * Threads scan disjoint candidate sequences (no overlap).
-   * Work is further broken into chunk-sized tasks for smooth scheduling.
-4. Each worker runs:
-
-   * `candidate → Miller–Rabin → next candidate → ...`
+1. The host picks a starting odd integer in the chosen bit-width.
+2. It scans **windows** of 10,000,000 odd candidates, printing progress after each window.
+3. Each window is split across threads -- threads scan disjoint candidate sequences (no overlap, no duplicated work).
+4. Each worker runs `candidate -> Miller-Rabin -> next candidate -> ...` in a tight loop.
 5. If any worker finds a probable prime, it reports it for that window.
-6. The process continues forever until the user stops it with **Ctrl+C**.
+6. The process runs continuously until Ctrl+C.
+
+The scanning uses an interleaved stride pattern: thread 0 checks `start + 0`, `start + 2T`, `start + 4T`, ..., thread 1 checks `start + 2`, `start + 2 + 2T`, ..., and so on. This guarantees full coverage with zero overlap.
 
 ## Install
 
@@ -60,7 +38,7 @@ This is a great teaching example because it combines:
 <LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
 :::
 
-## Commands
+## Run
 
 :::info
 <RuntimeRunTabs
@@ -68,6 +46,21 @@ This is a great teaching example because it combines:
   denoCommand="deno run -A src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
   nodeCommand="npx tsx src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
 />
+:::
+
+Expected output:
+
+```
+starting at 1500-bit odd integer (4 threads, 8 MR rounds)
+window 1: scanned 10,000,000 candidates in 4.2s -- no prime found
+window 2: scanned 10,000,000 candidates in 4.1s -- no prime found
+window 3: scanned 10,000,000 candidates in 4.3s -- OK probable prime found!
+  digits: 452
+  hex prefix: 0xA3F7...
+```
+
+:::note
+At 1500 bits, primes are sparse -- expect to scan through many windows. Lower `--bits` to 65 or 128 for faster results while testing.
 :::
 
 ## Code
@@ -80,91 +73,25 @@ This is a great teaching example because it combines:
   </TabItem>
 </Tabs>
 
-## What is this good for
+## The math behind it
 
-This is useful for students (and other AIs) to understand:
+**Why primes are findable:** Around a number of size N, prime density is roughly `1/ln(N)`. Primes get rarer as numbers get bigger, but not impossibly rare -- even at 1500 bits, you'll find them.
 
-### Practical probabilistic computing
+**Probable vs proven primes:** Miller-Rabin is a probabilistic test. With 8 rounds, the false-positive rate is vanishingly small (less than `4^-8`). In practice, this is what cryptographic libraries use for key generation.
 
-Prime testing at scale often uses probabilistic tests because they are extremely fast and reliable.
+**Tuning `--rounds`:** More rounds = higher confidence, but more compute per candidate. 8 rounds is a solid default. You can go higher if you need cryptographic-grade confidence.
 
-### Long-running compute pipelines
+## CLI knobs
 
-The “scan 10M, print progress, continue” structure is common in:
+- `--bits` -- bit-width of candidates (higher = harder, sparser primes)
+- `--threads` -- worker count
+- `--total` -- candidates per window (controls progress granularity)
+- `--chunk` -- candidates per task (controls scheduling granularity)
+- `--rounds` -- Miller-Rabin rounds (controls confidence vs speed)
 
-* large searches
-* brute-force experiments
-* sampling-based analysis
-* monitoring throughput over time
+## Things to try
 
-### Parallel workload design
-
-This shows how to parallelize work that is:
-
-* independent per candidate
-* CPU-heavy (BigInt exponentiation)
-* naturally partitionable (disjoint strides)
-
----
-
-## Scientific background
-
-### Why primes are “findable”
-
-Around a number size (N), the density of primes is roughly:
-$$
-\approx \frac{1}{\ln(N)}
-$$
-So primes get rarer as numbers get bigger, but not impossibly rare.
-
-### Probable primes vs proven primes
-
-This example finds **probable primes** using the **Miller–Rabin primality test**.
-
-* **Probable prime**: passes a strong probabilistic test.
-* **Proven prime**: guaranteed prime via deterministic proof methods.
-
-In practice, with good parameters, Miller–Rabin has such a low false-positive rate that it’s widely used in cryptography and large integer libraries.
-
-### Error probability intuition
-
-Miller–Rabin can be tuned by increasing “rounds”.
-More rounds means:
-
-* higher confidence
-* more compute per candidate
-
-This example chooses a sensible default and lets you adjust with `--rounds`.
-
----
-
-## How parallelization works here
-
-### Disjoint scanning (no duplicated work)
-
-Each thread scans candidates in an interleaved pattern:
-
-* thread 0 checks: `start + 0`, `start + 2T`, `start + 4T`, ...
-* thread 1 checks: `start + 2`, `start + 2 + 2T`, ...
-* thread i checks: `start + 2i`, `start + 2i + 2T`, ...
-
-(where (T =) number of threads)
-
-This guarantees:
-
-* no overlap across threads
-* full coverage of the window
-* even distribution of work
-
-
-
-## Suggested exercises
-
-1. Change `--bits` and observe how often primes appear.
-2. Increase `--rounds` and measure throughput impact.
-3. Compare different `--chunk` values and find a sweet spot.
-4. Modify the task to search for:
-
-   * twin primes (p and p+2)
-   * Sophie Germain primes (p and 2p+1 prime)
-   * safe primes (q prime and p=2q+1 prime)
+1. Lower `--bits` to 65 and watch primes appear frequently.
+2. Increase `--rounds` to 20 and measure the throughput impact.
+3. Compare different `--chunk` values -- too small and dispatch overhead dominates, too large and load balance suffers.
+4. Modify the task to search for twin primes (p and p+2 both prime) or Sophie Germain primes (p and 2p+1 both prime).

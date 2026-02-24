@@ -1,62 +1,59 @@
 ---
-title: Introduction
-description: Why these examples exist and what to copy into your own code.
+title: Examples
+description: Practical, copyable patterns for using Knitting in real workloads.
 sidebar:
   order: -1
 ---
 
-Use these examples as practical, copyable patterns for using Knitting in real
-workloads: CPU-heavy loops, batch scheduling, and data-transform pipelines.
+These examples are real patterns you can copy into your project -- not toy snippets. Each one runs a host-vs-worker comparison so you can see exactly what offloading buys you (and when it doesn't).
 
-## Why these examples matter
+## Pick the right example for your use case
 
-- They show when parallel work helps (and when it does not).
-- They demonstrate safe patterns for batching, pooling, and result aggregation.
-- They keep correctness visible with reproducible inputs and validation checks.
-- They map to real production tasks, not just toy computations.
+**"I have a web server and want to keep it responsive under load"**
+Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It's the most realistic example -- a real HTTP server with SSR, JWT, and health check routes. If your server handles file uploads, [Image processing API](/examples/data_transforms/rendering_output/image_processing) shows the same pattern with binary payloads (resize, thumbnail, watermark via sharp).
 
-## Example map
+**"I do SSR and want to offload rendering"**
+[React SSR](/examples/data_transforms/rendering_output/react_ssr) shows the basic pattern. [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
+
+**"I need to validate or parse lots of data"**
+[Schema validation](/examples/data_transforms/validation/schema_validate) (Zod), [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) (Web Crypto), or [Salt hashing](/examples/data_transforms/validation/salt_hashing) (PBKDF2) -- pick whichever is closest to your workload.
+
+**"I'm building an LLM-powered app"**
+[Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) trims prompts to fit a token budget before they hit the API.
+
+**"I have a CPU-heavy computation I want to parallelize"**
+The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi) (embarrassingly parallel), [Physics loop](/examples/maths/physics_loop) (variable-work simulation), [Big prime](/examples/maths/big_prime) (long-running search), and [TSP](/examples/maths/tsp_gsa) (NP-hard optimization with parallel restarts).
+
+**"I just want to convert some text"**
+[Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) is the simplest rendering example -- string in, compressed string out.
+
+## All examples
 
 ### Math and simulation
 
-- [Big prime](/examples/maths/big_prime): long-running BigInt search with
-  probabilistic testing.
-- [Monte Carlo pi](/examples/maths/monte_pi): independent sampling and
-  reduction.
-- [Physics loop](/examples/maths/physics_loop): branch-heavy simulation with
-  per-chunk summaries.
-- [TSP (GSA)](/examples/maths/tsp_gsa): parallel heuristic restarts for NP-hard
-  optimization.
+- [Big prime](/examples/maths/big_prime) -- long-running BigInt search with Miller-Rabin
+- [Monte Carlo pi](/examples/maths/monte_pi) -- independent sampling and reduction
+- [Physics loop](/examples/maths/physics_loop) -- branch-heavy simulation with variable work per trial
+- [TSP (GSA)](/examples/maths/tsp_gsa) -- parallel heuristic restarts for NP-hard optimization
 
 ### Data transforms
 
-- [Data transforms overview](/examples/data_transforms/intro_data_transforms):
-  quick navigation grouped by validation and rendering.
-- [Schema validation](/examples/data_transforms/validation/schema_validate): parse
-  JSON strings, validate against a schema, and return typed results.
-- [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation): verify
-  JWTs, apply renewal policy, and return stringified token responses.
-- [Salt hashing](/examples/data_transforms/validation/salt_hashing): salt
-  passwords, derive PBKDF2 hashes, and verify with constant-time comparison.
-- [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting):
-  shape prompts and trim context before calling an LLM.
-- [React SSR](/examples/data_transforms/rendering_output/react_ssr): parse,
-  validate, transform, and render on workers.
-- [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress):
-  compare where compression should run (worker vs host).
-- [Hono server routes](/examples/data_transforms/rendering_output/hono_server):
-  expose ping, SSR, and JWT endpoints while offloading heavy route work.
-- [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html):
-  markdown rendering pipeline with host vs worker comparison.
+- [Data transforms overview](/examples/data_transforms/intro_data_transforms) -- grouped by validation and rendering
+- [Schema validation](/examples/data_transforms/validation/schema_validate) -- Zod validation on workers
+- [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) -- HMAC verify + renewal with Web Crypto
+- [Salt hashing](/examples/data_transforms/validation/salt_hashing) -- PBKDF2 password hashing (heaviest per-call workload)
+- [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) -- trim LLM prompts to a token budget
+- [React SSR](/examples/data_transforms/rendering_output/react_ssr) -- render React components on workers
+- [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) -- SSR + Brotli, worker vs host comparison
+- [Hono server routes](/examples/data_transforms/rendering_output/hono_server) -- real HTTP server with offloaded routes
+- [Image processing API](/examples/data_transforms/rendering_output/image_processing) -- resize, thumbnail, and watermark with sharp on workers
+- [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) -- simple markdown transform pipeline
 
-## What to emulate from these examples
+## Patterns worth copying
 
-1. Keep worker tasks focused and deterministic.
-2. Batch calls and await them together (`Promise.all`) to reduce scheduling overhead.
-3. Return compact summaries from workers instead of large raw outputs.
-4. Validate invariants on the host and recompute critical metrics when needed.
-5. Compare against a host-only baseline before claiming speedups.
-6. Tune chunk sizes and thread count based on throughput and stability.
-
-These patterns are meant to keep behavior predictable, debugging straightforward,
-and performance scaling easier to reason about.
+1. **Keep worker tasks focused and deterministic.** One task, one job, predictable output.
+2. **Batch calls and await them together** (`Promise.all`) to reduce scheduling overhead.
+3. **Return compact summaries from workers** instead of large raw outputs.
+4. **Validate on the host.** Recompute critical metrics when needed -- don't trust worker output blindly.
+5. **Compare against a host-only baseline** before claiming speedups.
+6. **Tune chunk sizes** based on throughput -- there's always a sweet spot between dispatch overhead and load balance.

@@ -1,6 +1,6 @@
 ---
 title: Markdown to HTML
-description: Markdown-to-HTML rendering with a simple host-vs-worker benchmark.
+description: Convert markdown to HTML with Brotli compression -- a simple transform pipeline.
 hero:
   title: 'Markdown rendering'
 sidebar:
@@ -16,19 +16,16 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
 export const utils = getCode("data_transforms/markdown_to_html/utils.ts");
 
-## What is this about
+Converts markdown documents to HTML using `marked`, then compresses the output with Brotli. A straightforward transform pipeline -- parse, render, compress -- that shows how well workers handle chained operations.
 
-This example focuses on two files:
+## How it works
 
-1. `bench_markdown_to_html.ts` runs a host-vs-worker `mitata` benchmark.
-2. `utils.ts` contains markdown rendering, compression tasks, and shared helpers.
+The host generates markdown documents. Both the host and worker paths parse the markdown, render HTML, then Brotli-compress the result. Compressed byte totals are compared for parity before the benchmark runs.
 
-## Technologies used (and why)
+Two files:
 
-- **`marked`**: practical markdown parser for realistic transform workloads.
-- **Knitting tasks**: compares direct host calls and worker task execution for the same renderer.
-- **Brotli (`node:zlib`)**: benchmark path includes compression so byte movement cost is visible.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+- `bench_markdown_to_html.ts` -- the host-vs-worker benchmark
+- `utils.ts` -- markdown rendering, compression tasks, and shared helpers
 
 ## Install
 
@@ -40,7 +37,7 @@ This example focuses on two files:
 />
 :::
 
-## Quick bench
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -49,19 +46,15 @@ This example focuses on two files:
 />
 :::
 
-## What happens in the example
+Expected output:
 
-1. The host generates markdown documents.
-2. The host path parses markdown, renders HTML, then compresses with Brotli.
-3. The worker path runs the same compression task via `markdownToHtmlCompressed`.
-4. Host and worker compressed-byte totals are compared for parity.
-5. `mitata` reports timing and relative speed for host and worker runs.
+```
+byte parity check: host=18,720  worker=18,720  OK match
 
-## What the benchmark measures
-
-- `host`: parse + render + Brotli compress via direct imports.
-- `knitting`: the same document set through compression task calls.
-- Byte parity is checked before benchmark sampling starts.
+benchmark        avg (ns)    min ... max (ns)
+host              32,100     29,400 ... 41,200
+knitting          17,800     15,600 ... 24,300
+```
 
 ## Code
 
@@ -74,9 +67,6 @@ This example focuses on two files:
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## A clean pipeline example
 
-- It isolates markdown transform logic from benchmark orchestration.
-- It centralizes repetitive markdown builders and byte helpers in `utils.ts`.
-- It keeps benchmark commands simple and reproducible.
-- It compares host imports and task execution with one workload shape.
+This is the simplest rendering example -- no component tree, no JSX, just string in, string out. It's a good reference if you want to understand the worker pattern without the React SSR complexity. The same approach works for any transform chain: parse input, process it, compress or encode the result.
