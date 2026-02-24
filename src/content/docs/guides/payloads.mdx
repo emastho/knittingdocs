@@ -13,21 +13,24 @@ The transport supports the following payloads:
 - `bigint`
 - `undefined` and `null`
 - plain `Object` and `Array` (JSON serialized)
-- `Map` and `Set` (v8 serialize)
 - `Uint8Array`, `Int32Array`, `Float64Array`, `BigInt64Array`, `BigUint64Array`
 - `DataView`
-- `Error` (name, message, stack)
+- `Error` (name, message, stack, and cause chain)
 - `Date`
 - `symbol` from `Symbol.for(...)` only
+- `ArrayBuffer` and `Buffer` (Node.js)
 
 If you need multiple values, pass a tuple or object as the single argument.
-Functions are not supported as payloads.
+Functions and `Blob` values are not supported as payloads.
 
-Promise-like values are accepted at the `call.*()` boundary, but promises
+Promise values are accepted at the `call.*()` boundary, but promises
 themselves are runtime state and are not transferred through IPC as payloads.
 Only resolved values are serialized and sent to workers.
 If a promise input rejects, the host call rejects and the worker task is not
-executed.
+executed. Only native `Promise` is accepted (not arbitrary `PromiseLike` /
+thenables).
+
+See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs) for details.
 
 ```ts
 type JSONValue =
@@ -44,14 +47,10 @@ interface JSONObject {
 
 interface JSONArray extends Array<JSONValue> {}
 
-type Serializable = string | object | number | boolean | bigint;
-
 type ValidInput =
   | bigint
   | void
   | JSONValue
-  | Map<Serializable, Serializable>
-  | Set<Serializable>
   | symbol
   | Uint8Array
   | Int32Array
@@ -59,12 +58,37 @@ type ValidInput =
   | BigInt64Array
   | BigUint64Array
   | DataView
+  | ArrayBuffer
   | Error
   | Date;
 
 type Args = ValidInput | Serializable;
 
-type MaybePromise<T> = T | Promise<T>;
-
-type TaskInput = Args | PromiseLike<Args>;
+type TaskInput = NoBlob<Args> | Promise<NoBlob<Args>>;
 ```
+
+## Picking the right payload type
+
+Different types take different code paths and have very different costs.
+Use the cheapest type that fits your data.
+
+**Header-only (fastest):** `number`, `boolean`, `undefined`, `null`, `Date`,
+small `string`, small `bigint`. These fit in the call header with near-zero
+overhead. Prefer these whenever possible.
+
+**Static payload (fast):** `Symbol.for(...)`, large `bigint`, typed arrays
+(`Uint8Array`, `Int32Array`, etc.). Reuses a small buffer region alongside the
+header.
+
+**Dynamic payload (allocator path):** `Object`, `Array` (JSON-serialized),
+`Error`, `Map`, `Set`. These need allocation, serialization, and copying. Still
+faster than `postMessage`, but measurably heavier in hot loops.
+
+See the [Performance guide](/guides/performance) for per-type benchmarks and
+batching guidance.
+
+## Errors
+
+`Error` payloads preserve `name`, `message`, `stack`, and recursive `cause`
+chains. Both sync throws and async rejections inside tasks propagate back to
+the host as `Error` objects.

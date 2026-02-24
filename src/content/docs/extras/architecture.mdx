@@ -1,0 +1,235 @@
+---
+title: Architecture
+description: How Knitting's shared-memory transport, mailbox protocol, and lane model work under the hood.
+sidebar:
+  order: 7
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide explains what happens between `call.myTask(args)` and receiving the result. If you just want to use Knitting, you don't need this -- the [Quick start](/start/quick-start) and [Creating pools](/guides/creating-pools) guides are enough. Read this when you want to understand *why* things are fast, debug unexpected behavior, or tune advanced options.
+
+## High-level picture
+
+Knitting has three layers:
+
+1. **API layer** -- `task()`, `createPool()`, `call.*()`, `shutdown()`. This is what your code touches.
+2. **Dispatch layer** -- the balancer, lane routing, inliner, and host dispatcher. This decides *where* a call runs.
+3. **Transport layer** -- shared-memory mailboxes, payload buffers, wakeups. This moves data between threads without going through the runtime's message queue.
+
+```
++-----------------------------------------------------+
+|  Host thread                                        |
+|                                                     |
+|  call.myTask(args)                                  |
+|       |                                             |
+|       v                                             |
+|  +----------+    +-----------+                      |
+|  | Balancer  |--->| Dispatcher|                      |
+|  +----------+    +-----+-----+                      |
+|       |                |                            |
+|       |         +------+------+                     |
+|       |         v             v                     |
+|       |   +----------+ +----------+                 |
+|       |   | Worker 0 | | Worker 1 |  ... Worker N   |
+|       |   | (thread) | | (thread) |                 |
+|       |   +----------+ +----------+                 |
+|       |                                             |
+|       v (if inliner enabled)                        |
+|  +--------------+                                   |
+|  | Inline lane  | runs on host, no IPC              |
+|  +--------------+                                   |
++-----------------------------------------------------+
+
+  Shared memory region (SharedArrayBuffer):
+  +----------------------------------------+
+  |  Request mailbox   [32 slots]          |
+  |  Response mailbox  [32 slots]          |
+  |  Payload buffer (request)              |
+  |  Payload buffer (return)               |
+  |  Abort signal bitset                   |
+  +----------------------------------------+
+  (one set per worker)
+```
+
+## Transport: shared-memory mailboxes
+
+This is the core of Knitting's speed advantage. Instead of using `postMessage` (which serializes data, queues it, and deserializes on the other side), Knitting writes directly to `SharedArrayBuffer` regions visible to both threads.
+
+### The mailbox model
+
+Each worker has two independent mailboxes:
+
+- **Request mailbox** (host -> worker): the host writes a call header here, the worker reads it.
+- **Response mailbox** (worker -> host): the worker writes the result header here, the host reads it.
+
+Each mailbox has **32 slots**. A slot is a small fixed-size region that holds:
+- Task function ID (`Uint16`, supports up to 65,536 tasks per pool)
+- Payload type tag
+- Small inline values (numbers, booleans, short strings fit directly in the header)
+
+### Slot ownership via bitsets
+
+Slots are claimed and released using bitset operations on `Int32Array` views of the shared buffer. This is lock-free: no mutexes, no critical sections, just atomic compare-and-swap on the bitset word.
+
+The lifecycle of a slot:
+
+1. Host atomically claims a free slot in the request mailbox.
+2. Host writes the call header (task ID, payload tag, inline data or payload offset).
+3. Host notifies the worker.
+4. Worker reads the slot, executes the task.
+5. Worker claims a slot in the response mailbox, writes the result.
+6. Worker notifies the host.
+7. Host reads the result, releases the response slot, and resolves the promise.
+
+### Wakeups
+
+When the host writes a request, it needs to wake a potentially parked worker. When a worker writes a response, it needs to wake the host dispatcher. Knitting uses `Atomics.notify` (futex-style wakeups) for this.
+
+Workers don't busy-wait by default. The idle cycle is:
+
+1. **Spin** -- check the mailbox in a tight loop for `spinMicroseconds` (default: scales with lane count). Uses `Atomics.pause` to reduce power draw.
+2. **Park** -- call `Atomics.wait` with a timeout of `parkMs`. The thread sleeps until notified or the timeout expires.
+3. **Wake** -- `Atomics.notify` from the host breaks the park immediately.
+
+This means idle workers consume near-zero CPU while still waking up within microseconds when work arrives.
+
+## Data path: payload buffers
+
+Values that don't fit in the mailbox header slot need a separate path.
+
+Each worker allocates two `SharedArrayBuffer` regions:
+
+- **Request payload buffer** -- for arguments sent host -> worker
+- **Return payload buffer** -- for results sent worker -> host
+
+Sizes are controlled by `payloadInitialBytes` (default 4 MiB) and `payloadMaxBytes` (default 64 MiB). When growable `SharedArrayBuffer` is available in the runtime, buffers start small and grow on demand. Otherwise, they're allocated at max size upfront.
+
+### Three encoding paths (fast -> slow)
+
+| Path | When it's used | Cost |
+| --- | --- | --- |
+| **Header-only** | Primitives (`boolean`, `null`, `undefined`, `number`, small `string`, small `bigint`, `Date`) | Near zero. Value fits in the slot header. |
+| **Static payload** | Small typed arrays, short strings that overflow the header | Low. Copies into a fixed region of the payload buffer. |
+| **Dynamic payload** | Objects, arrays, large strings, `Error` | Higher. Requires allocation, encoding (similar to JSON serialization), and copying. |
+
+The [Performance guide](/guides/performance) has exact tier ratings per type.
+
+## Dispatch: lanes and balancing
+
+A **lane** is an execution target -- either a worker thread or the inline lane. The total lane count is `threads + (inliner ? 1 : 0)`.
+
+When you call `call.myTask(args)`, the dispatcher:
+
+1. Resolves any promise arguments on the host.
+2. Asks the **balancer** which lane should run this call.
+3. Encodes the arguments and writes them to that lane's mailbox (or queues them for the inliner).
+4. Returns a promise that resolves when the response arrives.
+
+### Balancer strategies
+
+| Strategy | Behavior |
+| --- | --- |
+| `roundRobin` (default) | Rotates through lanes in order. Simple, fair, predictable. |
+| `firstIdle` | Picks the first lane with no in-flight work, falls back to round-robin. |
+| `randomLane` | Picks a random lane. Good for uneven task durations. |
+| `firstIdleOrRandom` | First idle lane, else random. Balances fairness with load distribution. |
+
+When the pool has only one lane (one thread, no inliner), the balancer is bypassed entirely.
+
+### Host dispatcher backoff
+
+The host dispatcher has its own stall-avoidance logic:
+
+- `stallFreeLoops` (default 128): how many immediate notify-check loops run before backoff starts.
+- `maxBackoffMs` (default 10): ceiling for exponential backoff delay.
+
+Under sustained high load, the dispatcher stays in tight loops. Under intermittent load, it backs off to avoid burning CPU while idle.
+
+## Inliner: the host as a lane
+
+The optional **inliner** adds the host thread itself as an execution lane. Inline tasks skip the entire transport layer -- no encode, no mailbox write, no decode. The task function runs directly on the main thread.
+
+Inline execution is deferred to a macro-task boundary (via `MessageChannel`) so the dispatcher can handle worker sends/receives first, then the host drains inline work.
+
+Key details:
+- `position: "first" | "last"` -- where the inline lane sits in the balancer's lane order.
+- `batchSize` -- how many inline tasks run per event-loop tick.
+- `dispatchThreshold` -- minimum in-flight calls before the inline lane is eligible.
+- Abort signals on inline tasks use a static toolkit where `hasAborted()` always returns `false` (inline tasks can't be individually cancelled since they share the host thread).
+
+See [Inliner guide](/guides/inliner) for when to use it and when to avoid it.
+
+## Task lifecycle (end to end)
+
+Here's what happens for a single `call.add([1, 2])`:
+
+1. **Host:** `call.add([1, 2])` is invoked. The input is not a promise, so no awaiting needed.
+2. **Host:** The balancer selects a lane (say, worker 0).
+3. **Host:** The dispatcher finds a free slot in worker 0's request mailbox (bitset claim).
+4. **Host:** `[1, 2]` is encoded. A small tuple fits in the static payload path -- it's written to the payload buffer at a known offset, and the slot header records the type tag and offset.
+5. **Host:** `Atomics.notify` wakes worker 0 (or the worker is already spinning and sees the new slot).
+6. **Worker 0:** Reads the slot header, determines it's task `add` (by function ID). Decodes `[1, 2]` from the payload buffer.
+7. **Worker 0:** Calls `([a, b]) => a + b` with `[1, 2]`. Gets `3`.
+8. **Worker 0:** Claims a slot in the response mailbox. `3` is a number -- fits in the header (header-only path). Writes the result.
+9. **Worker 0:** `Atomics.notify` wakes the host dispatcher.
+10. **Host:** Reads the response slot. Decodes `3`. Resolves the promise returned by `call.add([1, 2])`.
+11. **Host:** Releases the response slot (bitset release).
+
+If the task throws, step 8 writes an error result instead, and step 10 rejects the promise.
+
+## Pool lifecycle
+
+### Startup (`createPool`)
+
+1. Allocates shared memory regions (mailboxes + payload buffers) for each worker.
+2. Spawns `threads` worker threads. Each worker imports the task module to discover exported `task()` values.
+3. Workers enter their idle spin/park loop, waiting for work.
+4. If `permission` is set, generates runtime-specific CLI flags and passes them via `workerExecArgv`.
+5. Returns the `{ call, shutdown }` interface.
+
+### Running
+
+- Calls flow through the dispatch layer continuously.
+- Workers spin briefly after completing work (in case more arrives), then park.
+- The host dispatcher manages backoff independently.
+
+### Shutdown
+
+1. `shutdown()` signals all workers to stop.
+2. If `resolveAfterFinishingAll` is `true`, workers finish all pending promises before exiting.
+3. All in-flight `call.*()` promises for abort-aware tasks reject with `"Thread closed"`.
+4. Worker threads terminate.
+
+## Abort signal pool
+
+Tasks defined with `abortSignal: true` or `abortSignal: { hasAborted: true }` use a shared-memory bitset to track cancellation state. The pool has a fixed capacity (default 258, tunable via `abortSignalCapacity`).
+
+When the host calls `.reject()` on an abort-aware promise, it flips a bit in the shared bitset. The worker can poll `toolkit.hasAborted()` to check that bit and bail out early.
+
+This is cooperative, not preemptive -- the worker must check. If it doesn't, the host promise still rejects immediately, but the worker task runs to completion in the background.
+
+## Memory layout (per worker)
+
+| Region | Default size | Purpose |
+| --- | --- | --- |
+| Request mailbox | Fixed (32 slots) | Call headers, host -> worker |
+| Response mailbox | Fixed (32 slots) | Result headers, worker -> host |
+| Request payload buffer | 4 MiB initial, 64 MiB max | Argument data |
+| Return payload buffer | 4 MiB initial, 64 MiB max | Result data |
+| Abort signal bitset | Scales with `abortSignalCapacity` | Cancellation flags |
+
+With default settings and 4 workers, the shared memory footprint is roughly:
+`4 workers x (2 mailboxes + 2 x 4 MiB payload buffers) ~ 32 MiB initial`
+
+Payload buffers grow on demand up to `payloadMaxBytes` if the runtime supports growable `SharedArrayBuffer`.
+
+## What Knitting does NOT do
+
+Understanding the boundaries helps avoid misuse:
+
+- **No message passing protocol.** Knitting is task-call oriented. If you need pub/sub or event-style messaging, use `postMessage` / `MessagePort`.
+- **No preemption.** A long-running task blocks its lane until it finishes. Use `abortSignal` with `hasAborted()` polling for cooperative cancellation.
+- **No cross-process or cross-machine communication.** Shared memory is local to a single process.
+- **No automatic scaling.** Thread count is fixed at pool creation. You choose the parallelism level upfront.
+- **No browser support (intentionally).** Shared memory in browsers has security constraints (Spectre). Knitting stays server-side.

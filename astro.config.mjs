@@ -157,6 +157,11 @@ export default defineConfig({
           collapsed: true,
           autogenerate: { directory: "benchmarks" },
         },
+                {
+          label: "Extras",
+          collapsed: true,
+          autogenerate: { directory: "extras" },
+        },
       ],
     }),
   ],

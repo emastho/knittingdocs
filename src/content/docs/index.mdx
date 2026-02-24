@@ -21,7 +21,7 @@ hero:
     alt: A glittering, brightly colored logo
     dark: ../../assets/logo.svg
     light: ../../assets/light_logo.svg
-  tagline: Shared-memory worker pools for Node.js, Deno, and Bun — function-call ergonomics on the shared-memory fast path.
+  tagline: Shared-memory worker pools for Node.js, Deno, and Bun , function-call ergonomics on the shared-memory fast path.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -58,40 +58,45 @@ import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
   ]}
 />
 
-Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-thread parallelism feel like normal function calls. If you’re evaluating it for real workloads, start with the architecture + tradeoffs, then look at benchmarks.
+Knitting lets you run tasks across worker threads as if they were normal function calls. Under the hood it uses shared memory to keep coordination fast, and it works on Node.js, Deno, and Bun. Curious how it actually works? Read the architecture section below, then check the benchmarks to see it in action.
 
-## Start here
+## Where do you want to start?
 
 <CardGrid>
   <LinkCard
     title="Quick start"
     href="/start/quick-start/"
-    description="Define tasks, create a pool, call it, shut it down."
+    description="Up and running in a few lines of code."
   />
   <LinkCard
     title="How Knitting works"
     href="#how-knitting-works"
-    description="Shared-memory mailboxes, wakeups, payload buffers."
+    description="What's actually happening under the hood."
   />
   <LinkCard
     title="Creating pools"
     href="/guides/creating-pools/"
-    description="Threads, balancer strategies, inliner, and timers."
+    description="Pick your thread count, balancer, and more."
   />
   <LinkCard
     title="Supported payloads"
     href="/guides/payloads/"
-    description="What you can send and how it’s encoded."
+    description="What you can send to workers and how it gets there."
+  />
+  <LinkCard
+    title="Permissions"
+    href="/guides/permissions/"
+    description="Restrict what workers can access per runtime."
   />
   <LinkCard
     title="Performance model"
     href="/guides/performance/"
-    description="Header-only vs payload paths, batching tips."
+    description="Where the speed comes from and how to get the most out of it."
   />
   <LinkCard
     title="Examples"
     href="/examples/intro_examples/"
-    description="SSR, validation, transforms, maths, and servers."
+    description="Real patterns you can copy , SSR, validation, servers, and more."
   />
 </CardGrid>
 
@@ -100,8 +105,7 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
 <div class="home-cards">
   <CardGrid stagger>
     <Card title="Multi-threading in 10 lines">
-      Start here if you want the smallest possible mental model.
-      Define tasks, create a pool, call it, and shut it down.
+      This is the whole thing. Define a task, spin up a pool, call it, done.
 
       ```ts
       import { isMain, task } from "@vixeny/knitting";
@@ -120,15 +124,13 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
       ```
 
 
-      This is intentionally simple. You can add batching and balancing later.
+      That's it. Batching, balancing, and all the fancy stuff comes later if you need it.
     </Card>
 
     <Card title="Throughput">
-      These results measure a full `1 MB` echo roundtrip: the host sends `1 MB` to a worker, and the worker sends `1 MB` back.
+      How fast can you move data? We measured a full `1 MB` echo roundtrip , host sends `1 MB` to a worker, worker sends `1 MB` back. That's `2 MB` per call.
 
-      Each call creates two `1 MB` objects and transfers `2 MB` total.
-
-      **Hot scoreboard (GB/s, one-way equivalent):**
+      **Here's what we saw (GB/s, one-way equivalent):**
 
       | Runtime | `Uint8Array` | `string` |
       | --- | ---: | ---: |
@@ -136,14 +138,13 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
       | **Deno** | **1.17** | **2.68** |
       | **Node** | **1.15** | **1.32** |
 
-      To stay conservative, we report one-way equivalent throughput (half of the roundtrip GB/s).
+      We report one-way equivalent (half the roundtrip) to keep things honest.
 
-      [Benchmarks overview](/benchmarks/introduction/)
+      [See the full benchmarks](/benchmarks/introduction/)
     </Card>
 
     <Card title="How fast?">
-      A quick look at runtime behavior across Bun, Deno, and Node.
-      Switch tabs to compare how each runtime responds under the same benchmark shape.
+      Same benchmark, three runtimes. Flip the tabs to compare.
 
       <Tabs>
         <TabItem label="Node" icon="node">
@@ -175,7 +176,7 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
         </TabItem>
       </Tabs>
 
-      Use this as orientation, then check the benchmark pages for details.
+      These give you the shape of it , dig into the benchmark pages for the full story.
     </Card>
 
 
@@ -183,24 +184,21 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
 
 
     <Card title="One more thread, big impact">
-      The simplest win: move the "heavy" part of your route (SSR, parsing, crypto, compression) into a worker
-      pool so the main request loop stays snappy.
+      The easiest win? Take the heavy stuff , SSR, parsing, crypto, compression , and toss it into a worker pool. Your main thread stays free to handle requests.
 
-      In the Hono server example, one run shows:
+      In the Hono server example we saw:
       - SSR-only throughput: **~+90%** (about **1.9x**).
       - Mixed load (ping + jwt + ssr together): `/ping` **~+59%**, `/jwt` **~+57%**, `/ssr` **~+58%**.
 
-      Why it works: without workers, an expensive request can monopolize the main thread and create
-      head-of-line blocking. Adding even a single worker thread lets that heavy work run in parallel,
-      so cheap routes keep flowing and tail latency stops spiking.
+      It's simple: without workers, one expensive request hogs the main thread and everything else waits. Even a single worker thread unblocks that, and your cheap routes keep flowing.
 
-      Try it in the Hono server example:
+      Try it yourself:
       - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/hono_server)
     </Card>
 
-    <Card title="10+ diverse examples (and growing)">
-      There is enough here to copy real patterns, not just toy snippets.
-      We keep adding examples as new workflows land.
+    <Card title="10+ examples (and growing)">
+      Not toy snippets , real patterns you can actually copy into your project.
+      We add more as new workflows come up.
 
       <FileTree>
       - examples/
@@ -210,36 +208,37 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
           - rendering_output/
             - React_ssr.mdx
             - Hono_server.mdx
-            - …
+            - ...
           - validation/
             - Schema_validate.mdx
             - Jwt_revalidation.mdx
-            - …
+            - ...
         - maths/
           - Big_prime.mdx
           - Monte_pi.mdx
           - Physics_loop.mdx
-          - …
+          - ...
       </FileTree>
 
       - [Browse examples](/examples/intro_examples)
 
-      Use the sidebar for guides + benchmarks, and the examples for copy/paste-ready patterns.
+      Guides and benchmarks live in the sidebar. Examples are ready to copy and paste.
     </Card>
 
     <Card title="Flexible by default">
-      Built to keep real workloads simple and adaptable.
+      Works the way you'd expect , promises in, async out, no surprises.
 
-      - Promise inputs and async outputs work naturally.
-      - Clear payload rules (and explicit serialization behavior).
-      - Great performance when you batch and keep payloads simple.
+      - Payload rules are explicit, so you always know what's being serialized.
+      - Batching and simple payloads get you the best throughput.
 
-      **Knitting exposes the knobs you usually need in production.**
+      **And the production knobs are there when you need them:**
 
-      - Balance lanes with `balancer` strategies.
-      - Add host execution with `inliner` when it helps.
-      - Control `spin`/`park`/`backoff`/`timeout` and more.
-      - See: [Creating pools](/guides/creating-pools/), [Supported payloads](/guides/payloads/), [Performance model](/guides/performance/)
+      - `balancer` strategies for lane selection.
+      - `inliner` to run tasks on the host when it makes sense.
+      - `permission` to restrict what workers can access (strict/unsafe).
+      - Abort signals to cancel in-flight work.
+      - `spin`/`park`/`backoff`/`timeout` for fine-tuning.
+      - See: [Creating pools](/guides/creating-pools/), [Permissions](/guides/permissions/), [Performance model](/guides/performance/)
 
     </Card>
 
@@ -251,50 +250,50 @@ Knitting is shared-memory IPC for Node.js, Deno, and Bun that makes worker-threa
 
 <KnittingArchitectureDiagram caption="Shared-memory request/response mailboxes keep the control path cheap; payload buffers and batching keep the data path fast." />
 
-Knitting’s core idea is simple: move the coordination path into shared memory so a task call doesn’t need a full message protocol or expensive hops through a runtime message queue.
+The core idea: instead of sending messages through the runtime's queue, Knitting coordinates through shared memory. That cuts out the middleman and makes task calls cheap.
 
 <CardGrid>
   <Card title="Control path: shared mailboxes">
-    Knitting uses a full-duplex transport: one mailbox for requests and one for responses.
+    There are two mailboxes , one for requests, one for responses. Think of it as a full-duplex pipe in shared memory.
 
-    - Calls claim a slot, write a small header, then notify a worker.
-    - Workers execute the task, write the result, then notify the host.
-    - Slot ownership is tracked via bitsets so state transitions stay lock-free.
+    - A call claims a slot, writes a small header, and wakes up a worker.
+    - The worker does the work, writes the result back, and wakes up the host.
+    - Slot ownership uses bitsets, so it's all lock-free.
   </Card>
 
   <Card title="Data path: payload buffers">
-    Values that don’t fit in a tiny header are encoded into reusable payload buffers.
+    When values are too big for the header, they go into reusable payload buffers.
 
-    - Each worker allocates two payload `SharedArrayBuffer`s (request + return).
-    - Sizes are explicit (`payloadInitialBytes`, `payloadMaxBytes`) so you can trade memory for throughput.
-    - Payload types and serialization rules are documented: [Supported payloads](/guides/payloads/).
+    - Each worker gets two `SharedArrayBuffer`; one for requests, one for returns.
+    - You control the sizes (`payloadInitialBytes`, `payloadMaxBytes`), so you can trade memory for speed.
+    - Full details: [Supported payloads](/guides/payloads/).
   </Card>
 
 </CardGrid>
 
-If you want the cost model (header-only vs payload paths) and batching advice, start here: [Performance model](/guides/performance/).
+Want to understand the cost model and when to batch? That's all in the [Performance model](/guides/performance/).
 
-## When Knitting Helps (and When It Doesn’t)
+## When Knitting Helps (and When It Doesn't)
 
 <CardGrid>
-  <Card title="Knitting helps when">
-    - The work is CPU-heavy or bursty (SSR, parsing, validation, crypto, compression).
-    - You have lots of small-to-medium calls where IPC overhead matters.
-    - Tail latency matters and you want to avoid head-of-line blocking on the main thread.
-    - You can batch calls to amortize overhead.
+  <Card title="Good fit">
+    - CPU-heavy or bursty work (SSR, parsing, validation, crypto, compression).
+    - Lots of small-to-medium calls where IPC overhead adds up.
+    - You care about tail latency and don't want one hot request blocking everything.
+    - You can batch calls to squeeze out more throughput.
   </Card>
 
-  <Card title="Knitting doesn’t help when">
-    - The workload is mostly I/O bound (network waits, DB waits).
-    - Calls are rare, or each job is huge enough that coordination overhead is irrelevant.
-    - You need a general-purpose message bus (use `postMessage` / MessagePort).
-    - You need cross-machine scheduling (Knitting is local, in-process).
+  <Card title="Not the right tool">
+    - Mostly I/O-bound work (waiting on the network or a database).
+    - Calls are rare, or each job is so big that coordination cost doesn't matter.
+    - You need a general-purpose message bus; use `postMessage` / MessagePort for that.
+    - You need to run across machines (Knitting is local, in-process only).
   </Card>
 </CardGrid>
 
 ## How Knitting Compares
 
-Knitting is not “workers, but faster.” It’s “task execution, but cheaper to coordinate.”
+It's not "workers, but faster"; it's "task execution, but way cheaper to coordinate."
 
 | | Knitting | `postMessage` / MessagePort | `child_process` / `cluster` |
 | --- | --- | --- | --- |
@@ -303,39 +302,40 @@ Knitting is not “workers, but faster.” It’s “task execution, but cheaper
 | Coordination path | Shared memory + wakeups | Message queue | OS IPC |
 | Best fit | High-frequency CPU work | Event-style messages | Multi-process services |
 
-Benchmarks show the impact of the coordination path across runtimes: [Benchmarks overview](/benchmarks/introduction/).
+The benchmarks show what this difference looks like in practice: [Benchmarks overview](/benchmarks/introduction/).
 
-## Safety & correctness (what to expect)
+## Safety & correctness
 
-- **Deterministic async boundary:** promise inputs are resolved on the host before dispatch, and async task results are awaited in the worker before returning.  
-  Workers only receive plain values, and callers only receive resolved values (or rejections).
-- **Throws don’t poison the pool:** a task that throws (sync) or rejects (async) simply rejects that one `call.*()`; workers keep processing later calls.
-- **Hands-off idle behavior (no busy-waiting by default):** when lanes have no work, workers spin briefly, then pause/park until woken; the host dispatcher also backs off under stall.  
-- **Fairness is default (not magic):** lane selection is controlled by `balancer` (default: round-robin) to reduce starvation across lanes, but Knitting does not preempt long-running tasks.
-- **Clear payload rules:** supported types are explicit; functions are not payloads (fail fast on the sending side before dispatch).
+Here's how Knitting behaves so you're not guessing:
+
+- **Async is deterministic:** promises resolve on the host *before* dispatch, and async results are awaited in the worker *before* returning. No half-resolved surprises on either side.
+- **Errors stay contained:** if a task throws or rejects, that single call fails , the worker keeps going for the next one. One bad call doesn't take down the pool.
+- **No busy-waiting by default:** idle workers spin briefly, then park until there's work. The host dispatcher backs off too. Your CPU isn't burning cycles on nothing.
+- **Fair by default:** round-robin lane selection keeps things balanced. But Knitting won't preempt a long-running task , if one call takes forever, that lane is busy until it's done.
+- **Functions aren't payloads:** you can't send a function to a worker. Knitting catches that early and fails fast before dispatch.
 
 :::caution
-Knitting is not a sandbox. Tasks run in your process with your permissions. If you need to execute untrusted code, use process-level isolation.
+Knitting is not a security boundary. Tasks run in your process with your permissions. The [permission protocol](/guides/permissions/) restricts file-system and sub-capability access, but if you need to run untrusted code, use a container or VM for real isolation.
 :::
 
-## Runtime support & constraints
+## Runtime support
 
-- Supported runtimes: Node.js, Deno, and Bun.
-- No browser / Web Worker support (intentionally).
-- Edge runtimes are not currently targeted.
-- Remote imports and `href` overrides expand trust boundaries; avoid them in production unless you really need them.
+- Works on **Node.js**, **Deno**, and **Bun**.
+- No browser or Web Worker support; that's intentional, not a missing feature.
+- Edge runtimes aren't targeted right now.
+- Watch out for remote imports and `href` overrides; they widen your trust boundary. Avoid in production unless you know what you're doing.
 
 ## Why Knitting
 
-Traditional worker APIs are great at message passing. Knitting is built around a different thesis: **make parallel code cheap enough to write** by minimizing coordination overhead and keeping the programming model close to normal function calls.
+Worker APIs are great for message passing. Knitting takes a different bet: **what if parallel code was cheap enough that you'd actually use it?**
 
-- Function-call workflow instead of manual message routing.
-- Lower IPC overhead for high-frequency workloads.
-- Same model across Node.js, Deno, and Bun.
-- Explicit control over batching, inlining, and shutdown behavior.
+Instead of building message protocols, you write function calls. Instead of paying for runtime IPC on every hop, you coordinate through shared memory. Same API on Node, Deno, and Bun.
 
+- Call functions instead of routing messages.
+- Less IPC overhead, especially for high-frequency workloads.
+- One programming model across all three runtimes.
+- You control batching, inlining, and shutdown when you need to.
 
-## Project Scope
+## Scope
 
-Knitting focuses on local multi-thread execution with shared-memory IPC.
-It is not a distributed scheduler or cluster manager.
+Knitting does one thing: local multi-thread execution with shared-memory IPC. It's not a distributed scheduler or a cluster manager.

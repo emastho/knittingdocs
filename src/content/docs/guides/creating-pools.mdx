@@ -30,21 +30,25 @@ createPool({
   threads?: number,
   payloadInitialBytes?: number,
   payloadMaxBytes?: number,
+  abortSignalCapacity?: number,
   inliner?: {
     position?: "first" | "last",
     batchSize?: number,
     dispatchThreshold?: number,
   },
   balancer?: {
-    strategy: "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
-  } | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
+    strategy?: "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
+  } | "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
+    resolveAfterFinishingAll?: true,
     timers?: {
       spinMicroseconds?: number,
       parkMs?: number,
       pauseNanoseconds?: number,
     },
   },
+  workerExecArgv?: string[],
+  permission?: "strict" | "unsafe" | PermisonProtocol,
   host?: {
     stallFreeLoops?: number,
     maxBackoffMs?: number,
@@ -57,6 +61,11 @@ createPool({
   },
 })
 ```
+
+### threads
+
+Number of worker threads to spawn (default `1`). The total lane count is
+`threads + (inliner ? 1 : 0)`.
 
 ### payloadInitialBytes
 
@@ -79,6 +88,24 @@ Maximum size (in bytes) each payload `SharedArrayBuffer` is allowed to grow to.
   - `payloadInitialBytes` is clamped to `payloadMaxBytes`.
 - Scope:
   - Applied per worker and per direction (request payload + return payload), so each worker allocates two payload buffers with these limits.
+
+### abortSignalCapacity
+
+Maximum number of concurrent abort-aware calls the pool can track. Defaults
+to `258`. Each call to a task that has `abortSignal` enabled occupies one slot;
+when the pool is exhausted the call throws `AbortSignalPoolExhausted`.
+
+Only tasks defined with `abortSignal: true` or `abortSignal: { hasAborted: true }`
+count against this limit. Regular tasks (no abort signal) are unaffected.
+
+Increase this if you fire many abort-aware calls concurrently:
+
+```ts
+const pool = createPool({
+  threads: 4,
+  abortSignalCapacity: 1024,
+})({ myAbortableTask });
+```
 
 ## Example
 
@@ -111,11 +138,19 @@ After `shutdown()` runs, in-flight and future `call.*()` promises reject (reason
 ## balancer
 
 Controls how calls are routed across lanes (threads, plus the optional inliner).
+Pass a string or an object with a `strategy` key.
 
-- `robinRound` (default): round-robin rotation.
+- `roundRobin` (default): round-robin rotation through all lanes.
 - `firstIdle`: pick the first idle lane, else fall back to round-robin.
 - `randomLane`: pick a random lane.
 - `firstIdleOrRandom`: pick the first idle lane, else random.
+
+:::note
+`robinRound` is accepted as a legacy alias for `roundRobin`.
+:::
+
+When only one thread is spawned and no inliner is enabled, the balancer is
+bypassed entirely and calls go directly to the single worker.
 
 ## inliner
 
@@ -130,8 +165,15 @@ Adds an extra lane that runs tasks on the main thread.
   plus inline lane are scheduled.
   This option has effect only when `inliner` is enabled.
 
+See [Inliner guide](/guides/inliner) for more detail.
 
 ## worker
+
+### resolveAfterFinishingAll
+
+When set to `true`, makes workers wait for all pending promises to settle
+before exiting. Useful when tasks spawn background work that should complete
+before shutdown.
 
 ### timers
 
@@ -156,7 +198,58 @@ Defaults to `max(1, totalLanes) * 50`.
 #### pauseNanoseconds
 
 `Atomics.pause` duration while spinning (nanoseconds). Use this to reduce power
-draw / contention during spin loops.
+draw / contention during spin loops. Set to `0` (or less) to disable pause calls.
+
+## workerExecArgv
+
+Extra Node.js `execArgv` flags passed to worker threads, for example
+`["--expose-gc"]`. Defaults to `process.execArgv` plus `--expose-gc` when
+the current Node.js binary supports that flag.
+
+Knitting deduplicates and validates flags against
+`process.allowedNodeEnvironmentFlags` before passing them to the worker.
+
+When `permission` is set to `"unsafe"`, Node.js permission flags
+(`--allow-fs-read`, `--allow-fs-write`, etc.) are automatically stripped from
+the inherited argv so they do not conflict.
+
+```ts
+const pool = createPool({
+  threads: 2,
+  workerExecArgv: ["--expose-gc", "--max-old-space-size=4096"],
+})({ myTask });
+```
+
+## permission
+
+Runtime permission protocol that restricts what workers can access.
+Accepts a shorthand string or a full configuration object.
+
+- `"strict"` (default when an object is passed): deny access to sensitive
+  paths and environment variables by default.
+- `"unsafe"`: strip all permission flags (workers run unrestricted).
+
+Object form for fine-grained control:
+
+```ts
+createPool({
+  threads: 2,
+  permission: {
+    mode: "strict",
+    console: true,
+    cwd: "/app",
+    read: ["./data"],
+    write: ["./output"],
+    denyRead: [".env", ".git"],
+    denyWrite: ["/etc"],
+    env: { allow: ["NODE_ENV", "PORT"] },
+    node: { worker: true, childProcess: false },
+  },
+})({ myTask });
+```
+
+See [Permissions guide](/guides/permissions) for the full reference (modes,
+allow/deny lists, runtime-specific settings, and strict-mode defaults).
 
 ## host
 
@@ -190,3 +283,8 @@ Useful when auditing module resolution (for example `task({ href })` overrides).
 ### logImportedUrl
 
 Logs the list of module URLs that workers import to discover tasks.
+
+## Limits
+
+A single pool supports up to **65,536 tasks** (function IDs are stored as
+`Uint16`, range `0..0xFFFF`). Passing more tasks throws a `RangeError`.

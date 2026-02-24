@@ -9,9 +9,9 @@ import { Badge } from '@astrojs/starlight/components';
 
 ## Quick legend
 
-Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be **2–4× faster** than `postMessage` (depending on payload and workload).
+Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be **2-4x faster** than `postMessage` (depending on payload and workload).
 
-- <Badge text="Best" variant="note" />: near “header-only” cost, best path
+- <Badge text="Best" variant="note" />: near "header-only" cost, best path
 - <Badge text="Fast" variant="success" />: still very cheap per call
 - <Badge text="Good" variant="tip" />: fine for real workloads
 - <Badge text="Fair" variant="caution" />: watch frequency
@@ -22,18 +22,18 @@ Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be 
 These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runtime, edit these numbers and re-label rows as needed.
 
 **For a single call (1 value):**
-- Best: ≤ 1 µs
-- Fast: ≤ 2 µs
-- Good: ≤ 4 µs
-- Fair: ≤ 9 µs
-- Slow: > 9 µs
+- Best: < 1 us
+- Fast: < 2 us
+- Good: < 4 us
+- Fair: < 9 us
+- Slow: > 9 us
 
 **For a batch (100 values):**
-- Best: ≤ 50 µs
-- Fast: ≤ 100 µs
-- Good: ≤ 200 µs
-- Fair: ≤ 450 µs
-- Slow: > 450 µs
+- Best: < 50 us
+- Fast: < 100 us
+- Good: < 200 us
+- Fair: < 450 us
+- Slow: > 450 us
 
 ---
 
@@ -48,14 +48,14 @@ These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runt
 
 ## Mental model (what makes things fast)
 
-**1) Header-only / “no payload”**  
+**1) Header-only / "no payload"**
 Values fit into the call header: tiny encode/decode cost.
 
-**2) Static payload**  
+**2) Static payload**
 Reuses part of the Header plus a small buffer, only for small playloads.
 
-**3) Dynamic payload (allocator path)**  
-Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in hot loops.
+**3) Dynamic payload (allocator path)**
+Needs allocation, copying, and bookkeeping. Still fast, but you'll feel it in hot loops.
 
 
 
@@ -128,14 +128,9 @@ Needs allocation, copying, and bookkeeping. Still fast, but you’ll feel it in 
       <td><Badge text="Good" variant="tip" /></td>
     </tr>
     <tr>
-      <td>Collections: <code>Set</code>, <code>Map</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Worse" variant="danger" /></td>
-    </tr>
-    <tr>
       <td>Errors: <code>Error</code></td>
       <td><code>(1)</code></td>
-      <td><Badge text="Worse" variant="danger" /></td>
+      <td><Badge text="Slow" variant="danger" /></td>
     </tr>
   </tbody>
 </table>
@@ -191,11 +186,6 @@ Batching amortizes overhead or if you are doing repeated calls.
       <td><Badge text="Good" variant="tip" /></td>
     </tr>
     <tr>
-      <td>Collections: <code>Map</code>, <code>Set</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Slow" variant="danger" /></td>
-    </tr>
-    <tr>
       <td>Errors: <code>Error</code></td>
       <td><code>(100)</code></td>
       <td><Badge text="Slow" variant="danger" /></td>
@@ -213,6 +203,42 @@ Batching amortizes overhead or if you are doing repeated calls.
   </tbody>
 </table>
 
+---
 
+## Configuration effects on performance
 
+### Thread count
 
+More threads means more lanes for the balancer to distribute work across, but
+each thread has a fixed memory cost (payload buffers, shared lock regions,
+abort signal pool). Returns diminish past the number of physical cores. For
+compute-only workloads, `threads: os.availableParallelism() - 1` is a
+reasonable starting point.
+
+### Inliner
+
+The inliner skips encode/decode entirely, so header-only payloads on the
+inline lane are effectively free. For tiny math tasks, adding
+`inliner: { position: "last", batchSize: 64 }` can improve throughput
+noticeably. See [Inliner guide](/guides/inliner).
+
+### Permissions
+
+Enabling `permission: "strict"` adds startup cost per worker (flag generation,
+lock file resolution) but has no measurable per-call overhead once workers are
+running. The cost is one-time and small.
+
+### Payload sizing
+
+`payloadInitialBytes` and `payloadMaxBytes` control the shared buffer each
+worker allocates. Larger initial buffers avoid runtime growth at the cost of
+upfront memory. If your payloads are consistently small (primitives, short
+strings), the default 4 MiB initial / 64 MiB max is more than enough.
+
+### Batching
+
+Batching many calls amortizes header and dispatch overhead. Even types rated
+<Badge text="Slow" variant="danger" /> in the single-call table become
+acceptable when batched. If you're calling the same task in a loop, fire all
+calls concurrently with `Promise.all` rather than awaiting each one
+sequentially.
