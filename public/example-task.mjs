@@ -16,4 +16,3 @@ export const wordStats = task({
     return { words, chars };
   },
 });
-

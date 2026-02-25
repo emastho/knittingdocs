@@ -71,7 +71,6 @@ async function main() {
   }
 }
 
-
 function runHostBatches(payloadBatches: string[][]): ValidationSummary {
   let totals: ValidationSummary = { valid: 0, invalid: 0 };
 
@@ -102,7 +101,6 @@ async function runWorkerBatches(
   }
   return totals;
 }
-
 
 if (isMain) {
   main().catch((error) => {

@@ -1,5 +1,9 @@
 // src/worker/loop.ts
-import { isMainThread as isMainThread3, workerData, MessageChannel } from "node:worker_threads";
+import {
+  isMainThread as isMainThread3,
+  MessageChannel,
+  workerData,
+} from "node:worker_threads";
 
 // src/ipc/tools/RingQueue.ts
 class RingQueue {
@@ -10,8 +14,9 @@ class RingQueue {
   #size = 0;
   constructor(capacity = 512) {
     let cap = 2;
-    while (cap < capacity)
+    while (cap < capacity) {
       cap <<= 1;
+    }
     this.#buf = new Array(cap).fill(null);
     this.#mask = cap - 1;
   }
@@ -33,16 +38,19 @@ class RingQueue {
     return this.#size === 0 ? undefined : this.#buf[this.#head];
   }
   reserve(minCapacity) {
-    if (minCapacity <= this.capacity)
+    if (minCapacity <= this.capacity) {
       return;
+    }
     let cap = this.capacity;
-    while (cap < minCapacity)
+    while (cap < minCapacity) {
       cap <<= 1;
+    }
     this.#growTo(cap);
   }
   #growIfFull() {
-    if (this.#size !== this.#mask + 1)
+    if (this.#size !== this.#mask + 1) {
       return;
+    }
     this.#growTo(this.#mask + 1 << 1);
   }
   #growTo(newCap) {
@@ -52,10 +60,10 @@ class RingQueue {
     const next = new Array(newCap).fill(null);
     const head = this.#head;
     const firstLen = Math.min(n, oldCap - head);
-    for (let i = 0;i < firstLen; i++) {
+    for (let i = 0; i < firstLen; i++) {
       next[i] = oldBuf[head + i];
     }
-    for (let i = firstLen;i < n; i++) {
+    for (let i = firstLen; i < n; i++) {
       next[i] = oldBuf[i - firstLen];
     }
     this.#buf = next;
@@ -85,8 +93,9 @@ class RingQueue {
   }
   shift() {
     const size = this.#size;
-    if (size === 0)
+    if (size === 0) {
       return;
+    }
     const head = this.#head;
     const buf = this.#buf;
     const v = buf[head];
@@ -97,8 +106,9 @@ class RingQueue {
   }
   shiftNoClear() {
     const size = this.#size;
-    if (size === 0)
+    if (size === 0) {
       return;
+    }
     const head = this.#head;
     const v = this.#buf[head];
     this.#head = head + 1 & this.#mask;
@@ -113,8 +123,9 @@ class RingQueue {
     const n = this.#size;
     while (i < n) {
       const v = buf[idx];
-      if (v !== null)
+      if (v !== null) {
         yield v;
+      }
       idx = idx + 1 & mask;
       i++;
     }
@@ -124,7 +135,7 @@ class RingQueue {
     const buf = this.#buf;
     const mask = this.#mask;
     let idx = this.#head;
-    for (let i = 0;i < out.length; i++) {
+    for (let i = 0; i < out.length; i++) {
       out[i] = buf[idx];
       idx = idx + 1 & mask;
     }
@@ -155,30 +166,36 @@ var register = ({ lockSector }) => {
   let hostLast = 0 | 0;
   let workerLast = 0 | 0;
   let updateTableCounter = 0;
-  const startAndIndexToArray = (length) => Array.from(startAndIndex.subarray(0, length));
+  const startAndIndexToArray = (length) =>
+    Array.from(startAndIndex.subarray(0, length));
   const compactSectorStable = (b) => {
     const sai = startAndIndex;
     let w = 0 | 0;
     let r = 0 | 0;
     b = b | 0;
-    for (;r + 3 < b; r += 4) {
+    for (; r + 3 < b; r += 4) {
       const v0 = sai[r];
       const v1 = sai[r + 1];
       const v2 = sai[r + 2];
       const v3 = sai[r + 3];
-      if (v0 !== EMPTY)
+      if (v0 !== EMPTY) {
         sai[w++] = v0;
-      if (v1 !== EMPTY)
+      }
+      if (v1 !== EMPTY) {
         sai[w++] = v1;
-      if (v2 !== EMPTY)
+      }
+      if (v2 !== EMPTY) {
         sai[w++] = v2;
-      if (v3 !== EMPTY)
+      }
+      if (v3 !== EMPTY) {
         sai[w++] = v3;
+      }
     }
-    for (;r < b; r++) {
+    for (; r < b; r++) {
       const v = sai[r];
-      if (v !== EMPTY)
+      if (v !== EMPTY) {
         sai[w++] = v;
+      }
     }
     return w;
   };
@@ -186,21 +203,24 @@ var register = ({ lockSector }) => {
     const w = a_load(workerBits, 0) | 0;
     const state = (hostLast ^ w) >>> 0;
     let freeBits = ~state >>> 0;
-    if (tableLength === 0 || freeBits === 0)
+    if (tableLength === 0 || freeBits === 0) {
       return;
+    }
     if (freeBits === EMPTY) {
       tableLength = 0;
       usedBits = 0 | 0;
       return;
     }
     freeBits &= usedBits;
-    if (freeBits === 0)
+    if (freeBits === 0) {
       return;
+    }
     const sai = startAndIndex;
-    for (let i = 0;i < tableLength; i++) {
+    for (let i = 0; i < tableLength; i++) {
       const v = sai[i];
-      if (v === EMPTY)
+      if (v === EMPTY) {
         continue;
+      }
       if ((freeBits & 1 << (v & SLOT_MASK)) !== 0) {
         sai[i] = EMPTY;
       }
@@ -210,16 +230,19 @@ var register = ({ lockSector }) => {
   };
   const allocTask = (task) => {
     updateTableCounter = updateTableCounter + 1 & 3;
-    if (updateTableCounter === 0)
+    if (updateTableCounter === 0) {
       updateTable();
+    }
     const payloadLen = task[5 /* PayloadLen */] | 0;
     const size = payloadLen + 63 & ~63;
     const freeBits = ~usedBits >>> 0;
     const freeBit = (freeBits & -freeBits) >>> 0;
-    if (freeBit === 0)
+    if (freeBit === 0) {
       return -1;
-    if (tableLength >= 32 /* slots */)
+    }
+    if (tableLength >= 32 /* slots */) {
       return -1;
+    }
     const slotIndex = 31 - clz32(freeBit);
     const sai = startAndIndex;
     const sz = size64bit;
@@ -246,13 +269,14 @@ var register = ({ lockSector }) => {
       hostLast ^= freeBit;
       return a_store(hostBits, 0, hostLast);
     }
-    for (let at = 0;at + 1 < tl; at++) {
+    for (let at = 0; at + 1 < tl; at++) {
       const cur = sai[at];
       const curStart = cur & START_MASK;
       const curEnd = curStart + (sz[cur & SLOT_MASK] >>> 0) >>> 0;
       const nextStart = sai[at + 1] & START_MASK;
-      if (nextStart - curEnd >>> 0 < size >>> 0)
+      if (nextStart - curEnd >>> 0 < size >>> 0) {
         continue;
+      }
       saiCopyWithin(at + 2, at + 1, tl);
       sai[at + 1] = (curEnd | slotIndex) >>> 0;
       sz[slotIndex] = size;
@@ -279,17 +303,21 @@ var register = ({ lockSector }) => {
     return -1;
   };
   const setSlotLength = (slotIndex, payloadLen) => {
-    if ((slotIndex | 0) < 0 || slotIndex >= 32 /* slots */)
+    if ((slotIndex | 0) < 0 || slotIndex >= 32 /* slots */) {
       return false;
+    }
     const bit = 1 << slotIndex;
-    if ((usedBits & bit) === 0)
+    if ((usedBits & bit) === 0) {
       return false;
+    }
     const current = size64bit[slotIndex] >>> 0;
     const aligned = (payloadLen | 0) + 63 & ~63;
-    if (aligned < 0)
+    if (aligned < 0) {
       return false;
-    if (aligned >>> 0 > current)
+    }
+    if (aligned >>> 0 > current) {
       return false;
+    }
     size64bit[slotIndex] = aligned >>> 0;
     return true;
   };
@@ -305,7 +333,7 @@ var register = ({ lockSector }) => {
     hostBits,
     workerBits,
     updateTable,
-    startAndIndexToArray
+    startAndIndexToArray,
   };
 };
 
@@ -316,9 +344,13 @@ import { Buffer as NodeBuffer } from "node:buffer";
 var globals = globalThis;
 var IS_DENO = typeof globals.Deno?.version?.deno === "string";
 var IS_BUN = typeof globals.Bun?.version === "string";
-var IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
-var SET_IMMEDIATE = typeof globals.setImmediate === "function" ? globals.setImmediate : undefined;
-var HAS_SAB_GROW = typeof SharedArrayBuffer === "function" && typeof SharedArrayBuffer.prototype.grow === "function";
+var IS_NODE = typeof process !== "undefined" &&
+  typeof process.versions?.node === "string";
+var SET_IMMEDIATE = typeof globals.setImmediate === "function"
+  ? globals.setImmediate
+  : undefined;
+var HAS_SAB_GROW = typeof SharedArrayBuffer === "function" &&
+  typeof SharedArrayBuffer.prototype.grow === "function";
 var createSharedArrayBuffer = (byteLength, maxByteLength) => {
   if (HAS_SAB_GROW && typeof maxByteLength === "number") {
     return new SharedArrayBuffer(byteLength, { maxByteLength });
@@ -328,17 +360,18 @@ var createSharedArrayBuffer = (byteLength, maxByteLength) => {
 
 // src/memory/createSharedBufferIO.ts
 var page = 1024 * 4;
-var textEncode = new TextEncoder;
+var textEncode = new TextEncoder();
 var SignalEnumOptions;
 ((SignalEnumOptions2) => {
   SignalEnumOptions2[SignalEnumOptions2["header"] = 64] = "header";
-  SignalEnumOptions2[SignalEnumOptions2["maxByteLength"] = page * page] = "maxByteLength";
+  SignalEnumOptions2[SignalEnumOptions2["maxByteLength"] = page * page] =
+    "maxByteLength";
   SignalEnumOptions2[SignalEnumOptions2["defaultSize"] = page] = "defaultSize";
   SignalEnumOptions2[SignalEnumOptions2["safePadding"] = page] = "safePadding";
 })(SignalEnumOptions ||= {});
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
 var createSharedDynamicBufferIO = ({
-  sab
+  sab,
 }) => {
   const maxBytes = 64 * 1024 * 1024;
   const initialBytes = HAS_SAB_GROW ? 4 * 1024 * 1024 : maxBytes;
@@ -355,18 +388,32 @@ var createSharedDynamicBufferIO = ({
   let f64 = new Float64Array(lockSAB, 64 /* header */);
   const capacityBytes = () => lockSAB.byteLength - 64 /* header */;
   const ensureCapacity = (neededBytes) => {
-    if (capacityBytes() >= neededBytes)
+    if (capacityBytes() >= neededBytes) {
       return true;
-    if (!HAS_SAB_GROW || typeof lockSAB.grow !== "function")
+    }
+    if (!HAS_SAB_GROW || typeof lockSAB.grow !== "function") {
       return false;
+    }
     try {
-      lockSAB.grow(alignUpto64(64 /* header */ + neededBytes + SignalEnumOptions.safePadding));
+      lockSAB.grow(
+        alignUpto64(
+          64 /* header */ + neededBytes + SignalEnumOptions.safePadding,
+        ),
+      );
     } catch {
       return false;
     }
-    u8 = new Uint8Array(lockSAB, 64 /* header */, lockSAB.byteLength - 64 /* header */);
+    u8 = new Uint8Array(
+      lockSAB,
+      64, /* header */
+      lockSAB.byteLength - 64, /* header */
+    );
     buf = requireBufferView(lockSAB);
-    f64 = new Float64Array(lockSAB, 64 /* header */, lockSAB.byteLength - 64 /* header */ >>> 3);
+    f64 = new Float64Array(
+      lockSAB,
+      64, /* header */
+      lockSAB.byteLength - 64 /* header */ >>> 3,
+    );
     return true;
   };
   const readUtf8 = (start, end) => {
@@ -392,28 +439,35 @@ var createSharedDynamicBufferIO = ({
   const readBytesBufferCopy = (start, end) => {
     const length = Math.max(0, end - start | 0);
     const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
+    if (length === 0) {
       return out;
+    }
     buf.copy(out, 0, start, end);
     return out;
   };
   const readBytesArrayBufferCopy = (start, end) => {
     const length = Math.max(0, end - start | 0);
     const out = new Uint8Array(length);
-    if (length === 0)
+    if (length === 0) {
       return out.buffer;
+    }
     buf.copy(out, 0, start, end);
     return out.buffer;
   };
   const read8BytesFloatCopy = (start, end) => f64.slice(start >>> 3, end >>> 3);
-  const read8BytesFloatView = (start, end) => f64.subarray(start >>> 3, end >>> 3);
+  const read8BytesFloatView = (start, end) =>
+    f64.subarray(start >>> 3, end >>> 3);
   const writeUtf8 = (str, start, reservedBytes = str.length * 3) => {
     if (!ensureCapacity(start + reservedBytes)) {
       throw new RangeError("Shared buffer capacity exceeded");
     }
-    const { read, written } = textEncode.encodeInto(str, u8.subarray(start, start + reservedBytes));
-    if (read !== str.length)
+    const { read, written } = textEncode.encodeInto(
+      str,
+      u8.subarray(start, start + reservedBytes),
+    );
+    if (read !== str.length) {
       throw new RangeError("Shared buffer capacity exceeded");
+    }
     return written;
   };
   return {
@@ -426,11 +480,11 @@ var createSharedDynamicBufferIO = ({
     readBytesArrayBufferCopy,
     read8BytesFloatCopy,
     read8BytesFloatView,
-    writeUtf8
+    writeUtf8,
   };
 };
 var createSharedStaticBufferIO = ({
-  headersBuffer
+  headersBuffer,
 }) => {
   const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
   const slotStride = 0 /* header */ + 128 /* TotalBuff */;
@@ -438,32 +492,43 @@ var createSharedStaticBufferIO = ({
   const slotOffset = (at) => at * slotStride + 0 /* header */;
   const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
   const arrU8Sec = Array.from({
-    length: 32 /* slots */
+    length: 32, /* slots */
   }, (_, i) => new Uint8Array(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrBuffSec = Array.from({ length: 32 /* slots */ }, (_, i) => NodeBuffer.from(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrF64Sec = Array.from({
-    length: 32 /* slots */
-  }, (_, i) => new Float64Array(headersBuffer, slotStartBytes(i), writableBytes >>> 3));
-  const canWrite = (start, length) => (start | 0) >= 0 && start + length <= writableBytes;
+  const arrBuffSec = Array.from(
+    { length: 32 /* slots */ },
+    (_, i) => NodeBuffer.from(headersBuffer, slotStartBytes(i), writableBytes),
+  );
+  const arrF64Sec = Array.from(
+    {
+      length: 32, /* slots */
+    },
+    (_, i) =>
+      new Float64Array(headersBuffer, slotStartBytes(i), writableBytes >>> 3),
+  );
+  const canWrite = (start, length) =>
+    (start | 0) >= 0 && start + length <= writableBytes;
   const writeUtf8 = (str, at) => {
     const { read, written } = textEncode.encodeInto(str, arrU8Sec[at]);
-    if (read !== str.length)
+    if (read !== str.length) {
       return -1;
+    }
     return written;
   };
   const readUtf8 = (start, end, at) => {
     return arrBuffSec[at].toString("utf8", start, end);
   };
   const writeBinary = (src, at, start = 0) => {
-    if (!canWrite(start, src.byteLength))
+    if (!canWrite(start, src.byteLength)) {
       return -1;
+    }
     arrU8Sec[at].set(src, start);
     return src.byteLength;
   };
   const write8Binary = (src, at, start = 0) => {
     const bytes = src.byteLength;
-    if (!canWrite(start, bytes))
+    if (!canWrite(start, bytes)) {
       return -1;
+    }
     arrF64Sec[at].set(src, start >>> 3);
     return bytes;
   };
@@ -472,21 +537,25 @@ var createSharedStaticBufferIO = ({
   const readBytesBufferCopy = (start, end, at) => {
     const length = Math.max(0, end - start | 0);
     const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
+    if (length === 0) {
       return out;
+    }
     arrBuffSec[at].copy(out, 0, start, end);
     return out;
   };
   const readBytesArrayBufferCopy = (start, end, at) => {
     const length = Math.max(0, end - start | 0);
     const out = new Uint8Array(length);
-    if (length === 0)
+    if (length === 0) {
       return out.buffer;
+    }
     arrBuffSec[at].copy(out, 0, start, end);
     return out.buffer;
   };
-  const read8BytesFloatCopy = (start, end, at) => arrF64Sec[at].slice(start >>> 3, end >>> 3);
-  const read8BytesFloatView = (start, end, at) => arrF64Sec[at].subarray(start >>> 3, end >>> 3);
+  const read8BytesFloatCopy = (start, end, at) =>
+    arrF64Sec[at].slice(start >>> 3, end >>> 3);
+  const read8BytesFloatView = (start, end, at) =>
+    arrF64Sec[at].subarray(start >>> 3, end >>> 3);
   return {
     writeUtf8,
     readUtf8,
@@ -498,7 +567,7 @@ var createSharedStaticBufferIO = ({
     readBytesArrayBufferCopy,
     read8BytesFloatCopy,
     read8BytesFloatView,
-    maxBytes: writableBytes
+    maxBytes: writableBytes,
   };
 };
 
@@ -528,14 +597,15 @@ class NumericBuffer {
     const arr = new Array(len);
     const rem = len & 3;
     let i = 0;
-    for (;i < len - rem; i += 4) {
+    for (; i < len - rem; i += 4) {
       arr[i] = srcF64[i];
       arr[i + 1] = srcF64[i + 1];
       arr[i + 2] = srcF64[i + 2];
       arr[i + 3] = srcF64[i + 3];
     }
-    for (;i < len; i++)
+    for (; i < len; i++) {
       arr[i] = srcF64[i];
+    }
     return arr;
   }
   static isNumericArray(v) {
@@ -555,8 +625,9 @@ class NumericBuffer {
     return this.arr;
   }
   toFloat64() {
-    if (this.isFloat)
+    if (this.isFloat) {
       return this.arrFloat;
+    }
     return Float64Array.from(this.arr);
   }
 }
@@ -567,22 +638,28 @@ var promisePayloadMarker = Symbol.for("knitting.promise.payload");
 var reasonFrom = (task, type, detail) => {
   switch (type) {
     case 0 /* Function */: {
-      const name = typeof task.value === "function" ? task.value.name || "<anonymous>" : "<unknown>";
+      const name = typeof task.value === "function"
+        ? task.value.name || "<anonymous>"
+        : "<unknown>";
       return `KNT_ERROR_0: Function is not a valid type; name: ${name}`;
     }
     case 1 /* Symbol */:
       return "KNT_ERROR_1: Symbol must use Symbol.for(...) keys";
     case 2 /* Json */:
-      return detail == null || detail.length === 0 ? "KNT_ERROR_2: JSON stringify failed; payload must be JSON-safe" : `KNT_ERROR_2: JSON stringify failed; ${detail}`;
+      return detail == null || detail.length === 0
+        ? "KNT_ERROR_2: JSON stringify failed; payload must be JSON-safe"
+        : `KNT_ERROR_2: JSON stringify failed; ${detail}`;
     case 3 /* Serializable */:
-      return detail == null || detail.length === 0 ? "KNT_ERROR_3: Value is not serializable by v8 serializer" : `KNT_ERROR_3: Value is not serializable by v8 serializer; ${detail}`;
+      return detail == null || detail.length === 0
+        ? "KNT_ERROR_3: Value is not serializable by v8 serializer"
+        : `KNT_ERROR_3: Value is not serializable by v8 serializer; ${detail}`;
   }
 };
 var encoderError = ({
   task,
   type,
   onPromise,
-  detail
+  detail,
 }) => {
   const reason = reasonFrom(task, type, detail);
   if (!isMainThread) {
@@ -594,8 +671,9 @@ var encoderError = ({
     throw new TypeError(reason);
   }
   const markedTask = task;
-  if (markedTask[promisePayloadMarker] === true)
+  if (markedTask[promisePayloadMarker] === true) {
     return false;
+  }
   markedTask[promisePayloadMarker] = true;
   queueMicrotask(() => {
     markedTask[promisePayloadMarker] = false;
@@ -617,7 +695,7 @@ var { for: symbolFor, keyFor: symbolKeyFor } = Symbol;
 var decodeBigIntBinary = (bytes) => {
   const sign = bytes[0];
   let value = 0n;
-  for (let i = bytes.length - 1;i >= 1; i--) {
+  for (let i = bytes.length - 1; i >= 1; i--) {
     value = value << 8n | BigInt(bytes[i]);
   }
   return sign === 1 ? -value : value;
@@ -629,10 +707,11 @@ var initStaticIO = (headersBuffer) => {
   const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
   const writableBytes = (128 /* TotalBuff */ - 8 /* Size */) * u32Bytes;
   const requiredBytes = slotStartBytes(32 /* slots */ - 1) + writableBytes;
-  if (headersBuffer.byteLength < requiredBytes)
+  if (headersBuffer.byteLength < requiredBytes) {
     return null;
+  }
   return createSharedStaticBufferIO({
-    headersBuffer: headersBuffer.buffer
+    headersBuffer: headersBuffer.buffer,
   });
 };
 var requireStaticIO = (headersBuffer) => {
@@ -646,28 +725,29 @@ var encodePayload = ({
   lockSector,
   sab,
   headersBuffer,
-  onPromise
+  onPromise,
 }) => {
   const { allocTask, setSlotLength, free } = register({
-    lockSector
+    lockSector,
   });
   const {
     writeBinary: writeDynamicBinary,
     write8Binary: writeDynamic8Binary,
-    writeUtf8: writeDynamicUtf8
+    writeUtf8: writeDynamicUtf8,
   } = createSharedDynamicBufferIO({
-    sab
+    sab,
   });
   const {
     maxBytes: staticMaxBytes,
     writeBinary: writeStaticBinary,
     write8Binary: writeStatic8Binary,
-    writeUtf8: writeStaticUtf8
+    writeUtf8: writeStaticUtf8,
   } = requireStaticIO(headersBuffer);
   const reserveDynamic = (task, bytes) => {
     task[5 /* PayloadLen */] = bytes;
-    if (allocTask(task) === -1)
+    if (allocTask(task) === -1) {
       return false;
+    }
     return true;
   };
   let bigintScratch = new Uint8Array(16);
@@ -730,8 +810,8 @@ var encodePayload = ({
       case "function":
         return encoderError({
           task,
-          type: 0 /* Function */,
-          onPromise
+          type: 0, /* Function */
+          onPromise,
         });
       case "number":
         if (args !== args) {
@@ -759,8 +839,9 @@ var encodePayload = ({
         let objectDynamicSlot = -1;
         const reserveDynamicObject = (bytes) => {
           task[5 /* PayloadLen */] = bytes;
-          if (allocTask(task) === -1)
+          if (allocTask(task) === -1) {
             return false;
+          }
           objectDynamicSlot = task[6 /* slotBuffer */];
           return true;
         };
@@ -778,8 +859,9 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 38 /* Buffer */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
+              }
               writeDynamicBinary(args, task[3 /* Start */]);
               task.value = null;
               return true;
@@ -796,8 +878,9 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 17 /* Binary */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
+              }
               writeDynamicBinary(args, task[3 /* Start */]);
               task.value = null;
               return true;
@@ -815,8 +898,9 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 36 /* ArrayBuffer */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
+              }
               writeDynamicBinary(view, task[3 /* Start */]);
               task.value = null;
               return true;
@@ -827,12 +911,14 @@ var encodePayload = ({
               try {
                 text = stringifyJSON(args);
               } catch (error) {
-                const detail = error instanceof Error ? error.message : String(error);
+                const detail = error instanceof Error
+                  ? error.message
+                  : String(error);
                 return encoderError({
                   task,
-                  type: 2 /* Json */,
+                  type: 2, /* Json */
                   onPromise,
-                  detail
+                  detail,
                 });
               }
               if (text.length <= staticMaxBytes) {
@@ -845,8 +931,9 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 12 /* Json */;
-              if (!reserveDynamicObject(text.length * 3))
+              if (!reserveDynamicObject(text.length * 3)) {
                 return false;
+              }
               const written = writeDynamicUtf8(text, task[3 /* Start */]);
               task[5 /* PayloadLen */] = written;
               setSlotLength(task[6 /* slotBuffer */], written);
@@ -856,8 +943,9 @@ var encodePayload = ({
             case NumericBuffer: {
               const float64 = args.toFloat64();
               task[2 /* Type */] = 14 /* NumericBuffer */;
-              if (!reserveDynamicObject(float64.byteLength))
+              if (!reserveDynamicObject(float64.byteLength)) {
                 return false;
+              }
               writeDynamic8Binary(float64, task[3 /* Start */]);
               task.value = null;
               return true;
@@ -866,7 +954,10 @@ var encodePayload = ({
               const view = args;
               const bytes = view.byteLength;
               if (bytes <= staticMaxBytes) {
-                const written = writeStaticBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), slotIndex);
+                const written = writeStaticBinary(
+                  new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                  slotIndex,
+                );
                 if (written !== -1) {
                   task[2 /* Type */] = 31 /* StaticInt32Array */;
                   task[5 /* PayloadLen */] = written;
@@ -875,9 +966,13 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 19 /* Int32Array */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
-              writeDynamicBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), task[3 /* Start */]);
+              }
+              writeDynamicBinary(
+                new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                task[3 /* Start */],
+              );
               task.value = null;
               return true;
             }
@@ -894,8 +989,9 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 20 /* Float64Array */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
+              }
               writeDynamic8Binary(view, task[3 /* Start */]);
               task.value = null;
               return true;
@@ -904,7 +1000,10 @@ var encodePayload = ({
               const view = args;
               const bytes = view.byteLength;
               if (bytes <= staticMaxBytes) {
-                const written = writeStaticBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), slotIndex);
+                const written = writeStaticBinary(
+                  new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                  slotIndex,
+                );
                 if (written !== -1) {
                   task[2 /* Type */] = 33 /* StaticBigInt64Array */;
                   task[5 /* PayloadLen */] = written;
@@ -913,9 +1012,13 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 21 /* BigInt64Array */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
-              writeDynamicBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), task[3 /* Start */]);
+              }
+              writeDynamicBinary(
+                new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                task[3 /* Start */],
+              );
               task.value = null;
               return true;
             }
@@ -923,7 +1026,10 @@ var encodePayload = ({
               const view = args;
               const bytes = view.byteLength;
               if (bytes <= staticMaxBytes) {
-                const written = writeStaticBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), slotIndex);
+                const written = writeStaticBinary(
+                  new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                  slotIndex,
+                );
                 if (written !== -1) {
                   task[2 /* Type */] = 34 /* StaticBigUint64Array */;
                   task[5 /* PayloadLen */] = written;
@@ -932,9 +1038,13 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 22 /* BigUint64Array */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
-              writeDynamicBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), task[3 /* Start */]);
+              }
+              writeDynamicBinary(
+                new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                task[3 /* Start */],
+              );
               task.value = null;
               return true;
             }
@@ -942,7 +1052,10 @@ var encodePayload = ({
               const view = args;
               const bytes = view.byteLength;
               if (bytes <= staticMaxBytes) {
-                const written = writeStaticBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), slotIndex);
+                const written = writeStaticBinary(
+                  new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                  slotIndex,
+                );
                 if (written !== -1) {
                   task[2 /* Type */] = 35 /* StaticDataView */;
                   task[5 /* PayloadLen */] = written;
@@ -951,9 +1064,13 @@ var encodePayload = ({
                 }
               }
               task[2 /* Type */] = 23 /* DataView */;
-              if (!reserveDynamicObject(bytes))
+              if (!reserveDynamicObject(bytes)) {
                 return false;
-              writeDynamicBinary(new Uint8Array(view.buffer, view.byteOffset, view.byteLength), task[3 /* Start */]);
+              }
+              writeDynamicBinary(
+                new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+                task[3 /* Start */],
+              );
               task.value = null;
               return true;
             }
@@ -988,12 +1105,14 @@ var encodePayload = ({
             try {
               binary = serialize(args);
             } catch (error) {
-              const detail = error instanceof Error ? error.message : String(error);
+              const detail = error instanceof Error
+                ? error.message
+                : String(error);
               return encoderError({
                 task,
-                type: 3 /* Serializable */,
+                type: 3, /* Serializable */
                 onPromise,
-                detail
+                detail,
               });
             }
             if (binary.byteLength <= staticMaxBytes) {
@@ -1006,8 +1125,9 @@ var encodePayload = ({
               }
             }
             task[2 /* Type */] = 13 /* Serializable */;
-            if (!reserveDynamicObject(binary.byteLength))
+            if (!reserveDynamicObject(binary.byteLength)) {
               return false;
+            }
             writeDynamicBinary(binary, task[3 /* Start */]);
             task.value = null;
             return true;
@@ -1019,9 +1139,9 @@ var encodePayload = ({
           const detail = error instanceof Error ? error.message : String(error);
           return encoderError({
             task,
-            type: 3 /* Serializable */,
+            type: 3, /* Serializable */
             onPromise,
-            detail
+            detail,
           });
         }
       case "string": {
@@ -1036,9 +1156,14 @@ var encodePayload = ({
           }
         }
         task[2 /* Type */] = 11 /* String */;
-        if (!reserveDynamic(task, estimatedBytes))
+        if (!reserveDynamic(task, estimatedBytes)) {
           return false;
-        const written = writeDynamicUtf8(text, task[3 /* Start */], estimatedBytes);
+        }
+        const written = writeDynamicUtf8(
+          text,
+          task[3 /* Start */],
+          estimatedBytes,
+        );
         task[5 /* PayloadLen */] = written;
         setSlotLength(task[6 /* slotBuffer */], written);
         return true;
@@ -1048,8 +1173,8 @@ var encodePayload = ({
         if (key === undefined) {
           return encoderError({
             task,
-            type: 1 /* Symbol */,
-            onPromise
+            type: 1, /* Symbol */
+            onPromise,
           });
         }
         const estimatedBytes = key.length * 3;
@@ -1062,8 +1187,9 @@ var encodePayload = ({
           }
         }
         task[2 /* Type */] = 26 /* Symbol */;
-        if (!reserveDynamic(task, estimatedBytes))
+        if (!reserveDynamic(task, estimatedBytes)) {
           return false;
+        }
         const written = writeDynamicUtf8(key, task[3 /* Start */]);
         task[5 /* PayloadLen */] = written;
         setSlotLength(task[6 /* slotBuffer */], written);
@@ -1079,10 +1205,10 @@ var decodePayload = ({
   lockSector,
   sab,
   headersBuffer,
-  host
+  host,
 }) => {
   const { free } = register({
-    lockSector
+    lockSector,
   });
   const {
     readUtf8: readDynamicUtf8,
@@ -1091,9 +1217,9 @@ var decodePayload = ({
     readBytesBufferCopy: readDynamicBufferCopy,
     readBytesArrayBufferCopy: readDynamicArrayBufferCopy,
     read8BytesFloatCopy: readDynamic8BytesFloatCopy,
-    read8BytesFloatView: readDynamic8BytesFloatView
+    read8BytesFloatView: readDynamic8BytesFloatView,
   } = createSharedDynamicBufferIO({
-    sab
+    sab,
   });
   const {
     readUtf8: readStaticUtf8,
@@ -1101,7 +1227,7 @@ var decodePayload = ({
     readBytesView: readStaticBytesView,
     readBytesBufferCopy: readStaticBufferCopy,
     readBytesArrayBufferCopy: readStaticArrayBufferCopy,
-    read8BytesFloatCopy: readStatic8BytesFloatCopy
+    read8BytesFloatCopy: readStatic8BytesFloatCopy,
   } = requireStaticIO(headersBuffer);
   return (task, slotIndex, specialFlags) => {
     switch (task[2 /* Type */]) {
@@ -1137,83 +1263,174 @@ var decodePayload = ({
         task.value = undefined;
         return;
       case 11 /* String */:
-        task.value = readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicUtf8(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 15 /* StaticString */:
         task.value = readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex);
         return;
       case 12 /* Json */:
-        task.value = parseJSON(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = parseJSON(
+          readDynamicUtf8(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 16 /* StaticJson */:
-        task.value = parseJSON(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = parseJSON(
+          readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 28 /* BigInt */:
-        task.value = decodeBigIntBinary(readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = decodeBigIntBinary(
+          readDynamicBytesCopy(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 29 /* StaticBigInt */:
-        task.value = decodeBigIntBinary(readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = decodeBigIntBinary(
+          readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 26 /* Symbol */:
-        task.value = symbolFor(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = symbolFor(
+          readDynamicUtf8(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 27 /* StaticSymbol */:
-        task.value = symbolFor(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = symbolFor(
+          readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 19 /* Int32Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new Int32Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 2,
+        );
         free(task[6 /* slotBuffer */]);
         return;
       }
       case 31 /* StaticInt32Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new Int32Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 2,
+        );
         return;
       }
       case 20 /* Float64Array */: {
-        task.value = readDynamic8BytesFloatCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamic8BytesFloatCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         free(task[6 /* slotBuffer */]);
         return;
       }
       case 32 /* StaticFloat64Array */:
-        task.value = readStatic8BytesFloatCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStatic8BytesFloatCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 21 /* BigInt64Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new BigInt64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         free(task[6 /* slotBuffer */]);
         return;
       }
       case 33 /* StaticBigInt64Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new BigInt64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         return;
       }
       case 22 /* BigUint64Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new BigUint64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         free(task[6 /* slotBuffer */]);
         return;
       }
       case 34 /* StaticBigUint64Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new BigUint64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         return;
       }
       case 23 /* DataView */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new DataView(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        );
         free(task[6 /* slotBuffer */]);
         return;
       }
       case 35 /* StaticDataView */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new DataView(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        );
         return;
       }
       case 25 /* Date */:
@@ -1223,37 +1440,74 @@ var decodePayload = ({
         return;
       case 17 /* Binary */:
         {
-          const buffer = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-          task.value = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+          const buffer = readDynamicBufferCopy(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          );
+          task.value = new Uint8Array(
+            buffer.buffer,
+            buffer.byteOffset,
+            buffer.byteLength,
+          );
         }
         free(task[6 /* slotBuffer */]);
         return;
       case 18 /* StaticBinary */:
-        task.value = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 36 /* ArrayBuffer */:
-        task.value = readDynamicArrayBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicArrayBufferCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 37 /* StaticArrayBuffer */:
-        task.value = readStaticArrayBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticArrayBufferCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 38 /* Buffer */:
-        task.value = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicBufferCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 39 /* StaticBuffer */:
-        task.value = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticBufferCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 13 /* Serializable */:
-        task.value = deserialize(readDynamicBytesView(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = deserialize(
+          readDynamicBytesView(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         free(task[6 /* slotBuffer */]);
         return;
       case 30 /* StaticSerializable */:
-        task.value = deserialize(readStaticBytesView(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = deserialize(
+          readStaticBytesView(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 14 /* NumericBuffer */:
-        task.value = NumericBuffer.fromFloat64(readDynamic8BytesFloatView(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = NumericBuffer.fromFloat64(
+          readDynamic8BytesFloatView(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         free(task[6 /* slotBuffer */]);
         return;
     }
@@ -1267,7 +1521,8 @@ var LOCK_HOST_BITS_OFFSET_BYTES = 64 /* padding */;
 var LOCK_WORKER_BITS_OFFSET_BYTES = 64 /* padding */ * 2;
 var LOCK_SECTOR_BYTE_LENGTH = LOCK_WORKER_BITS_OFFSET_BYTES + LOCK_WORD_BYTES;
 var HEADER_SLOT_STRIDE_U32 = 0 /* header */ + 128 /* TotalBuff */;
-var HEADER_U32_LENGTH = 0 /* header */ + HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
+var HEADER_U32_LENGTH = 0 /* header */ +
+  HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
 var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
 var INDEX_ID = 0;
 var def = (_) => {};
@@ -1319,35 +1574,43 @@ var lock2 = ({
   payloadSector,
   resultList,
   toSentList,
-  recycleList
+  recycleList,
 }) => {
-  const LockBoundSAB = LockBoundSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
+  const LockBoundSAB = LockBoundSector ??
+    new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
   const hostBits = new Int32Array(LockBoundSAB, LOCK_HOST_BITS_OFFSET_BYTES, 1);
-  const workerBits = new Int32Array(LockBoundSAB, LOCK_WORKER_BITS_OFFSET_BYTES, 1);
-  const bufferHeadersBuffer = headers ?? new SharedArrayBuffer(HEADER_BYTE_LENGTH);
+  const workerBits = new Int32Array(
+    LockBoundSAB,
+    LOCK_WORKER_BITS_OFFSET_BYTES,
+    1,
+  );
+  const bufferHeadersBuffer = headers ??
+    new SharedArrayBuffer(HEADER_BYTE_LENGTH);
   const headersBuffer = new Uint32Array(bufferHeadersBuffer);
   const payloadMaxBytes = 64 * 1024 * 1024;
   const payloadInitialBytes = HAS_SAB_GROW ? 4 * 1024 * 1024 : payloadMaxBytes;
-  const payloadSAB = payload ?? createSharedArrayBuffer(payloadInitialBytes, payloadMaxBytes);
-  const payloadLockSAB = payloadSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
+  const payloadSAB = payload ??
+    createSharedArrayBuffer(payloadInitialBytes, payloadMaxBytes);
+  const payloadLockSAB = payloadSector ??
+    new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
   let promiseHandler;
   const encodeTask = encodePayload({
     sab: payloadSAB,
     headersBuffer,
     lockSector: payloadLockSAB,
-    onPromise: (task, result) => promiseHandler?.(task, result)
+    onPromise: (task, result) => promiseHandler?.(task, result),
   });
   const decodeTask = decodePayload({
     sab: payloadSAB,
     headersBuffer,
-    lockSector: payloadLockSAB
+    lockSector: payloadLockSAB,
   });
   let LastLocal = 0 | 0;
   let LastWorker = 0 | 0;
   let lastTake = 32 | 0;
-  const toBeSent = toSentList ?? new RingQueue;
-  const recyclecList = recycleList ?? new RingQueue;
-  const resolved = resultList ?? new RingQueue;
+  const toBeSent = toSentList ?? new RingQueue();
+  const recyclecList = recycleList ?? new RingQueue();
+  const resolved = resultList ?? new RingQueue();
   const a_load = Atomics.load;
   const a_store = Atomics.store;
   const toBeSentPush = (task) => toBeSent.push(task);
@@ -1361,10 +1624,12 @@ var lock2 = ({
   const enlist = (task) => toBeSentPush(task);
   const encodeWithState = (task, state) => {
     const free = ~state;
-    if (free === 0)
+    if (free === 0) {
       return 0;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
+    }
+    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
       return 0;
+    }
     encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
     return selectedSlotBit;
   };
@@ -1374,8 +1639,9 @@ var lock2 = ({
     if (list === toBeSent) {
       while (true) {
         const task = toBeSentShift();
-        if (!task)
+        if (!task) {
           break;
+        }
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
           toBeSentUnshift(task);
@@ -1387,8 +1653,9 @@ var lock2 = ({
     } else {
       while (true) {
         const task = list.shiftNoClear();
-        if (!task)
+        if (!task) {
           break;
+        }
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
           list.unshift(task);
@@ -1401,21 +1668,30 @@ var lock2 = ({
     return encoded;
   };
   const encodeAll = () => {
-    if (toBeSent.isEmpty)
+    if (toBeSent.isEmpty) {
       return true;
+    }
     encodeManyFrom(toBeSent);
     return toBeSent.isEmpty;
   };
   let selectedSlotIndex = 0 | 0, selectedSlotBit = 0 >>> 0;
-  const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
-  const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
+  const storeHost = (bit) =>
+    a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
+  const storeWorker = (bit) =>
+    a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
   const encode = (task, state = LastLocal ^ a_load(workerBits, 0) | 0) => {
     const free = ~state;
-    if (free === 0)
+    if (free === 0) {
       return false;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
+    }
+    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
       return false;
-    return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
+    }
+    return encodeAt(
+      task,
+      selectedSlotIndex,
+      selectedSlotBit = 1 << selectedSlotIndex,
+    );
   };
   const encodeAt = (task, at, bit) => {
     const off = slotOffset(at);
@@ -1432,8 +1708,9 @@ var lock2 = ({
   const hasSpace = () => (hostBits[0] ^ LastWorker) !== 0;
   const decode = () => {
     let diff = a_load(hostBits, 0) ^ LastWorker;
-    if (diff === 0)
+    if (diff === 0) {
       return false;
+    }
     let last = lastTake;
     let consumedBits = 0 | 0;
     try {
@@ -1445,33 +1722,36 @@ var lock2 = ({
       }
       while (diff !== 0) {
         let pick = diff & (1 << last) - 1;
-        if (pick === 0)
+        if (pick === 0) {
           pick = diff;
+        }
         decodeAt(selectedSlotIndex = 31 - clz32(pick));
         selectedSlotBit = 1 << (last = selectedSlotIndex);
         diff ^= selectedSlotBit;
         consumedBits = consumedBits ^ selectedSlotBit | 0;
       }
     } finally {
-      if (consumedBits !== 0)
+      if (consumedBits !== 0) {
         storeWorker(consumedBits);
+      }
     }
     lastTake = last;
     return true;
   };
   const resolveHost = ({
     queue,
-    onResolved
+    onResolved,
   }) => {
     const getTask = takeTask({
-      queue
+      queue,
     });
     const HAS_RESOLVE = onResolved ? true : false;
     let lastResolved = 32;
     return () => {
       let diff = a_load(hostBits, 0) ^ LastWorker | 0;
-      if (diff === 0)
+      if (diff === 0) {
         return 0;
+      }
       let modified = 0;
       let consumedBits = 0 | 0;
       let last = lastResolved;
@@ -1497,8 +1777,9 @@ var lock2 = ({
       while (diff !== 0) {
         const lowerMask = last === 31 ? 2147483647 : (1 << last) - 1;
         let pick = diff & lowerMask;
-        if (pick === 0)
+        if (pick === 0) {
           pick = diff;
+        }
         const idx = 31 - clz32(pick);
         const selectedBit = 1 << idx;
         const task = getTask(headersBuffer, idx);
@@ -1555,7 +1836,7 @@ var lock2 = ({
     resolveHost,
     setPromiseHandler: (handler) => {
       promiseHandler = handler;
-    }
+    },
   };
 };
 
@@ -1564,16 +1845,19 @@ var createWorkerRxQueue = ({
   listOfFunctions,
   workerOptions,
   lock,
-  returnLock
+  returnLock,
 }) => {
   const PLACE_HOLDER = (_) => {
     throw "UNREACHABLE FROM PLACE HOLDER (thread)";
   };
   let hasAnythingFinished = 0;
   let awaiting = 0;
-  const jobs = listOfFunctions.reduce((acc, fixed) => (acc.push(fixed.run), acc), []);
-  const toWork = new RingQueue;
-  const pendingFrames = new RingQueue;
+  const jobs = listOfFunctions.reduce(
+    (acc, fixed) => (acc.push(fixed.run), acc),
+    [],
+  );
+  const toWork = new RingQueue();
+  const pendingFrames = new RingQueue();
   const toWorkPush = (slot) => toWork.push(slot);
   const toWorkShift = () => toWork.shiftNoClear();
   const pendingShift = () => pendingFrames.shiftNoClear();
@@ -1583,12 +1867,15 @@ var createWorkerRxQueue = ({
   const IDX_FLAGS = 0 /* FlagsToHost */;
   const IDX_FN = 0 /* FunctionID */;
   const FLAG_REJECT = 1 /* Reject */;
-  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true ? () => hasAnythingFinished !== 0 && toWork.size === 0 : () => hasAnythingFinished !== 0;
+  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true
+    ? () => hasAnythingFinished !== 0 && toWork.size === 0
+    : () => hasAnythingFinished !== 0;
   const { decode, resolved } = lock;
   const resolvedShift = resolved.shiftNoClear.bind(resolved);
   const enqueueLock = () => {
-    if (!decode())
+    if (!decode()) {
       return false;
+    }
     let task = resolvedShift();
     while (task) {
       task.resolve = PLACE_HOLDER;
@@ -1599,14 +1886,16 @@ var createWorkerRxQueue = ({
     return true;
   };
   const encodeReturnSafe = (slot) => {
-    if (!returnLock.encode(slot))
+    if (!returnLock.encode(slot)) {
       return false;
+    }
     return true;
   };
   const sendReturn = (slot, shouldReject) => {
     slot[IDX_FLAGS] = shouldReject ? FLAG_REJECT : 0;
-    if (!encodeReturnSafe(slot))
+    if (!encodeReturnSafe(slot)) {
       return false;
+    }
     hasAnythingFinished--;
     recyclePush(slot);
     return true;
@@ -1614,16 +1903,19 @@ var createWorkerRxQueue = ({
   const settleNow = (slot, isError, value, wasAwaited) => {
     slot.value = value;
     hasAnythingFinished++;
-    if (wasAwaited && awaiting > 0)
+    if (wasAwaited && awaiting > 0) {
       awaiting--;
+    }
     const shouldReject = isError || slot[IDX_FLAGS] === FLAG_REJECT;
-    if (!sendReturn(slot, shouldReject))
+    if (!sendReturn(slot, shouldReject)) {
       pendingPush(slot);
+    }
   };
   const writeOne = () => {
     const slot = pendingShift();
-    if (!slot)
+    if (!slot) {
       return false;
+    }
     if (!sendReturn(slot, slot[IDX_FLAGS] === FLAG_REJECT)) {
       pendingUnshift(slot);
       return false;
@@ -1636,8 +1928,9 @@ var createWorkerRxQueue = ({
     writeBatch: (max) => {
       let wrote = 0;
       while (wrote < max) {
-        if (!writeOne())
+        if (!writeOne()) {
           break;
+        }
         wrote++;
       }
       return wrote;
@@ -1646,15 +1939,19 @@ var createWorkerRxQueue = ({
       let processed = 0;
       while (processed < 3) {
         const slot = toWorkShift();
-        if (!slot)
+        if (!slot) {
           break;
+        }
         try {
           const result = jobs[slot[IDX_FN]](slot.value);
           slot[IDX_FLAGS] = 0;
           if (result instanceof Promise) {
             awaiting++;
             try {
-              result.then((value) => settleNow(slot, false, value, true), (err) => settleNow(slot, true, err, true));
+              result.then(
+                (value) => settleNow(slot, false, value, true),
+                (err) => settleNow(slot, true, err, true),
+              );
             } catch (err) {
               settleNow(slot, true, err, true);
             }
@@ -1670,7 +1967,7 @@ var createWorkerRxQueue = ({
     },
     enqueueLock,
     hasAwaiting: () => awaiting > 0,
-    getAwaiting: () => awaiting
+    getAwaiting: () => awaiting,
   };
 };
 
@@ -1681,7 +1978,8 @@ import { isMainThread as isMainThread2 } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
 var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 var WINDOWS_UNC_PATH = /^\\\\[^\\/?]+\\[^\\/?]+/;
-var encodeFilePath = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var encodeFilePath = (path) =>
+  encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
 var toModuleUrl = (specifier) => {
   if (WINDOWS_DRIVE_PATH.test(specifier)) {
     const normalized = specifier.replace(/\\/g, "/");
@@ -1706,7 +2004,7 @@ var genTaskID = ((counter) => () => counter++)(0);
 var getCallerFilePathForBun = (offset) => {
   const originalStackTrace = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack2) => stack2;
-  const err = new Error;
+  const err = new Error();
   const stack = err.stack;
   Error.prepareStackTrace = originalStackTrace;
   const caller = stack[offset]?.getFileName();
@@ -1715,7 +2013,7 @@ var getCallerFilePathForBun = (offset) => {
   }
   return toModuleUrl(caller);
 };
-var linkingMap = new Map;
+var linkingMap = new Map();
 var getCallerFilePath = () => {
   const stackOffset = 3;
   const href = getCallerFilePathForBun(stackOffset);
@@ -1728,7 +2026,7 @@ var signalDebuggerV2 = ({
   thread,
   isMain,
   op,
-  startAt
+  startAt,
 }) => {
   const orange = "\x1B[38;5;214m";
   const purple = "\x1B[38;5;129m";
@@ -1737,8 +2035,9 @@ var signalDebuggerV2 = ({
   const color = isMain ? orange : purple;
   const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
   const logDir = join(process.cwd(), "log");
-  if (!existsSync(logDir))
+  if (!existsSync(logDir)) {
     mkdirSync(logDir, { recursive: true });
+  }
   const born = startAt;
   const logFile = join(logDir, `${isMain ? "M" : "T"}_${thread}_${born}.log`);
   const stream = createWriteStream(logFile, { flags: "a" });
@@ -1746,18 +2045,29 @@ var signalDebuggerV2 = ({
   let lastBeat = born;
   let hitsTotal = 0;
   const hitsPerValue = { [last]: 0 };
-  const header = `${color}Thread${tab}Tag${tab}Value${tab}SinceBorn${tab}SinceLast${tab}HitsPrev${tab}TotalHits${reset}`;
-  stream.write(stripAnsi(header) + `
-`);
+  const header =
+    `${color}Thread${tab}Tag${tab}Value${tab}SinceBorn${tab}SinceLast${tab}HitsPrev${tab}TotalHits${reset}`;
+  stream.write(
+    stripAnsi(header) + `
+`,
+  );
   function maybeLog(value, tag) {
     hitsTotal++;
     hitsPerValue[value] = (hitsPerValue[value] ?? 0) + 1;
     if (value !== last) {
       const now = isMain ? beat() : beat() + born;
       const hits = hitsPerValue[last];
-      const line = `${color}${isMain ? "M" : "T"}${thread}${reset}${tab}${tab}` + `${tag}${String(last).padStart(1, " ")}${reset}${tab}` + `${(now - born).toFixed(2).padStart(9)}${tab}` + `${(now - lastBeat).toFixed(2).padStart(9)}${tab}` + `${hits.toString().padStart(8)}${tab}` + `${hitsTotal.toString().padStart(9)}`;
-      stream.write(stripAnsi(line) + `
-`);
+      const line =
+        `${color}${isMain ? "M" : "T"}${thread}${reset}${tab}${tab}` +
+        `${tag}${String(last).padStart(1, " ")}${reset}${tab}` +
+        `${(now - born).toFixed(2).padStart(9)}${tab}` +
+        `${(now - lastBeat).toFixed(2).padStart(9)}${tab}` +
+        `${hits.toString().padStart(8)}${tab}` +
+        `${hitsTotal.toString().padStart(9)}`;
+      stream.write(
+        stripAnsi(line) + `
+`,
+      );
       last = value;
       lastBeat = now;
     }
@@ -1777,7 +2087,7 @@ var signalDebuggerV2 = ({
         maybeLog(value, "PUT ");
       }
       return ok;
-    }
+    },
   });
   return proxied;
 };
@@ -1788,20 +2098,28 @@ var CACHE_LINE_BYTES = 64;
 var SIGNAL_OFFSETS = {
   op: 0,
   rxStatus: CACHE_LINE_BYTES,
-  txStatus: CACHE_LINE_BYTES * 2
+  txStatus: CACHE_LINE_BYTES * 2,
 };
 var a_store = Atomics.store;
-var createSharedMemoryTransport = ({ sabObject, isMain, thread, debug, startTime }) => {
+var createSharedMemoryTransport = (
+  { sabObject, isMain, thread, debug, startTime },
+) => {
   const toGrow = sabObject?.size ?? page2;
-  const sab = sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(toGrow + toGrow % page2, page2 * page2);
+  const sab = sabObject?.sharedSab
+    ? sabObject.sharedSab
+    : createSharedArrayBuffer(toGrow + toGrow % page2, page2 * page2);
   const startAt = beat();
-  const isReflected = typeof debug !== "undefined" && (debug?.logMain === isMain && isMain === true || debug?.logThreads === true && isMain === false);
-  const op = isReflected ? signalDebuggerV2({
-    thread,
-    isMain,
-    startAt: startTime ?? startAt,
-    op: new Int32Array(sab, SIGNAL_OFFSETS.op, 1)
-  }) : new Int32Array(sab, SIGNAL_OFFSETS.op, 1);
+  const isReflected = typeof debug !== "undefined" &&
+    (debug?.logMain === isMain && isMain === true ||
+      debug?.logThreads === true && isMain === false);
+  const op = isReflected
+    ? signalDebuggerV2({
+      thread,
+      isMain,
+      startAt: startTime ?? startAt,
+      op: new Int32Array(sab, SIGNAL_OFFSETS.op, 1),
+    })
+    : new Int32Array(sab, SIGNAL_OFFSETS.op, 1);
   if (isMainThread2) {
     a_store(new Int32Array(sab, SIGNAL_OFFSETS.op, 1), 0, 0);
   }
@@ -1814,7 +2132,7 @@ var createSharedMemoryTransport = ({ sabObject, isMain, thread, debug, startTime
     isReflected,
     opView: new Int32Array(sab, SIGNAL_OFFSETS.op, 1),
     rxStatus,
-    txStatus: new Int32Array(sab, SIGNAL_OFFSETS.txStatus, 1)
+    txStatus: new Int32Array(sab, SIGNAL_OFFSETS.txStatus, 1),
   };
 };
 var mainSignal = ({ op, opView, startAt, rxStatus, txStatus }) => {
@@ -1823,7 +2141,7 @@ var mainSignal = ({ op, opView, startAt, rxStatus, txStatus }) => {
     opView,
     startAt,
     rxStatus,
-    txStatus
+    txStatus,
   };
 };
 
@@ -1832,64 +2150,75 @@ var endpointSymbol = Symbol.for("task");
 
 // src/worker/get-functions.ts
 var normalizeTimeout = (timeout) => {
-  if (timeout == null)
+  if (timeout == null) {
     return;
+  }
   if (typeof timeout === "number") {
-    return timeout >= 0 ? { ms: timeout, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return timeout >= 0
+      ? { ms: timeout, kind: 0, /* Reject */ value: new Error("Task timeout") }
+      : undefined;
   }
   const ms = timeout.time;
-  if (!(ms >= 0))
+  if (!(ms >= 0)) {
     return;
+  }
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: 1, /* Resolve */ value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: 1, /* Resolve */ value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: 0, /* Reject */ value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: 0, /* Reject */ value: new Error("Task timeout") };
 };
-var raceTimeout = (promise, spec) => new Promise((resolve, reject) => {
-  let done = false;
-  const timer = setTimeout(() => {
-    if (done)
-      return;
-    done = true;
-    if (spec.kind === 1 /* Resolve */) {
-      resolve(spec.value);
-    } else {
-      reject(spec.value);
-    }
-  }, spec.ms);
-  promise.then((value) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    resolve(value);
-  }, (err) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    reject(err);
+var raceTimeout = (promise, spec) =>
+  new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) {
+        return;
+      }
+      done = true;
+      if (spec.kind === 1 /* Resolve */) {
+        resolve(spec.value);
+      } else {
+        reject(spec.value);
+      }
+    }, spec.ms);
+    promise.then((value) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }, (err) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
-});
 var isThenable = (value) => {
-  if (value == null)
+  if (value == null) {
     return false;
+  }
   const type = typeof value;
-  if (type !== "object" && type !== "function")
+  if (type !== "object" && type !== "function") {
     return false;
+  }
   return typeof value.then === "function";
 };
 var composeWorkerCallable = (fixed) => {
   const fn = fixed.f;
   const timeout = normalizeTimeout(fixed.timeout);
-  if (!timeout)
+  if (!timeout) {
     return fn;
+  }
   return (args) => {
     const result = fn(args);
     return isThenable(result) ? raceTimeout(result, timeout) : result;
@@ -1899,26 +2228,35 @@ var getFunctions = async ({ list, ids, at }) => {
   const modules = list.map((specifier) => toModuleUrl(specifier));
   const results = await Promise.all(modules.map(async (imports) => {
     const module = await import(imports);
-    return Object.entries(module).filter(([_, value]) => value != null && typeof value === "object" && value?.[endpointSymbol] === true).map(([name, value]) => ({
+    return Object.entries(module).filter(([_, value]) =>
+      value != null && typeof value === "object" &&
+      value?.[endpointSymbol] === true
+    ).map(([name, value]) => ({
       ...value,
-      name
+      name,
     }));
   }));
   const flattened = results.flat();
   const useAtFilter = modules.length === 1 && at.length > 0;
   const atSet = useAtFilter ? new Set(at) : null;
   const targetModule = useAtFilter ? modules[0] : null;
-  const flattenedResults = flattened.filter((obj) => useAtFilter ? obj.importedFrom === targetModule && atSet.has(obj.at) : ids.includes(obj.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const flattenedResults = flattened.filter((obj) =>
+    useAtFilter
+      ? obj.importedFrom === targetModule && atSet.has(obj.at)
+      : ids.includes(obj.id)
+  ).sort((a, b) => a.name.localeCompare(b.name));
   return flattenedResults.map((fixed) => ({
     ...fixed,
-    run: composeWorkerCallable(fixed)
+    run: composeWorkerCallable(fixed),
   }));
 };
 
 // src/worker/timers.ts
 var maybeGc = (() => {
   const host = globalThis;
-  const gc = typeof host.gc === "function" ? host.gc.bind(globalThis) : undefined;
+  const gc = typeof host.gc === "function"
+    ? host.gc.bind(globalThis)
+    : undefined;
   if (gc) {
     try {
       delete host.gc;
@@ -1943,8 +2281,9 @@ var p_now = performance.now.bind(performance);
 var a_pause = "pause" in Atomics ? Atomics.pause : undefined;
 var whilePausing = ({ pauseInNanoseconds }) => {
   const forNanoseconds = pauseInNanoseconds ?? DEFAULT_PAUSE_TIME;
-  if (!a_pause || forNanoseconds <= 0)
+  if (!a_pause || forNanoseconds <= 0) {
     return () => {};
+  }
   return () => a_pause(forNanoseconds);
 };
 var pauseGeneric = whilePausing({});
@@ -1955,18 +2294,22 @@ var sleepUntilChanged = ({
   rxStatus,
   txStatus,
   enqueueLock,
-  write
+  write,
 }) => {
-  const pause = pauseInNanoseconds !== undefined ? whilePausing({ pauseInNanoseconds }) : pauseGeneric;
+  const pause = pauseInNanoseconds !== undefined
+    ? whilePausing({ pauseInNanoseconds })
+    : pauseGeneric;
   const tryProgress = () => {
     let progressed = false;
-    if (enqueueLock())
+    if (enqueueLock()) {
       progressed = true;
+    }
     if (write) {
       const wrote = write();
       if (typeof wrote === "number") {
-        if (wrote > 0)
+        if (wrote > 0) {
           progressed = true;
+        }
       } else if (wrote === true) {
         progressed = true;
       }
@@ -1978,16 +2321,20 @@ var sleepUntilChanged = ({
     maybeGc();
     let spinChecks = 0;
     while (true) {
-      if (a_load(opView, at) !== value || txStatus[0 /* thisIsAHint */] === 1)
+      if (a_load(opView, at) !== value || txStatus[0 /* thisIsAHint */] === 1) {
         return;
-      if (tryProgress())
+      }
+      if (tryProgress()) {
         return;
+      }
       pause();
-      if ((spinChecks++ & 63) === 0 && p_now() >= until)
+      if ((spinChecks++ & 63) === 0 && p_now() >= until) {
         break;
+      }
     }
-    if (tryProgress())
+    if (tryProgress()) {
       return;
+    }
     a_store2(rxStatus, 0, 0);
     a_wait(opView, at, value, parkMs ?? 60);
     a_store2(rxStatus, 0, 1);
@@ -1997,21 +2344,25 @@ var sleepUntilChanged = ({
 // src/worker/loop.ts
 var jsrIsGreatAndWorkWithoutBugs = () => null;
 var installTerminationGuard = () => {
-  if (typeof process === "undefined")
+  if (typeof process === "undefined") {
     return;
+  }
   const proc = process;
-  if (proc.__knittingTerminationGuard === true)
+  if (proc.__knittingTerminationGuard === true) {
     return;
+  }
   proc.__knittingTerminationGuard = true;
   const blocked = (name) => {
-    throw new Error(`KNT_ERROR_PROCESS_GUARD: ${name} is disabled in worker tasks`);
+    throw new Error(
+      `KNT_ERROR_PROCESS_GUARD: ${name} is disabled in worker tasks`,
+    );
   };
   const guardMethod = (name) => {
     try {
       Object.defineProperty(proc, name, {
         configurable: false,
         writable: false,
-        value: (..._args) => blocked(`process.${name}`)
+        value: (..._args) => blocked(`process.${name}`),
       });
     } catch {}
   };
@@ -2025,7 +2376,7 @@ var installTerminationGuard = () => {
       Object.defineProperty(globalScope.Bun, "exit", {
         configurable: false,
         writable: false,
-        value: (_code) => blocked("Bun.exit")
+        value: (_code) => blocked("Bun.exit"),
       });
     } catch {}
   }
@@ -2034,7 +2385,7 @@ var installTerminationGuard = () => {
       Object.defineProperty(globalScope.Deno, "exit", {
         configurable: false,
         writable: false,
-        value: (_code) => blocked("Deno.exit")
+        value: (_code) => blocked("Deno.exit"),
       });
     } catch {}
   }
@@ -2044,8 +2395,9 @@ var installUnhandledRejectionSilencer = () => {
     return;
   }
   const proc = process;
-  if (proc.__knittingUnhandledRejectionSilencer === true)
+  if (proc.__knittingUnhandledRejectionSilencer === true) {
     return;
+  }
   proc.__knittingUnhandledRejectionSilencer = true;
   process.on("unhandledRejection", () => {});
 };
@@ -2059,15 +2411,21 @@ var workerMainLoop = async (workerData2) => {
     startAt,
     workerOptions,
     lock,
-    returnLock
+    returnLock,
   } = workerData2;
   if (!sab) {
     throw new Error("worker missing transport SAB");
   }
-  if (!lock?.headers || !lock?.lockSector || !lock?.payload || !lock?.payloadSector) {
+  if (
+    !lock?.headers || !lock?.lockSector || !lock?.payload ||
+    !lock?.payloadSector
+  ) {
     throw new Error("worker missing lock SABs");
   }
-  if (!returnLock?.headers || !returnLock?.lockSector || !returnLock?.payload || !returnLock?.payloadSector) {
+  if (
+    !returnLock?.headers || !returnLock?.lockSector || !returnLock?.payload ||
+    !returnLock?.payloadSector
+  ) {
     throw new Error("worker missing return lock SABs");
   }
   var Comment;
@@ -2076,30 +2434,34 @@ var workerMainLoop = async (workerData2) => {
   })(Comment ||= {});
   const signals = createSharedMemoryTransport({
     sabObject: {
-      sharedSab: sab
+      sharedSab: sab,
     },
     isMain: false,
     thread,
     debug,
-    startTime: startAt
+    startTime: startAt,
   });
   const lockState = lock2({
     headers: lock.headers,
     LockBoundSector: lock.lockSector,
     payload: lock.payload,
-    payloadSector: lock.payloadSector
+    payloadSector: lock.payloadSector,
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
     LockBoundSector: returnLock.lockSector,
     payload: returnLock.payload,
-    payloadSector: returnLock.payloadSector
+    payloadSector: returnLock.payloadSector,
   });
   const timers = workerOptions?.timers;
-  const spinMicroseconds = timers?.spinMicroseconds ?? Math.max(1, workerData2.totalNumberOfThread) * 50;
-  const parkMs = timers?.parkMs ?? Math.max(1, workerData2.totalNumberOfThread) * 50;
+  const spinMicroseconds = timers?.spinMicroseconds ??
+    Math.max(1, workerData2.totalNumberOfThread) * 50;
+  const parkMs = timers?.parkMs ??
+    Math.max(1, workerData2.totalNumberOfThread) * 50;
   const pauseSpin = (() => {
-    const fn = typeof timers?.pauseNanoseconds === "number" ? whilePausing({ pauseInNanoseconds: timers.pauseNanoseconds }) : pauseGeneric;
+    const fn = typeof timers?.pauseNanoseconds === "number"
+      ? whilePausing({ pauseInNanoseconds: timers.pauseNanoseconds })
+      : pauseGeneric;
     return () => fn();
   })();
   const { opView, rxStatus, txStatus } = signals;
@@ -2109,7 +2471,7 @@ var workerMainLoop = async (workerData2) => {
     list: workerData2.list,
     isWorker: true,
     ids: workerData2.ids,
-    at: workerData2.at
+    at: workerData2.at,
   });
   if (debug?.logImportedUrl === true) {
     console.log(workerData2.list);
@@ -2126,12 +2488,12 @@ var workerMainLoop = async (workerData2) => {
     hasCompleted,
     writeBatch,
     hasPending,
-    getAwaiting
+    getAwaiting,
   } = createWorkerRxQueue({
     listOfFunctions,
     workerOptions,
     lock: lockState,
-    returnLock: returnLockState
+    returnLock: returnLockState,
   });
   a_store3(rxStatus, 0, 1);
   const BATCH_MAX = 32;
@@ -2143,9 +2505,9 @@ var workerMainLoop = async (workerData2) => {
     txStatus,
     pauseInNanoseconds: timers?.pauseNanoseconds,
     enqueueLock,
-    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0
+    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0,
   });
-  const channel = new MessageChannel;
+  const channel = new MessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
@@ -2155,14 +2517,16 @@ var workerMainLoop = async (workerData2) => {
   const MAX_AWAITING_MS = 10;
   let wakeSeq = a_load2(opView, 0);
   const scheduleMacro = () => {
-    if (isInMacro)
+    if (isInMacro) {
       return;
+    }
     isInMacro = true;
     post2(null);
   };
   const scheduleTimer = (delayMs) => {
-    if (isInMacro)
+    if (isInMacro) {
       return;
+    }
     isInMacro = true;
     if (delayMs <= 0 && typeof SET_IMMEDIATE === "function") {
       SET_IMMEDIATE(loop);
@@ -2193,16 +2557,19 @@ var workerMainLoop = async (workerData2) => {
     while (true) {
       progressed = _enqueueLock();
       if (_hasCompleted()) {
-        if (_writeBatch(WRITE_MAX) > 0)
+        if (_writeBatch(WRITE_MAX) > 0) {
           progressed = true;
+        }
       }
       if (_hasPending()) {
-        if (_serviceBatchImmediate() > 0)
+        if (_serviceBatchImmediate() > 0) {
           progressed = true;
+        }
       }
       if ((awaiting = _getAwaiting()) > 0) {
-        if (awaiting !== lastAwaiting)
+        if (awaiting !== lastAwaiting) {
           awaitingSpins = 0;
+        }
         lastAwaiting = awaiting;
         awaitingSpins++;
         const delay = Math.min(MAX_AWAITING_MS, Math.max(0, awaitingSpins - 1));
@@ -2249,7 +2616,7 @@ var withResolvers = () => {
 function createHostTxQueue({
   max,
   lock,
-  returnLock
+  returnLock,
 }) {
   const PLACE_HOLDER = (_) => {
     throw "UNREACHABLE FROM PLACE HOLDER (main)";
@@ -2265,7 +2632,7 @@ function createHostTxQueue({
   };
   const queue = Array.from({ length: max ?? 10 }, (_, index) => newSlot(index));
   const freeSockets = Array.from({ length: max ?? 10 }, (_, i) => i);
-  const toBeSent = new RingQueue;
+  const toBeSent = new RingQueue();
   const toBeSentPush = (task) => toBeSent.push(task);
   const toBeSentShift = () => toBeSent.shiftNoClear();
   const freePush = (id) => freeSockets.push(id);
@@ -2281,7 +2648,7 @@ function createHostTxQueue({
     onResolved: (task) => {
       inUsed = inUsed - 1 | 0;
       freePush(task[1 /* ID */]);
-    }
+    },
   });
   const hasPendingFrames = () => toBeSentCount > 0;
   const txIdle = () => toBeSentCount === 0 && inUsed === pendingPromises;
@@ -2294,7 +2661,7 @@ function createHostTxQueue({
     toBeSentCount = toBeSentCount + 1 | 0;
   };
   const rejectAll = (reason) => {
-    for (let index = 0;index < queue.length; index++) {
+    for (let index = 0; index < queue.length; index++) {
       const slot = queue[index];
       if (slot.reject !== PLACE_HOLDER) {
         try {
@@ -2313,11 +2680,13 @@ function createHostTxQueue({
     pendingPromises = 0 | 0;
   };
   const flushToWorker = () => {
-    if (toBeSentCount === 0)
+    if (toBeSentCount === 0) {
       return false;
+    }
     const encoded = encodeManyFrom(toBeSent) | 0;
-    if (encoded === 0)
+    if (encoded === 0) {
       return false;
+    }
     toBeSentCount = toBeSentCount - encoded | 0;
     return true;
   };
@@ -2360,10 +2729,12 @@ function createHostTxQueue({
     flushToWorker,
     enqueueKnown,
     settlePromisePayload: (task, result) => {
-      if (task.reject === PLACE_HOLDER)
+      if (task.reject === PLACE_HOLDER) {
         return false;
-      if (pendingPromises > 0)
+      }
+      if (pendingPromises > 0) {
         pendingPromises = pendingPromises - 1 | 0;
+      }
       if (result.status === "rejected") {
         try {
           task.reject(result.reason);
@@ -2374,7 +2745,7 @@ function createHostTxQueue({
       }
       task.value = result.value;
       return enqueueKnown(task);
-    }
+    },
   };
 }
 
@@ -2384,24 +2755,30 @@ var hostDispatcherLoop = ({
   signalBox: {
     opView,
     txStatus,
-    rxStatus
+    rxStatus,
   },
   queue: {
     completeFrame,
     hasPendingFrames,
     flushToWorker,
-    txIdle
+    txIdle,
   },
   channelHandler,
-  dispatcherOptions
+  dispatcherOptions,
 }) => {
   const a_load2 = Atomics.load;
   const a_store3 = Atomics.store;
   const a_notify = Atomics.notify;
   const notify = channelHandler.notify.bind(channelHandler);
   let stallCount = 0 | 0;
-  const STALL_FREE_LOOPS = Math.max(0, (dispatcherOptions?.stallFreeLoops ?? 128) | 0);
-  const MAX_BACKOFF_MS = Math.max(0, (dispatcherOptions?.maxBackoffMs ?? 10) | 0);
+  const STALL_FREE_LOOPS = Math.max(
+    0,
+    (dispatcherOptions?.stallFreeLoops ?? 128) | 0,
+  );
+  const MAX_BACKOFF_MS = Math.max(
+    0,
+    (dispatcherOptions?.maxBackoffMs ?? 10) | 0,
+  );
   let progressed = false;
   let anyProgressed = false;
   const check = () => {
@@ -2416,8 +2793,9 @@ var hostDispatcherLoop = ({
           anyProgressed = true;
         }
         while (hasPendingFrames()) {
-          if (!flushToWorker())
+          if (!flushToWorker()) {
             break;
+          }
           progressed = true;
           anyProgressed = true;
         }
@@ -2429,8 +2807,9 @@ var hostDispatcherLoop = ({
         anyProgressed = progressed = true;
       }
       while (hasPendingFrames()) {
-        if (!flushToWorker())
+        if (!flushToWorker()) {
           break;
+        }
         anyProgressed = progressed = true;
       }
     } while (progressed);
@@ -2455,10 +2834,11 @@ var hostDispatcherLoop = ({
       return;
     }
     let delay = stallCount - STALL_FREE_LOOPS - 1 | 0;
-    if (delay < 0)
+    if (delay < 0) {
       delay = 0;
-    else if (delay > MAX_BACKOFF_MS)
+    } else if (delay > MAX_BACKOFF_MS) {
       delay = MAX_BACKOFF_MS;
+    }
     setTimeout(check, delay);
   };
   const fastCheck = () => {
@@ -2470,7 +2850,7 @@ var hostDispatcherLoop = ({
   fastCheck.isRunning = false;
   return {
     check,
-    fastCheck
+    fastCheck,
   };
 };
 
@@ -2480,7 +2860,7 @@ class ChannelHandler {
   port2;
   #post2;
   constructor() {
-    this.channel = new MessageChannel2;
+    this.channel = new MessageChannel2();
     this.port1 = this.channel.port1;
     this.port2 = this.channel.port2;
     this.#post2 = this.port2.postMessage.bind(this.port2);
@@ -2522,7 +2902,7 @@ var spawnWorkerContext = ({
   workerExecArgv,
   host,
   payloadInitialBytes,
-  payloadMaxBytes
+  payloadMaxBytes,
 }) => {
   const tsFileUrl = new URL(import.meta.url);
   if (debug?.logHref === true) {
@@ -2531,60 +2911,63 @@ var spawnWorkerContext = ({
   }
   const defaultPayloadMaxBytes = 64 * 1024 * 1024;
   const sanitizeBytes = (value) => {
-    if (!Number.isFinite(value))
+    if (!Number.isFinite(value)) {
       return;
+    }
     const bytes = Math.floor(value);
     return bytes > 0 ? bytes : undefined;
   };
   const maxBytes = sanitizeBytes(payloadMaxBytes) ?? defaultPayloadMaxBytes;
   const requestedInitial = sanitizeBytes(payloadInitialBytes);
-  const initialBytes = HAS_SAB_GROW ? Math.min(requestedInitial ?? 4 * 1024 * 1024, maxBytes) : maxBytes;
+  const initialBytes = HAS_SAB_GROW
+    ? Math.min(requestedInitial ?? 4 * 1024 * 1024, maxBytes)
+    : maxBytes;
   const lockBuffers = {
     lockSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     payloadSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     headers: new SharedArrayBuffer(HEADER_BYTE_LENGTH),
-    payload: createSharedArrayBuffer(initialBytes, maxBytes)
+    payload: createSharedArrayBuffer(initialBytes, maxBytes),
   };
   const returnLockBuffers = {
     lockSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     payloadSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     headers: new SharedArrayBuffer(HEADER_BYTE_LENGTH),
-    payload: createSharedArrayBuffer(initialBytes, maxBytes)
+    payload: createSharedArrayBuffer(initialBytes, maxBytes),
   };
   const lock = lock2({
     headers: lockBuffers.headers,
     LockBoundSector: lockBuffers.lockSector,
     payload: lockBuffers.payload,
-    payloadSector: lockBuffers.payloadSector
+    payloadSector: lockBuffers.payloadSector,
   });
   const returnLock = lock2({
     headers: returnLockBuffers.headers,
     LockBoundSector: returnLockBuffers.lockSector,
     payload: returnLockBuffers.payload,
-    payloadSector: returnLockBuffers.payloadSector
+    payloadSector: returnLockBuffers.payloadSector,
   });
   const signals = createSharedMemoryTransport({
     sabObject: sab,
     isMain: true,
     thread,
-    debug
+    debug,
   });
   const signalBox = mainSignal(signals);
   const queue = createHostTxQueue({
     lock,
-    returnLock
+    returnLock,
   });
   const {
     enqueue,
     rejectAll,
-    txIdle
+    txIdle,
   } = queue;
-  const channelHandler = new ChannelHandler;
+  const channelHandler = new ChannelHandler();
   const { check, fastCheck } = hostDispatcherLoop({
     signalBox,
     queue,
     channelHandler,
-    dispatcherOptions: host
+    dispatcherOptions: host,
   });
   channelHandler.open(check);
   let worker;
@@ -2600,13 +2983,15 @@ var spawnWorkerContext = ({
     totalNumberOfThread,
     startAt: signalBox.startAt,
     lock: lockBuffers,
-    returnLock: returnLockBuffers
+    returnLock: returnLockBuffers,
   };
   const baseWorkerOptions = {
     type: "module",
-    workerData: workerDataPayload
+    workerData: workerDataPayload,
   };
-  const withExecArgv = workerExecArgv && workerExecArgv.length > 0 ? { ...baseWorkerOptions, execArgv: workerExecArgv } : baseWorkerOptions;
+  const withExecArgv = workerExecArgv && workerExecArgv.length > 0
+    ? { ...baseWorkerOptions, execArgv: workerExecArgv }
+    : baseWorkerOptions;
   try {
     worker = new poliWorker(workerUrl, withExecArgv);
   } catch (error) {
@@ -2622,8 +3007,9 @@ var spawnWorkerContext = ({
   const a_notify = Atomics.notify;
   const scheduleFastCheck = queueMicrotask;
   const send = () => {
-    if (check.isRunning === true)
+    if (check.isRunning === true) {
       return;
+    }
     channelHandler.notify();
     check.isRunning = true;
     if (a_load2(signalBox.rxStatus, 0) === 0) {
@@ -2658,13 +3044,16 @@ var spawnWorkerContext = ({
         Promise.resolve(worker.terminate()).catch(() => {});
       } catch {}
     },
-    lock
+    lock,
   };
   return context;
 };
 
 // src/api.ts
-import { isMainThread as isMainThread4, workerData as workerData2 } from "node:worker_threads";
+import {
+  isMainThread as isMainThread4,
+  workerData as workerData2,
+} from "node:worker_threads";
 
 // src/runtime/balancer.ts
 var selectStrategy = (contexts, handlers, strategy) => {
@@ -2685,11 +3074,17 @@ var managerMethod = ({
   contexts,
   balancer,
   handlers,
-  inlinerGate
+  inlinerGate,
 }) => {
-  const strategy = typeof balancer === "object" && balancer != null ? balancer.strategy : balancer;
+  const strategy = typeof balancer === "object" && balancer != null
+    ? balancer.strategy
+    : balancer;
   if (contexts.length < 2) {
-    throw new Error(contexts.length === 0 ? "No threads available." : "Cannot rotate with a single thread.");
+    throw new Error(
+      contexts.length === 0
+        ? "No threads available."
+        : "Cannot rotate with a single thread.",
+    );
   }
   if (handlers.length === 0) {
     throw new Error("No handlers provided.");
@@ -2699,7 +3094,9 @@ var managerMethod = ({
     return allInvoker;
   }
   const inlinerIndex = inlinerGate.index | 0;
-  const threshold = Number.isFinite(inlinerGate.threshold) ? Math.max(1, Math.floor(inlinerGate.threshold)) : 1;
+  const threshold = Number.isFinite(inlinerGate.threshold)
+    ? Math.max(1, Math.floor(inlinerGate.threshold))
+    : 1;
   if (threshold <= 1 || inlinerIndex < 0 || inlinerIndex >= handlers.length) {
     return allInvoker;
   }
@@ -2709,14 +3106,19 @@ var managerMethod = ({
   }
   const workerHandlers = new Array(workerLaneCount);
   const workerContexts = new Array(workerLaneCount);
-  for (let source = 0, lane = 0;source < handlers.length; source += 1) {
-    if (source === inlinerIndex)
+  for (let source = 0, lane = 0; source < handlers.length; source += 1) {
+    if (source === inlinerIndex) {
       continue;
+    }
     workerHandlers[lane] = handlers[source];
     workerContexts[lane] = contexts[source];
     lane += 1;
   }
-  const workerOnlyInvoker = selectStrategy(workerContexts, workerHandlers, strategy);
+  const workerOnlyInvoker = selectStrategy(
+    workerContexts,
+    workerHandlers,
+    strategy,
+  );
   let inFlight = 0;
   const releaseResolved = (value) => {
     inFlight -= 1;
@@ -2748,8 +3150,9 @@ function roundRobin(_contexts) {
       return (args) => {
         const lane = rrCursor;
         rrCursor += 1;
-        if (rrCursor === top)
+        if (rrCursor === top) {
           rrCursor = 0;
+        }
         return handlers[lane](args);
       };
     };
@@ -2765,15 +3168,16 @@ function firstIdle(contexts) {
       }
       let rrCursor = 0;
       return (args) => {
-        for (let lane = 0;lane < laneCount; lane += 1) {
+        for (let lane = 0; lane < laneCount; lane += 1) {
           if (isSolved[lane]()) {
             return handlers[lane](args);
           }
         }
         const fallback = rrCursor;
         rrCursor += 1;
-        if (rrCursor === laneCount)
+        if (rrCursor === laneCount) {
           rrCursor = 0;
+        }
         return handlers[fallback](args);
       };
     };
@@ -2802,7 +3206,7 @@ function firstIdleRandom(contexts) {
         return (args) => handlers[0](args);
       }
       return (args) => {
-        for (let lane = 0;lane < laneCount; lane += 1) {
+        for (let lane = 0; lane < laneCount; lane += 1) {
           if (isSolved[lane]()) {
             return handlers[lane](args);
           }
@@ -2817,67 +3221,80 @@ function firstIdleRandom(contexts) {
 // src/runtime/inline-executor.ts
 import { MessageChannel as MessageChannel3 } from "node:worker_threads";
 var normalizeTimeout2 = (timeout) => {
-  if (timeout == null)
+  if (timeout == null) {
     return;
+  }
   if (typeof timeout === "number") {
-    return timeout >= 0 ? { ms: timeout, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return timeout >= 0
+      ? { ms: timeout, kind: 0, /* Reject */ value: new Error("Task timeout") }
+      : undefined;
   }
   const ms = timeout.time;
-  if (!(ms >= 0))
+  if (!(ms >= 0)) {
     return;
+  }
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: 1, /* Resolve */ value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: 1, /* Resolve */ value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: 0, /* Reject */ value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: 0, /* Reject */ value: new Error("Task timeout") };
 };
-var raceTimeout2 = (promise, spec) => new Promise((resolve, reject) => {
-  let done = false;
-  const timer = setTimeout(() => {
-    if (done)
-      return;
-    done = true;
-    if (spec.kind === 1 /* Resolve */) {
-      resolve(spec.value);
-    } else {
-      reject(spec.value);
-    }
-  }, spec.ms);
-  promise.then((value) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    resolve(value);
-  }, (err) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    reject(err);
+var raceTimeout2 = (promise, spec) =>
+  new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) {
+        return;
+      }
+      done = true;
+      if (spec.kind === 1 /* Resolve */) {
+        resolve(spec.value);
+      } else {
+        reject(spec.value);
+      }
+    }, spec.ms);
+    promise.then((value) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }, (err) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
-});
 var composeInlineCallable = (fn, timeout) => {
   const normalized = normalizeTimeout2(timeout);
-  if (!normalized)
+  if (!normalized) {
     return fn;
+  }
   return (args) => {
     const result = fn(args);
-    return result instanceof Promise ? raceTimeout2(result, normalized) : result;
+    return result instanceof Promise
+      ? raceTimeout2(result, normalized)
+      : result;
   };
 };
 var createInlineExecutor = ({
   tasks,
   genTaskID: genTaskID2,
-  batchSize
+  batchSize,
 }) => {
   const entries = Object.values(tasks).sort((a, b) => a.id - b.id);
-  const runners = entries.map((entry) => composeInlineCallable(entry.f, entry.timeout));
+  const runners = entries.map((entry) =>
+    composeInlineCallable(entry.f, entry.timeout)
+  );
   const initCap = 16;
   let fnByIndex = new Int32Array(initCap);
   let stateByIndex = new Int8Array(initCap).fill(-1 /* Free */);
@@ -2886,28 +3303,35 @@ var createInlineExecutor = ({
   let deferredByIndex = new Array(initCap);
   const freeStack = new Array(initCap);
   let freeTop = initCap;
-  for (let i = 0;i < initCap; i++)
+  for (let i = 0; i < initCap; i++) {
     freeStack[i] = initCap - 1 - i;
+  }
   const pendingQueue = new RingQueue(initCap);
   let working = 0;
   let isInMacro = false;
   let isInMicro = false;
-  const batchLimit = Number.isFinite(batchSize) ? Math.max(1, Math.floor(batchSize ?? 1)) : Number.POSITIVE_INFINITY;
-  const channel = new MessageChannel3;
+  const batchLimit = Number.isFinite(batchSize)
+    ? Math.max(1, Math.floor(batchSize ?? 1))
+    : Number.POSITIVE_INFINITY;
+  const channel = new MessageChannel3();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
   const hasPending = () => pendingQueue.isEmpty === false;
-  const queueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (callback) => Promise.resolve().then(callback);
+  const queueMicro = typeof queueMicrotask === "function"
+    ? queueMicrotask
+    : (callback) => Promise.resolve().then(callback);
   const scheduleMacro = () => {
-    if (working === 0 || isInMacro)
+    if (working === 0 || isInMacro) {
       return;
+    }
     isInMacro = true;
     post2(null);
   };
   const send = () => {
-    if (working === 0 || isInMacro || isInMicro)
+    if (working === 0 || isInMacro || isInMicro) {
       return;
+    }
     isInMicro = true;
     queueMicro(runMicroLoop);
   };
@@ -2916,25 +3340,33 @@ var createInlineExecutor = ({
     send();
   };
   const enqueueIfCurrent = (index, taskID) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (
+      stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID
+    ) {
       return;
+    }
     enqueue(index);
   };
   const settleIfCurrent = (index, taskID, isError, value) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (
+      stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID
+    ) {
       return;
+    }
     const deferred = deferredByIndex[index];
     if (deferred) {
-      if (isError)
+      if (isError) {
         deferred.reject(value);
-      else
+      } else {
         deferred.resolve(value);
+      }
     }
     cleanup(index);
   };
   function allocIndex() {
-    if (freeTop > 0)
+    if (freeTop > 0) {
       return freeStack[--freeTop];
+    }
     const oldCap = fnByIndex.length;
     const newCap = oldCap << 1;
     const nextFnByIndex = new Int32Array(newCap);
@@ -2948,7 +3380,7 @@ var createInlineExecutor = ({
     taskIdByIndex.length = newCap;
     taskIdByIndex.fill(-1, oldCap);
     deferredByIndex.length = newCap;
-    for (let i = newCap - 1;i >= oldCap; --i) {
+    for (let i = newCap - 1; i >= oldCap; --i) {
       freeStack[freeTop++] = i;
     }
     return freeStack[--freeTop];
@@ -2957,11 +3389,13 @@ var createInlineExecutor = ({
     let processed = 0;
     while (processed < batchLimit) {
       const maybeIndex = pendingQueue.shiftNoClear();
-      if (maybeIndex === undefined)
+      if (maybeIndex === undefined) {
         break;
+      }
       const index = maybeIndex | 0;
-      if (stateByIndex[index] !== 0 /* Pending */)
+      if (stateByIndex[index] !== 0 /* Pending */) {
         continue;
+      }
       const taskID = taskIdByIndex[index];
       try {
         const args = argsByIndex[index];
@@ -2972,7 +3406,10 @@ var createInlineExecutor = ({
           processed++;
           continue;
         }
-        res.then((value) => settleIfCurrent(index, taskID, false, value), (err) => settleIfCurrent(index, taskID, true, err));
+        res.then(
+          (value) => settleIfCurrent(index, taskID, false, value),
+          (err) => settleIfCurrent(index, taskID, true, err),
+        );
         processed++;
       } catch (err) {
         settleIfCurrent(index, taskID, true, err);
@@ -2992,8 +3429,9 @@ var createInlineExecutor = ({
     }
   }
   function runMicroLoop() {
-    if (!isInMicro)
+    if (!isInMicro) {
       return;
+    }
     processLoop(true);
     isInMicro = false;
   }
@@ -3005,8 +3443,9 @@ var createInlineExecutor = ({
     argsByIndex[index] = undefined;
     deferredByIndex[index] = undefined;
     freeStack[freeTop++] = index;
-    if (working === 0)
+    if (working === 0) {
       isInMacro = false;
+    }
   }
   const call = ({ fnNumber }) => (args) => {
     const taskID = genTaskID2();
@@ -3020,8 +3459,9 @@ var createInlineExecutor = ({
     working++;
     if (args instanceof Promise) {
       args.then((value) => {
-        if (taskIdByIndex[index] !== taskID)
+        if (taskIdByIndex[index] !== taskID) {
           return;
+        }
         argsByIndex[index] = value;
         enqueueIfCurrent(index, taskID);
       }, (err) => settleIfCurrent(index, taskID, true, err));
@@ -3033,9 +3473,10 @@ var createInlineExecutor = ({
   port1.onmessage = () => processLoop(false);
   return {
     kills: async () => {
-      for (let index = 0;index < stateByIndex.length; index++) {
-        if (stateByIndex[index] !== 0 /* Pending */)
+      for (let index = 0; index < stateByIndex.length; index++) {
+        if (stateByIndex[index] !== 0 /* Pending */) {
           continue;
+        }
         try {
           deferredByIndex[index]?.reject("Thread closed");
         } catch {}
@@ -3057,22 +3498,28 @@ var createInlineExecutor = ({
       isInMicro = false;
     },
     call,
-    txIdle: () => working === 0
+    txIdle: () => working === 0,
   };
 };
 
 // src/api.ts
 var isMain = isMainThread4;
 var toListAndIds = (args) => {
-  const result = Object.values(args).reduce((acc, v) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc), [
-    new Set,
-    new Set,
-    new Set
-  ]);
+  const result = Object.values(args).reduce(
+    (
+      acc,
+      v,
+    ) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc),
+    [
+      new Set(),
+      new Set(),
+      new Set(),
+    ],
+  );
   return {
     list: [...result[0]],
     ids: [...result[1]],
-    at: [...result[2]]
+    at: [...result[2]],
   };
 };
 var createPool = ({
@@ -3086,136 +3533,171 @@ var createPool = ({
   worker,
   workerExecArgv,
   dispatcher,
-  host
-}) => (tasks) => {
+  host,
+}) =>
+(tasks) => {
   if (isMainThread4 === false) {
     if (debug?.extras === true) {
-      console.warn("createPool has been called with : " + JSON.stringify(workerData2));
+      console.warn(
+        "createPool has been called with : " + JSON.stringify(workerData2),
+      );
     }
     const notMainThreadError = () => {
       throw new Error("createPool can only be called in the main thread.");
     };
-    const throwingProxyTarget = function() {
+    const throwingProxyTarget = function () {
       return notMainThreadError();
     };
     const throwingProxyHandler = {
-      get: function() {
+      get: function () {
         return notMainThreadError;
-      }
+      },
     };
-    const mainThreadOnlyProxy = new Proxy(throwingProxyTarget, throwingProxyHandler);
+    const mainThreadOnlyProxy = new Proxy(
+      throwingProxyTarget,
+      throwingProxyHandler,
+    );
     return {
       shutdown: mainThreadOnlyProxy,
-      call: mainThreadOnlyProxy
+      call: mainThreadOnlyProxy,
     };
   }
-  const { list, ids, at } = toListAndIds(tasks), listOfFunctions = Object.entries(tasks).map(([k, v]) => ({
-    ...v,
-    name: k
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  const { list, ids, at } = toListAndIds(tasks),
+    listOfFunctions = Object.entries(tasks).map(([k, v]) => ({
+      ...v,
+      name: k,
+    })).sort((a, b) => a.name.localeCompare(b.name));
   const usingInliner = typeof inliner === "object" && inliner != null;
   const totalNumberOfThread = (threads ?? 1) + (usingInliner ? 1 : 0);
-  const allowedFlags = typeof process !== "undefined" && process.allowedNodeEnvironmentFlags ? process.allowedNodeEnvironmentFlags : null;
+  const allowedFlags =
+    typeof process !== "undefined" && process.allowedNodeEnvironmentFlags
+      ? process.allowedNodeEnvironmentFlags
+      : null;
   const sanitizeExecArgv = (flags) => {
-    if (!flags || flags.length === 0)
+    if (!flags || flags.length === 0) {
       return;
-    if (!allowedFlags)
+    }
+    if (!allowedFlags) {
       return flags;
+    }
     const filtered = flags.filter((flag) => {
       const key = flag.split("=", 1)[0];
       return allowedFlags.has(key);
     });
     return filtered.length > 0 ? filtered : undefined;
   };
-  const defaultExecArgv = workerExecArgv ?? (typeof process !== "undefined" && Array.isArray(process.execArgv) ? allowedFlags?.has("--expose-gc") === true ? process.execArgv.includes("--expose-gc") ? process.execArgv : [...process.execArgv, "--expose-gc"] : process.execArgv : undefined);
+  const defaultExecArgv = workerExecArgv ??
+    (typeof process !== "undefined" && Array.isArray(process.execArgv)
+      ? allowedFlags?.has("--expose-gc") === true
+        ? process.execArgv.includes("--expose-gc")
+          ? process.execArgv
+          : [...process.execArgv, "--expose-gc"]
+        : process.execArgv
+      : undefined);
   const execArgv = sanitizeExecArgv(defaultExecArgv);
-  const isDispatcherOptions = (value) => typeof value === "object" && value !== null && ("host" in value);
-  const hostDispatcher = host ?? (isDispatcherOptions(dispatcher) ? dispatcher.host : dispatcher);
+  const isDispatcherOptions = (value) =>
+    typeof value === "object" && value !== null && ("host" in value);
+  const hostDispatcher = host ??
+    (isDispatcherOptions(dispatcher) ? dispatcher.host : dispatcher);
   let workers = Array.from({
-    length: threads ?? 1
-  }).map((_, thread) => spawnWorkerContext({
-    list,
-    ids,
-    at,
-    thread,
-    debug,
-    totalNumberOfThread,
-    source,
-    workerOptions: worker,
-    workerExecArgv: execArgv,
-    host: hostDispatcher,
-    payloadInitialBytes,
-    payloadMaxBytes
-  }));
+    length: threads ?? 1,
+  }).map((_, thread) =>
+    spawnWorkerContext({
+      list,
+      ids,
+      at,
+      thread,
+      debug,
+      totalNumberOfThread,
+      source,
+      workerOptions: worker,
+      workerExecArgv: execArgv,
+      host: hostDispatcher,
+      payloadInitialBytes,
+      payloadMaxBytes,
+    })
+  );
   if (usingInliner) {
     const mainThread = createInlineExecutor({
       tasks,
       genTaskID,
-      batchSize: inliner?.batchSize ?? 1
+      batchSize: inliner?.batchSize ?? 1,
     });
     if (inliner?.position === "first") {
       workers = [
         mainThread,
-        ...workers
+        ...workers,
       ];
     } else {
       workers.push(mainThread);
     }
   }
-  const inlinerIndex = usingInliner ? inliner?.position === "first" ? 0 : workers.length - 1 : -1;
-  const inlinerDispatchThreshold = Number.isFinite(inliner?.dispatchThreshold) ? Math.max(1, Math.floor(inliner?.dispatchThreshold ?? 1)) : 1;
+  const inlinerIndex = usingInliner
+    ? inliner?.position === "first" ? 0 : workers.length - 1
+    : -1;
+  const inlinerDispatchThreshold = Number.isFinite(inliner?.dispatchThreshold)
+    ? Math.max(1, Math.floor(inliner?.dispatchThreshold ?? 1))
+    : 1;
   const indexedFunctions = listOfFunctions.map((fn, index) => ({
     name: fn.name,
-    index
+    index,
   }));
-  const callHandlers = new Map;
+  const callHandlers = new Map();
   for (const { name } of indexedFunctions) {
     callHandlers.set(name, []);
   }
   for (const worker2 of workers) {
     for (const { name, index } of indexedFunctions) {
       callHandlers.get(name).push(worker2.call({
-        fnNumber: index
+        fnNumber: index,
       }));
     }
   }
   const useDirectHandler = (threads ?? 1) === 1 && !usingInliner;
-  const buildInvoker = (handlers) => useDirectHandler ? handlers[0] : managerMethod({
-    contexts: workers,
-    balancer,
-    handlers,
-    inlinerGate: usingInliner ? {
-      index: inlinerIndex,
-      threshold: inlinerDispatchThreshold
-    } : undefined
-  });
-  const callEntries = Array.from(callHandlers.entries(), ([name, handlers]) => [name, buildInvoker(handlers)]);
+  const buildInvoker = (handlers) =>
+    useDirectHandler ? handlers[0] : managerMethod({
+      contexts: workers,
+      balancer,
+      handlers,
+      inlinerGate: usingInliner
+        ? {
+          index: inlinerIndex,
+          threshold: inlinerDispatchThreshold,
+        }
+        : undefined,
+    });
+  const callEntries = Array.from(
+    callHandlers.entries(),
+    ([name, handlers]) => [name, buildInvoker(handlers)],
+  );
   return {
     shutdown: async () => {
       await Promise.allSettled(workers.map((worker2) => worker2.kills()));
     },
-    call: Object.fromEntries(callEntries)
+    call: Object.fromEntries(callEntries),
   };
 };
 var SINGLE_TASK_KEY = "__task__";
 var createSingleTaskPool = (single, options) => {
   const pool = createPool(options ?? {})({
-    [SINGLE_TASK_KEY]: single
+    [SINGLE_TASK_KEY]: single,
   });
   return {
     call: pool.call[SINGLE_TASK_KEY],
-    shutdown: pool.shutdown
+    shutdown: pool.shutdown,
   };
 };
 var task = (I) => {
   const [href, at] = getCallerFilePath();
-  const importedFrom = I?.href != null ? toModuleUrl(I.href) : new URL(href).href;
+  const importedFrom = I?.href != null
+    ? toModuleUrl(I.href)
+    : new URL(href).href;
   const out = {
     ...I,
     id: genTaskID(),
     importedFrom,
     at,
-    [endpointSymbol]: true
+    [endpointSymbol]: true,
   };
   out.createPool = (options) => {
     if (isMainThread4 === false) {
@@ -3225,9 +3707,4 @@ var task = (I) => {
   };
   return out;
 };
-export {
-  workerMainLoop,
-  task,
-  isMain,
-  createPool
-};
+export { createPool, isMain, task, workerMainLoop };

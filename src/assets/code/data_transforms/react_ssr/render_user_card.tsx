@@ -7,8 +7,8 @@ import {
   formatJoinDate,
   initials,
   levelForScore,
-  normalizeUser,
   type NormalizedUser,
+  normalizeUser,
 } from "./utils.ts";
 
 function Stat({ label, value }: { label: string; value: number }) {

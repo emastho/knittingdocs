@@ -87,10 +87,13 @@ async function main() {
 
     boxplot(() => {
       summary(() => {
-        bench(`host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`, async () => {
-          const totals = await runHostBatches(rawBatches);
-          sink = totals.outputBytes;
-        });
+        bench(
+          `host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`,
+          async () => {
+            const totals = await runHostBatches(rawBatches);
+            sink = totals.outputBytes;
+          },
+        );
 
         bench(
           `knitting (${THREADS} thread${
