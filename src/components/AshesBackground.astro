@@ -1,14 +1,49 @@
 <div class="ashes-container" data-ashes aria-hidden="true">
-  <canvas data-ashes-main></canvas>
+  <canvas class="ashes-canvas ashes-canvas--back" data-ashes-back></canvas>
+  <canvas class="ashes-canvas ashes-canvas--front" data-ashes-front></canvas>
 </div>
 
 <script>
-  const containers = document.querySelectorAll('[data-ashes]');
-  const CLEANUP_KEY = '__ashesCleanup';
   const BASE_PARTICLES = 58;
   const FRAME_MS = 1000 / 30;
   const MAX_DPR = 2;
+  const FRONT_LAYER_RATIO = 0.06;
+  const FRONT_LAYER_Z_BOOST = 10;
 
+  /**
+   * @typedef {() => void} CleanupFn
+   * @typedef {[number, number, number]} RgbColor
+   * @typedef {{ x: number, y: number }} Point
+   * @typedef {{
+   *   x: number,
+   *   y: number,
+   *   a: number,
+   *   r: number,
+   *   g: number,
+   *   b: number,
+   *   tailAlpha: number,
+   *   isFrontLayer: boolean,
+   *   z: number,
+   *   dp: Point[]
+   * }} Particle
+   * @typedef {{
+   *   x?: number,
+   *   y?: number,
+   *   a?: number,
+   *   dp?: Point[],
+   *   isFrontLayer?: boolean
+   * }} AshOptions
+   */
+
+  /** @type {NodeListOf<HTMLDivElement>} */
+  const containers = document.querySelectorAll('[data-ashes]');
+  /** @type {WeakMap<HTMLDivElement, CleanupFn>} */
+  const containerCleanups = new WeakMap();
+
+  /**
+   * @param {string | null} value
+   * @returns {string | null}
+   */
   function normalizeHexColor(value) {
     if (!value) return null;
     const trimmed = value.trim();
@@ -16,10 +51,17 @@
     return match ? match[0] : null;
   }
 
+  /**
+   * @param {number} value
+   * @returns {number}
+   */
   function clampColor(value) {
     return Math.max(0, Math.min(255, value));
   }
 
+  /**
+   * @returns {RgbColor}
+   */
   function hexToRgb() {
     const rootStyles = getComputedStyle(document.documentElement);
     const raw = rootStyles.getPropertyValue('--ashes');
@@ -39,6 +81,11 @@
     return [r, g, b];
   }
 
+  /**
+   * @param {number} width
+   * @param {number} height
+   * @returns {number}
+   */
   function getParticleCount(width, height) {
     const area = Math.max(1, width * height);
     const areaScale = Math.min(1.25, Math.max(0.6, area / (1280 * 720)));
@@ -55,21 +102,30 @@
     return Math.max(0, count);
   }
 
+  /**
+   * @param {HTMLDivElement} container
+   * @returns {CleanupFn}
+   */
   function startAshes(container) {
-    const existingCleanup = container[CLEANUP_KEY];
+    const existingCleanup = containerCleanups.get(container);
     if (typeof existingCleanup === 'function') existingCleanup();
 
-    const canvas = container.querySelector('[data-ashes-main]');
-    if (!(canvas instanceof HTMLCanvasElement)) return () => {};
+    const backCanvas = container.querySelector('[data-ashes-back]');
+    const frontCanvas = container.querySelector('[data-ashes-front]');
+    if (!(backCanvas instanceof HTMLCanvasElement) || !(frontCanvas instanceof HTMLCanvasElement)) {
+      return () => {};
+    }
 
-    const ctx = canvas.getContext('2d', { alpha: true });
-    if (!ctx) return () => {};
+    const backCtx = backCanvas.getContext('2d', { alpha: true });
+    const frontCtx = frontCanvas.getContext('2d', { alpha: true });
+    if (!backCtx || !frontCtx) return () => {};
 
     let W = 1;
     let H = 1;
     let dpr = 1;
     let angle = 0;
     let rgb = hexToRgb();
+    /** @type {Particle[]} */
     const A = [];
 
     // Keep original fade-in behavior so particles do not pop all at once.
@@ -78,10 +134,22 @@
     let rafId = 0;
     let lastTs = 0;
 
+    /**
+     * @param {number} from
+     * @param {number} to
+     * @param {number} [seed]
+     * @returns {number}
+     */
     function randomRange(from, to, seed) {
-      return Math.floor((seed ? seed : Math.random()) * (to - from + 1) + from);
+      const source = typeof seed === 'number' ? seed : Math.random();
+      return Math.floor(source * (to - from + 1) + from);
     }
 
+    /**
+     * @param {Particle} particle
+     * @param {number} [seed]
+     * @returns {void}
+     */
     function recolorParticle(particle, seed) {
       const m = typeof seed === 'number' ? seed : Math.random();
       particle.r = clampColor(randomRange(rgb[0] - 10, rgb[0], m));
@@ -89,33 +157,81 @@
       particle.b = clampColor(randomRange(rgb[2] - 10, rgb[2], m));
     }
 
-    function Ash(o) {
-      let i;
-      let j;
-      const m = Math.random();
-      const p = randomRange(4, 8, m);
+    /**
+     * @param {Particle} particle
+     * @param {boolean} isFrontLayer
+     * @returns {void}
+     */
+    function setParticleLayer(particle, isFrontLayer) {
+      particle.isFrontLayer = isFrontLayer;
+      particle.z = particle.a + (isFrontLayer ? FRONT_LAYER_Z_BOOST : 0);
+    }
 
-      if (o && typeof o.x === 'number') this.x = o.x;
-      else this.x = m * W;
-      if (o && typeof o.y === 'number') this.y = o.y;
-      else this.y = m * H;
-      if (o && typeof o.a === 'number') this.a = o.a;
-      else this.a = m * (p - 4) + 1;
+    function rebalanceFrontLayer() {
+      if (A.length === 0) return;
 
-      recolorParticle(this, m);
-      this.tailAlpha = randomRange(1, 10, m) / 10;
+      const targetFront = Math.max(0, Math.round(A.length * FRONT_LAYER_RATIO));
+      /** @type {Particle[]} */
+      const front = [];
+      /** @type {Particle[]} */
+      const back = [];
 
-      if (o && o.dp) this.dp = o.dp;
-      else {
-        this.dp = [{ x: 0, y: 0 }];
-        for (i = 0; i < p; i++) {
-          j = i === 0 || p / 2 > i ? 1 : -1;
-          this.dp.push({
-            x: this.dp[i].x + randomRange(5, 30) * j,
-            y: this.dp[i].y + randomRange(5, 30) * j,
+      for (let i = 0; i < A.length; i++) {
+        if (A[i].isFrontLayer) front.push(A[i]);
+        else back.push(A[i]);
+      }
+
+      if (front.length > targetFront) {
+        const toDemote = front.length - targetFront;
+        for (let i = 0; i < toDemote; i++) {
+          setParticleLayer(front[i], false);
+        }
+      } else if (front.length < targetFront) {
+        const toPromote = Math.min(targetFront - front.length, back.length);
+        for (let i = 0; i < toPromote; i++) {
+          setParticleLayer(back[i], true);
+        }
+      }
+    }
+
+    /**
+     * @param {AshOptions} [options]
+     * @returns {Particle}
+     */
+    function createAsh(options = {}) {
+      const seed = Math.random();
+      const pointCount = randomRange(4, 8, seed);
+      /** @type {Particle} */
+      const particle = {
+        x: typeof options.x === 'number' ? options.x : seed * W,
+        y: typeof options.y === 'number' ? options.y : seed * H,
+        a: typeof options.a === 'number' ? options.a : seed * (pointCount - 4) + 1,
+        r: 0,
+        g: 0,
+        b: 0,
+        tailAlpha: randomRange(1, 10, seed) / 10,
+        isFrontLayer: false,
+        z: 0,
+        dp: [],
+      };
+
+      recolorParticle(particle, seed);
+      setParticleLayer(particle, Boolean(options.isFrontLayer));
+
+      if (options.dp) {
+        particle.dp = options.dp;
+      } else {
+        particle.dp = [{ x: 0, y: 0 }];
+        for (let i = 0; i < pointCount; i++) {
+          const direction = i === 0 || pointCount / 2 > i ? 1 : -1;
+          particle.dp.push({
+            x: particle.dp[i].x + randomRange(5, 30) * direction,
+            y: particle.dp[i].y + randomRange(5, 30) * direction,
           });
         }
       }
+
+      return particle;
     }
 
     function syncParticleCount() {
@@ -124,27 +240,38 @@
       if (target > A.length) {
         const isInitialFill = A.length === 0;
         while (A.length < target) {
-          A.push(isInitialFill ? new Ash() : new Ash({ y: -10 }));
+          A.push(isInitialFill ? createAsh() : createAsh({ y: -10 }));
         }
       } else if (target < A.length) {
         A.length = target;
       }
+
+      rebalanceFrontLayer();
     }
 
     function resize() {
-      const rect = container.getBoundingClientRect();
-      W = Math.max(1, rect.width | 0);
-      H = Math.max(1, rect.height | 0);
+      W = Math.max(1, window.innerWidth | 0);
+      H = Math.max(1, window.innerHeight | 0);
 
       dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      canvas.style.width = `${W}px`;
-      canvas.style.height = `${H}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      backCanvas.width = Math.round(W * dpr);
+      backCanvas.height = Math.round(H * dpr);
+      backCanvas.style.width = `${W}px`;
+      backCanvas.style.height = `${H}px`;
+
+      frontCanvas.width = Math.round(W * dpr);
+      frontCanvas.height = Math.round(H * dpr);
+      frontCanvas.style.width = `${W}px`;
+      frontCanvas.style.height = `${H}px`;
+
+      backCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      frontCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       syncParticleCount();
-      if (A.length === 0) ctx.clearRect(0, 0, W, H);
+      if (A.length === 0) {
+        backCtx.clearRect(0, 0, W, H);
+        frontCtx.clearRect(0, 0, W, H);
+      }
     }
 
     function update() {
@@ -160,11 +287,11 @@
 
         if (p.x > W + 5 || p.x < -5 || p.y > H) {
           if (i % 3 > 0) {
-            A[i] = new Ash({ y: -10, a: p.a, dp: p.dp });
+            A[i] = createAsh({ y: -10, a: p.a, dp: p.dp, isFrontLayer: p.isFrontLayer });
           } else if (driftX > 0) {
-            A[i] = new Ash({ x: -5, a: p.a, dp: p.dp });
+            A[i] = createAsh({ x: -5, a: p.a, dp: p.dp, isFrontLayer: p.isFrontLayer });
           } else {
-            A[i] = new Ash({ x: W + 5, a: p.a, dp: p.dp });
+            A[i] = createAsh({ x: W + 5, a: p.a, dp: p.dp, isFrontLayer: p.isFrontLayer });
           }
         }
       }
@@ -173,30 +300,36 @@
     function draw() {
       if (A.length === 0) return;
 
-      ctx.clearRect(0, 0, W, H);
+      backCtx.clearRect(0, 0, W, H);
+      frontCtx.clearRect(0, 0, W, H);
 
       for (let i = 0; i < A.length; i++) {
         const p = A[i];
-        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.a);
+        const targetCtx = p.isFrontLayer ? frontCtx : backCtx;
+        const grad = targetCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.a);
         grad.addColorStop(0, `rgba(${p.r}, ${p.g}, ${p.b}, 1)`);
         grad.addColorStop(0.9, `rgba(${p.r}, ${p.g}, ${p.b}, ${p.tailAlpha})`);
         grad.addColorStop(1, `rgba(${p.r}, ${p.g}, ${p.b}, 0)`);
 
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
+        targetCtx.beginPath();
+        targetCtx.moveTo(p.x, p.y);
         for (let j = 1; j < p.dp.length; j++) {
-          ctx.lineTo(p.x + p.dp[j].x, p.y + p.dp[j].y);
+          targetCtx.lineTo(p.x + p.dp[j].x, p.y + p.dp[j].y);
         }
-        ctx.closePath();
-        ctx.fillStyle = grad;
-        ctx.globalAlpha = incr();
-        ctx.fill();
+        targetCtx.closePath();
+        targetCtx.fillStyle = grad;
+        targetCtx.globalAlpha = incr();
+        targetCtx.fill();
       }
 
       update();
-      ctx.globalAlpha = 1;
+      backCtx.globalAlpha = 1;
+      frontCtx.globalAlpha = 1;
     }
 
+    /**
+     * @param {number} ts
+     */
     function frame(ts) {
       if (lastTs === 0 || ts - lastTs >= FRAME_MS) {
         draw();
@@ -228,20 +361,22 @@
       attributeFilter: ['data-theme'],
     });
 
+    /** @type {CleanupFn} */
     const cleanup = () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
       themeObserver.disconnect();
-      if (container[CLEANUP_KEY] === cleanup) {
-        delete container[CLEANUP_KEY];
+      if (containerCleanups.get(container) === cleanup) {
+        containerCleanups.delete(container);
       }
     };
 
-    container[CLEANUP_KEY] = cleanup;
+    containerCleanups.set(container, cleanup);
     return cleanup;
   }
 
+  /** @type {CleanupFn[]} */
   const cleanups = [];
   containers.forEach((container) => {
     cleanups.push(startAshes(container));
@@ -272,20 +407,23 @@
   }
 
   .ashes-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
     pointer-events: none;
   }
 
-  canvas {
-    position: absolute;
+  .ashes-canvas {
+    position: fixed;
     inset: 0;
     width: 100%;
     height: 100%;
+    pointer-events: none;
     transform: translate3d(0, 0, 0);
+  }
+
+  .ashes-canvas--back {
+    z-index: -1;
+  }
+
+  .ashes-canvas--front {
+    z-index: 10;
   }
 </style>

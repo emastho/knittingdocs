@@ -432,6 +432,8 @@ function barScale(speed: number) {
     MOTION: "motion",
     BARS: "bars",
   };
+  const NO_MOTION_SAMPLE_MS = 1100;
+  const NO_MOTION_DELTA_PX = 0.8;
   // Tuned to be noticeably more permissive before falling back to bars mode.
   const LOW_END_MEMORY_GB = 1;
   const LOW_END_CORES = 1;
@@ -539,23 +541,14 @@ function barScale(speed: number) {
       return ballRect.left - trackRect.left;
     };
 
-    const getReferencePair = () => {
-      let reference = null;
-      let referenceDuration = Number.POSITIVE_INFINITY;
-
+    const getBallTrackPairs = () => {
+      const pairs = [];
       tracks.forEach((track, index) => {
         const ball = balls[index];
         if (!(track instanceof HTMLElement) || !(ball instanceof HTMLElement)) return;
-        const styles = getComputedStyle(ball);
-        const duration = parseCssTimeMs(styles.animationDuration);
-        if (!duration) return;
-        if (duration < referenceDuration) {
-          referenceDuration = duration;
-          reference = { track, ball };
-        }
+        pairs.push({ track, ball });
       });
-
-      return reference;
+      return pairs;
     };
 
     const clearNoMotionWatchdog = () => {
@@ -673,19 +666,27 @@ function barScale(speed: number) {
     const scheduleNoMotionFallback = () => {
       clearNoMotionWatchdog();
       if (isBarsMode) return;
-      if (control.getMode() === MODES.MOTION) return;
-      const ref = getReferencePair();
-      if (!ref) return;
-      const startOffset = readOffset(ref.ball, ref.track);
+      const pairs = getBallTrackPairs();
+      if (!pairs.length) return;
+      const startOffsets = pairs.map(({ ball, track }) => readOffset(ball, track));
 
       noMotionTimer = window.setTimeout(() => {
         if (isBarsMode) return;
-        const endOffset = readOffset(ref.ball, ref.track);
-        if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset)) return;
-        if (Math.abs(endOffset - startOffset) < 0.8) {
+        let sampled = 0;
+        let moved = 0;
+
+        pairs.forEach(({ ball, track }, index) => {
+          const startOffset = startOffsets[index];
+          const endOffset = readOffset(ball, track);
+          if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset)) return;
+          sampled += 1;
+          if (Math.abs(endOffset - startOffset) >= NO_MOTION_DELTA_PX) moved += 1;
+        });
+
+        if (sampled > 0 && moved === 0) {
           enableBarsMode();
         }
-      }, 1100);
+      }, NO_MOTION_SAMPLE_MS);
     };
 
     const syncInfiniteUi = () => {
