@@ -1,4 +1,4 @@
-import { task } from "./knitting.js";
+import { task } from "@vixeny/knitting";
 
 // Example CPU-oriented task: safe single-argument tuple input.
 export const add = task({
