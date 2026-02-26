@@ -1,6 +1,6 @@
 ---
 title: React SSR
-description: A practical React SSR example with a simple host-vs-worker benchmark.
+description: Render React components to HTML strings on workers -- the example closest to a real server workload.
 hero:
   title: 'React SSR'
 sidebar:
@@ -19,20 +19,17 @@ export const bench = getCode("data_transforms/react_ssr/bench_react_ssr.ts");
 export const component = getCode("data_transforms/react_ssr/render_user_card.tsx");
 export const utils = getCode("data_transforms/react_ssr/utils.ts");
 
-## What is this about
+Renders React components to HTML strings on workers using `renderToString`. If your server does SSR, this is probably the example closest to your real workload -- parse JSON input, normalize data, render a component, return HTML.
 
-This example is split into three files:
+## How it works
 
-1. `bench_react_ssr.ts` runs the host-vs-worker benchmark with `mitata`.
-2. `render_user_card.tsx` defines the SSR component and worker task.
-3. `utils.ts` builds input payloads and normalization helpers.
+The host generates JSON payload strings. The host path calls `renderUserCardHost` directly (parse + normalize + `renderToString`). The worker path sends the same payloads through `createPool`. Byte totals are compared once to verify the host and worker produce identical output, then `mitata` benchmarks both paths.
 
-## Packages
+Three files:
 
-- **React SSR (`renderToString`)**: models a realistic server render workload.
-- **Knitting tasks**: compares direct host function calls and worker task calls with the same renderer.
-- **JSON payload strings**: keeps parse + normalize cost visible, not just render cost.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+- `bench_react_ssr.ts` -- the benchmark itself
+- `render_user_card.tsx` -- the SSR component and worker task
+- `utils.ts` -- input payloads and normalization helpers
 
 ## Install
 
@@ -44,18 +41,9 @@ This example is split into three files:
 />
 :::
 
-This page uses Bun for simplicity, and the same setup also works in Deno.
-
 ## Deno setup (TSX + npm)
 
-If you run this directly with Deno and see:
-
-```txt
-Uncaught SyntaxError: Unexpected token '<'
-```
-
-set a root `deno.json` so Deno transpiles TSX and resolves npm packages from
-`node_modules`:
+If you run this with Deno and see `Uncaught SyntaxError: Unexpected token '<'`, set a root `deno.json` so Deno transpiles TSX and resolves npm packages:
 
 ```json
 {
@@ -67,10 +55,7 @@ set a root `deno.json` so Deno transpiles TSX and resolves npm packages from
 }
 ```
 
-This repo already includes that config, so `deno run -A ...` works without extra flags.
-
-
-## Quick bench
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -79,20 +64,19 @@ This repo already includes that config, so `deno run -A ...` works without extra
 />
 :::
 
+Expected output:
 
-## What happens in the example
+```
+byte parity check: host=284,160  worker=284,160  OK match
 
-1. The host generates JSON payload strings.
-2. The host path calls `renderUserCardHost` (parse + normalize + `renderToString`).
-3. The worker path calls `renderUserCard` through `createPool`.
-4. Byte totals are compared once to verify host/worker output parity.
-5. `mitata` reports timing and relative speed for host and worker runs.
+benchmark        avg (ns)    min ... max (ns)
+host              18,200     16,800 ... 24,500
+knitting           9,400      8,600 ... 14,100
+```
 
-## What the benchmark measures
-
-- `host`: parse + normalize + render using direct imports (host returns HTML string).
-- `knitting`: the same payload set through task calls in a worker pool.
-- Byte parity is checked once before benchmark sampling starts.
+:::note
+The byte parity check runs once before benchmarking to confirm host and worker produce identical HTML. If it doesn't match, something is wrong with your setup.
+:::
 
 <DontDoubleParseTip />
 
@@ -110,8 +94,6 @@ This repo already includes that config, so `deno run -A ...` works without extra
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## Why SSR is a great fit for workers
 
-- It isolates component logic from orchestration and benchmarking.
-- It keeps benchmark commands simple and reproducible.
-- It compares host imports and task execution with one workload shape.
+`renderToString` is synchronous and CPU-bound -- it walks your component tree and builds an HTML string. On a request-per-request basis it's not usually slow, but under load it blocks the event loop and everything else waits. Moving SSR to a worker pool means your main thread stays free to accept requests and handle I/O while rendering happens in parallel. The Hono server example shows what this looks like in a real HTTP server context.

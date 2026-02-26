@@ -1,9 +1,9 @@
 import { createPool, isMain } from "@vixeny/knitting";
 import { bench, boxplot, run, summary } from "mitata";
 import {
+  buildMarkdownDocs,
   markdownToHtmlCompressed,
   markdownToHtmlCompressedHost,
-  buildMarkdownDocs,
   sumChunkBytes,
 } from "./utils.ts";
 
@@ -37,12 +37,10 @@ async function main() {
   let sink = 0;
 
   try {
-    
-     await runWorkers(
+    await runWorkers(
       pool.call.markdownToHtmlCompressed,
       markdowns,
     );
-
 
     console.log("Markdown -> HTML benchmark (mitata)");
     console.log("workload: parse + render + brotli");
@@ -58,7 +56,10 @@ async function main() {
         bench(
           `knitting (${THREADS} thread(s), ${DOCS.toLocaleString()} docs)`,
           async () => {
-            sink = await runWorkers(pool.call.markdownToHtmlCompressed, markdowns);
+            sink = await runWorkers(
+              pool.call.markdownToHtmlCompressed,
+              markdowns,
+            );
           },
         );
       });

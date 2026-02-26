@@ -1,8 +1,8 @@
 import { createPool, isMain } from "@vixeny/knitting";
 import {
+  buildMarkdownDocs,
   markdownToHtmlCompressed,
   markdownToHtmlCompressedHost,
-  buildMarkdownDocs,
   sumChunkBytes,
 } from "./utils.ts";
 

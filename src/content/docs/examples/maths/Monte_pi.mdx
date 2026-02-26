@@ -1,8 +1,8 @@
 ---
 title: Monte Carlo pi
-description: "Estimate π with parallel Monte Carlo"
+description: "Estimate pi by throwing darts at a circle -- embarrassingly parallel"
 hero:
-  title: 'Parallel Monte Carlo π'
+  title: 'Parallel Monte Carlo pi'
 sidebar:
   order: 2
 
@@ -17,38 +17,17 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/monte_carlo/pi.ts");
 export const pi_chunk = getCode("maths/monte_carlo/montecarlo_pi.ts");
 
-## What is this about
+The classic Monte Carlo dartboard: throw random points into a square, count how many land inside the unit circle, and estimate pi. Every point is independent, making this embarrassingly parallel and a clean demonstration of Knitting's map-reduce pattern.
 
-This example estimates **π (pi)** using a classic **Monte Carlo dartboard** idea, and uses Knitting to run the work across threads.
+## How it works
 
-We throw lots of random points into a square and count how many land inside the unit circle:
+Throw lots of random points into $$[-1,1]\times[-1,1]$$. A point is "inside" if $$x^2 + y^2 \le 1$$. Because areas scale nicely:
 
-* Points are uniform in $$[-1,1]\times[-1,1]$$
-* A point is “inside” if $$x^2 + y^2 \le 1$$
-
-Because areas scale nicely, we get:
 $$
 \pi \approx 4 \cdot \frac{\text{inside}}{\text{total}}
 $$
 
-The fun part: every point is independent, so it’s **embarrassingly parallel**.
-
-## What happens in this example
-
-1. The host creates a **pool of workers**.
-2. The host divides the total sample count into **chunks**.
-3. For each chunk, the host calls the worker task `piChunk(seed, samples)`.
-4. Each worker runs a tight inner loop:
-
-   * generate `(x, y)` with a fast deterministic RNG
-   * count how many fall inside the unit circle
-5. Each chunk returns a tiny summary: `{ inside, samples }`.
-6. The host aggregates chunk results and prints the final π estimate (plus a rough error scale).
-
-This structure mirrors real scientific workloads:
-
-* **embarrassingly parallel**: each chunk can run independently
-* **reduce step**: results are combined at the end
+The host divides the total sample count into chunks, dispatches each chunk to a worker via `piChunk(seed, samples)`, and each worker runs a tight inner loop with a fast deterministic RNG (xorshift32). Each chunk returns a tiny summary: `{ inside, samples }`. The host aggregates and prints the final estimate.
 
 ## Install
 
@@ -56,7 +35,7 @@ This structure mirrors real scientific workloads:
 <LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
 :::
 
-## Commands
+## Run
 
 :::info
 <RuntimeRunTabs
@@ -64,6 +43,20 @@ This structure mirrors real scientific workloads:
   denoCommand="deno run -A src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
   nodeCommand="npx tsx src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
 />
+:::
+
+Expected output:
+
+```
+threads: 6  samples: 50,000,000  chunk: 1,000,000
+dispatching 50 chunks...
+
+pi ~ 3.14159842  (error: +0.00000577)
+elapsed: 0.87s
+```
+
+:::note
+Monte Carlo error shrinks like `1/sqrtN` -- to halve the error, you need 4x more samples. With 50M samples you'll typically land within ~0.001 of the true value.
 :::
 
 ## Code
@@ -76,141 +69,23 @@ This structure mirrors real scientific workloads:
   </TabItem>
 </Tabs>
 
-## What is this good for
+## Why this is a good parallel pattern
 
-Monte Carlo parallelization is a great fit for problems where:
+This example captures the core scientific computing pattern: **map** (simulate many independent trials) then **reduce** (combine partial statistics). Each chunk returns a small summary, not raw data -- that's critical for keeping transfer overhead low.
 
-* experiments are independent
-* you want better accuracy by increasing sample count
-* the model is expensive or high-dimensional
+The same structure works for numerical integration, uncertainty propagation, risk estimation, statistical physics, and any problem you can phrase as "run many trials and combine results."
 
-Common uses:
+## Practical notes
 
-* **Numerical integration** (estimate integrals you can’t solve analytically)
-* **Uncertainty propagation** (how noisy inputs affect outputs)
-* **Risk estimation** (finance, reliability engineering)
-* **Statistical physics** (random walks, Ising models, diffusion)
-* **Computer graphics** (path tracing / light transport approximations)
-* **Optimization** (randomized search / sampling-based heuristics)
+**Chunk size matters.** Each task should do enough work to justify dispatch overhead. Start with 100k-5M iterations per chunk depending on your loop cost. Too small and overhead dominates; too big and you lose load balancing.
 
-If you can phrase your problem as “run many trials and combine results,” Knitting can usually help.
+**Seed carefully.** Use one base seed (so runs are reproducible) and derive a different per-chunk seed (so chunks don't share the same random stream). This example does this correctly.
 
----
+**Keep the inner loop tight.** Avoid allocations per iteration. This example uses xorshift32 instead of `Math.random()` for speed.
 
-## Scientific background you should know
+## Things to try
 
-### Monte Carlo in one sentence
-
-Monte Carlo approximates an expected value by averaging outcomes from randomized trials:
-$$
-\mathbb{E}[X] \approx \frac{1}{N}\sum_{i=1}^{N} X_i
-$$
-
-### Why it works
-
-As $$N$$ grows, the estimate converges by the **Law of Large Numbers**.
-
-### Error behavior
-
-Monte Carlo error typically shrinks like:
-$$
-\text{error} \propto \frac{1}{\sqrt{N}}
-$$
-
-This is why doubling accuracy is expensive: to reduce error by 10×, you often need ~100× more samples.
-
-### Reproducibility matters
-
-Scientific simulations need to be repeatable. That’s why this example uses deterministic seeds:
-
-* one base seed per run (so you can reproduce a result)
-* different per-chunk seeds (so chunks don’t reuse the same random stream)
-
----
-
-## How parallelization is done here
-
-The simulation is split into **chunks**:
-
-* Each chunk returns partial statistics:
-
-  * `inside`
-  * `samples`
-
-The host then combines chunk outputs. This is a standard pattern:
-
-* **map**: compute chunk stats
-* **reduce**: aggregate stats
-
-Key idea: send back **small summaries**, not giant arrays. Less copying, less overhead, more speed.
-
----
-
-## Lessons on using the scripts
-
-### 1) Choose chunk sizes that make sense
-
-Each task should do enough work to justify dispatch overhead.
-
-Rule of thumb:
-
-* If tasks are too small, overhead dominates → slower than single-threaded
-* If tasks are too big, you reduce load balancing and responsiveness
-
-Start with chunk sizes like:
-
-* `100k` to `5M` iterations per job (depends on your loop cost)
-
-### 2) Keep the inner loop “boringly tight”
-
-Avoid allocations and avoid calling expensive RNG APIs in your hot path. This example uses a tiny deterministic RNG (xorshift32) for speed.
-
-### 3) Seed carefully
-
-Use:
-
-* one base seed (so a run is reproducible)
-* different per-chunk seeds (so chunks don’t share the same random stream)
-
-This avoids accidental correlation between chunks.
-
-### 4) Validate results (don’t trust vibes)
-
-When teaching or benchmarking:
-
-* recompute an output on the host
-* validate invariants (counts non-negative, totals match)
-* check that results stay stable if you fix seeds
-
----
-
-## Performance notes and what to look for
-
-### When you should see speedups
-
-* simulation loop is CPU-heavy
-* minimal allocation inside the loop
-* chunks are large enough
-* you have multiple physical cores
-
-### When you might not
-
-* you have tiny tasks
-* your loop spends time in IO or awaits
-* memory bandwidth is the bottleneck
-* your chunk result is huge and expensive to transfer
-
-### What “good behavior” looks like
-
-* throughput increases with more threads (until cores saturate)
-* p99 latency is stable
-* results are reproducible under fixed seeds
-
----
-
-## Suggested exercises
-
-1. Increase `--samples` and watch how the estimate stabilizes.
-2. Try different `--chunk` sizes and measure throughput.
-3. Fix the seed base and confirm the output is identical across runs.
+1. Increase `--samples` to 500M and watch the estimate stabilize.
+2. Try different `--chunk` sizes and measure throughput -- there's a sweet spot.
+3. Fix the seed and confirm identical output across runs.
 4. Modify the worker to also return timing per chunk and plot a histogram.

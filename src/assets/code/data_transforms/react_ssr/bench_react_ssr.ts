@@ -6,8 +6,6 @@ import { buildUserPayloads } from "./utils.ts";
 const THREADS = 1;
 const REQUESTS = 2_000;
 
-
-
 async function main() {
   const payloads = buildUserPayloads(REQUESTS);
   const pool = createPool({
@@ -80,7 +78,6 @@ async function runWorkers(
 
 if (isMain) {
   main().catch((error) => {
-
     console.error(error);
     process.exitCode = 1;
   });

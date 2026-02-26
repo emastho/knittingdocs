@@ -14,8 +14,6 @@ const ITERATIONS = 1_200;
 const KEY_BYTES = 32;
 const SALT_BYTES = 16;
 
-
-
 async function main() {
   const packets = buildDemoHashPackets({
     count: REQUESTS,
@@ -50,10 +48,13 @@ async function main() {
 
     boxplot(() => {
       summary(() => {
-        bench(`host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`, async () => {
-          const totals = await runHostBatches(batches);
-          sink = totals.outputBytes ^ totals.digestXor;
-        });
+        bench(
+          `host (${REQUESTS.toLocaleString()} req, batch ${BATCH})`,
+          async () => {
+            const totals = await runHostBatches(batches);
+            sink = totals.outputBytes ^ totals.digestXor;
+          },
+        );
 
         bench(
           `knitting (${THREADS} thread${
@@ -76,7 +77,6 @@ async function main() {
     pool.shutdown();
   }
 }
-
 
 function makeBatches(packets: Uint8Array[], batchSize: number): Uint8Array[][] {
   const out: Uint8Array[][] = [];

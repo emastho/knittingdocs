@@ -1,6 +1,6 @@
 ---
 title: React SSR compression
-description: A practical SSR+compression example with a simple host-vs-worker benchmark.
+description: SSR + Brotli compression on workers -- testing where compression should live.
 hero:
   title: 'SSR + compression'
 sidebar:
@@ -19,23 +19,15 @@ export const bench = getCode("data_transforms/react_ssr_compress/bench_react_ssr
 export const component = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
 export const utils = getCode("data_transforms/react_ssr_compress/utils.ts");
 
+Takes the React SSR example one step further: after rendering HTML, compress it with Brotli. This tests whether it's better to compress on the worker (render + compress in one shot) or on the host (render on worker, compress on main thread). Spoiler: doing both on the worker usually wins because you avoid sending uncompressed HTML back across the thread boundary.
 
-## What is this about
+## How it works
 
-This example focuses on two files:
+The host generates JSON payload strings. Both paths render the same user card component, then Brotli-compress the HTML output. The benchmark compares compressed byte totals for parity, then measures throughput.
 
-1. `bench_react_ssr_compress.ts` runs a host-vs-worker `mitata` benchmark with fixed settings.
-2. `render_user_card_compressed.tsx` isolates the compression task.
-
-Shared payload/compression helpers live in `utils.ts` so benchmark and task files stay focused.
-
-## Technologies used (and why)
-
-- **React SSR (`renderToString`)**: generates real HTML workload before compression.
-- **Brotli (`node:zlib`)**: models CPU-heavy response compression on the server path.
-- **Knitting tasks**: compares direct host compression and worker task compression.
-- **JSON payload strings**: keeps parse + normalize cost visible, not just compression cost.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+- `bench_react_ssr_compress.ts` -- the benchmark
+- `render_user_card_compressed.tsx` -- the SSR + compression task
+- `utils.ts` -- shared payload and compression helpers
 
 ## Install
 
@@ -47,9 +39,9 @@ Shared payload/compression helpers live in `utils.ts` so benchmark and task file
 />
 :::
 
-Compression uses the built-in `node:zlib` APIs (no extra packages required).
+Compression uses built-in `node:zlib` -- no extra packages.
 
-## Quick bench
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -58,22 +50,19 @@ Compression uses the built-in `node:zlib` APIs (no extra packages required).
 />
 :::
 
-## What happens in this example
+Expected output:
 
-1. The host generates JSON payload strings.
-2. The host path renders HTML and compresses with Brotli.
-3. The worker path runs the same compression logic via `renderUserCardCompressed`.
-4. Host and worker compressed-byte totals are compared for parity.
-5. `mitata` reports timing and relative speed for host and worker runs.
+```
+byte parity check: host=42,380  worker=42,380  OK match
 
-## What the benchmark measures
+benchmark        avg (ns)    min ... max (ns)
+host              45,600     41,200 ... 58,300
+knitting          24,100     21,800 ... 32,400
+```
 
-- `host`: parse + SSR + Brotli compress via direct imports.
-- `knitting`: the same payload set through compression task calls.
-- Byte parity is reported to verify output consistency.
+Brotli is significantly more expensive than `renderToString` alone, so the worker advantage is more pronounced here than in the plain SSR example.
 
 <DontDoubleParseTip />
-
 
 ## Code
 
@@ -85,15 +74,10 @@ Compression uses the built-in `node:zlib` APIs (no extra packages required).
     <Code code={bench} lang="ts" title={"bench_react_ssr_compress.ts"} />
   </TabItem>
     <TabItem label="utils.ts">
-    <Code code={utils} lang="tsx" title={"utils.ts"} />
+    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 
+## Compression placement matters
 
-
-## Why this pattern matters
-
-- It isolates card-compression logic from benchmark orchestration.
-- It centralizes repetitive payload/compression helpers in `utils.ts`.
-- It keeps benchmark commands simple and reproducible.
-- It compares host imports and task execution with one workload shape.
+Where you compress affects both throughput and data transfer. If you compress on the worker, you send a small compressed buffer back to the host. If you compress on the host, you first transfer the full uncompressed HTML string across the thread boundary, then compress it. For response compression in a real server, doing render + compress on the worker is almost always the right call.

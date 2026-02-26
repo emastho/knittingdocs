@@ -1,6 +1,6 @@
 ---
 title: Salt hashing
-description: Password salting + PBKDF2 hashing with a simple host-vs-worker benchmark.
+description: PBKDF2 password hashing with constant-time verification -- the heaviest per-call workload in the validation set.
 hero:
   title: 'Salting + hashing'
 sidebar:
@@ -17,20 +17,22 @@ export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
 export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
 export const utils = getCode("data_transforms/salt_hashing/utils.ts");
 
-## What is this about
+Derives password hashes with PBKDF2-SHA256 and verifies them with constant-time comparison. This is the heaviest per-call workload in the validation set -- each hash derivation is genuinely CPU-expensive by design (that's the point of PBKDF2).
 
-This example is split into three files:
+## How it works
 
-1. `salt_knitting.ts` runs salting + hashing checks in host and Knitting modes.
-2. `utils.ts` isolates hashing, verification, and packet fast-path functions.
-3. `bench_salt_hashing.ts` runs a host-vs-worker benchmark with `mitata`.
+1. Generate a random salt per password.
+2. Derive a hash using `PBKDF2-SHA256` via Web Crypto.
+3. Store as a compact record: `algorithm$iterations$keyBytes$salt$hash`.
+4. Verify login attempts by recomputing and constant-time comparing.
 
-## Technologies used (and why)
+The benchmark uses `Uint8Array` payloads to reduce serialization noise in hot loops.
 
-- **Web Crypto (`PBKDF2` + `SHA-256`)**: standard password derivation path with explicit iteration cost.
-- **Knitting tasks**: lets you compare host imports and worker execution with the same function logic.
-- **`Uint8Array` packets**: benchmark path uses typed-array payloads to reduce serialization noise in hot loops.
-- **`mitata`**: provides a standard benchmark harness for host vs worker runs.
+Three files:
+
+- `salt_knitting.ts` -- runs salting + verification in host and Knitting modes
+- `utils.ts` -- hashing, verification, and fast-path packet functions
+- `bench_salt_hashing.ts` -- host-vs-worker benchmark with `mitata`
 
 ## Install
 
@@ -42,7 +44,7 @@ This example is split into three files:
 />
 :::
 
-This example uses built-in Web Crypto APIs, so no extra crypto package is required.
+Uses built-in Web Crypto APIs -- no extra crypto package required.
 
 ## Run
 
@@ -54,7 +56,17 @@ This example uses built-in Web Crypto APIs, so no extra crypto package is requir
 />
 :::
 
-## Quick bench
+Expected output:
+
+```
+-- host mode --
+  hashed: 100  verified: 100  mismatches: 0
+
+-- knitting mode (2 threads) --
+  hashed: 100  verified: 100  mismatches: 0
+```
+
+## Benchmark
 
 :::info
 <RuntimeRunTabs
@@ -63,18 +75,7 @@ This example uses built-in Web Crypto APIs, so no extra crypto package is requir
 />
 :::
 
-## What happens in this example
-
-1. Generate or receive per-password salt bytes.
-2. Derive a hash using `PBKDF2-SHA256`.
-3. Persist a compact record format (`algorithm$iterations$keyBytes$salt$hash`).
-4. Verify login attempts by recomputing and constant-time comparing hashes.
-
-## What the benchmark measures
-
-- `host`: hash typed-array packets through direct function imports.
-- `knitting`: hash the same packets using worker task calls.
-- Batch calls reduce dispatch overhead and keep comparison stable.
+Compares hashing typed-array packets through direct imports (`host`) vs worker task calls (`knitting`). Because PBKDF2 is intentionally slow (high iteration count), this is where workers shine most -- each call does enough real work to easily justify dispatch overhead.
 
 ## Code
 
@@ -90,8 +91,6 @@ This example uses built-in Web Crypto APIs, so no extra crypto package is requir
   </TabItem>
 </Tabs>
 
-## Why this pattern matters
+## The ideal offload candidate
 
-- It keeps password storage flow explicit and deterministic.
-- It keeps benchmark commands simple and reproducible.
-- It compares host imports and task execution with one workload shape.
+Password hashing is one of those tasks where workers are almost always worth it. The work is CPU-bound, each call is independent, the input and output are small, and -- critically -- you *want* it to be slow (high iterations = harder to brute force). That's a perfect storm for offloading: expensive per-call work that would otherwise block your event loop during login/signup spikes.
