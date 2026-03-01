@@ -4,7 +4,8 @@ import { Hono } from "hono";
 import { issueJwt } from "./hono_components_jwt.ts";
 import { renderSsrPage } from "./hono_componets_ssr.tsx";
 
-const handlers = createPool({})({
+const handlers = createPool({
+})({
   issueJwt,
   renderSsrPage,
 });

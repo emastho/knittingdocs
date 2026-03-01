@@ -187,10 +187,10 @@ Knitting lets you run tasks across worker threads as if they were normal functio
       The easiest win? Take the heavy stuff -- SSR, parsing, crypto, compression -- and toss it into a worker pool. Your main thread stays free to handle requests.
 
       In the Hono server example we saw:
-      - SSR-only throughput: **~+90%** (about **1.9x**).
-      - Mixed load (ping + jwt + ssr together): `/ping` **~+59%**, `/jwt` **~+57%**, `/ssr` **~+58%**.
+      - Throughput: `/ping` **2998 → 5471 (+82%)**, `/ssr` **2998 → 5421 (+81%)**, `/jwt` **2916 → 5454 (+87%)** — roughly **1.8× across the board**.
+      - Latency: median and `p99` roughly halve for all routes, and the JWT tail (`p99.9`) falls by **~48%**, so even the slowest hops get faster.
 
-      It's simple: without workers, one expensive request hogs the main thread and everything else waits. Even a single worker thread unblocks that, and your cheap routes keep flowing.
+      It's simple: offloading expensive work keeps the main thread free, so cheap routes keep flowing while heavy work runs in workers.
 
       Try it yourself:
       - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/hono_server)
