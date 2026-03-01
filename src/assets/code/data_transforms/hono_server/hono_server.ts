@@ -1,13 +1,7 @@
 import { serve } from "@hono/node-server";
-import { createPool } from "@vixeny/knitting";
 import { Hono } from "hono";
-import { issueJwt } from "./hono_components_jwt.ts";
-import { renderSsrPage } from "./hono_componets_ssr.tsx";
-
-const handlers = createPool({})({
-  issueJwt,
-  renderSsrPage,
-});
+import { issueJwtHost } from "./hono_components_jwt.ts";
+import { renderSsrPageHost } from "./hono_componets_ssr.tsx";
 
 async function main() {
   const app = new Hono();
@@ -27,7 +21,7 @@ async function main() {
       return c.json({ ok: false, reason: "body: expected JSON object" }, 400);
     }
 
-    const html = await handlers.call.renderSsrPage(rawPayload);
+    const html = renderSsrPageHost(rawPayload);
     return c.html(html);
   });
 
@@ -38,7 +32,7 @@ async function main() {
       return c.json({ ok: false, reason: "body: expected JSON object" }, 400);
     }
 
-    const responseJson = await handlers.call.issueJwt(payload);
+    const responseJson = await issueJwtHost(payload);
 
     return c.body(responseJson ?? "Bad request", responseJson ? 200 : 400, {
       "content-type": "application/json; charset=utf-8",
@@ -52,8 +46,6 @@ async function main() {
   });
 
   const close = () => {
-    // IMPORTANT TO CLOSE CONNECTION
-    handlers.shutdown();
     server.close();
   };
 

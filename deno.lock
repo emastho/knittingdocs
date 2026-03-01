@@ -3,22 +3,22 @@
   "specifiers": {
     "npm:@astrojs/starlight@~0.34.4": "0.34.8_astro@5.17.1__vite@6.4.1___picomatch@4.0.3__zod@3.25.76",
     "npm:@hono/node-server@^1.19.9": "1.19.9_hono@4.11.9",
-    "npm:@jsr/vixeny__knitting@0.1.8": "0.1.8",
+    "npm:@jsr/vixeny__knitting@0.1.13": "0.1.13",
     "npm:@types/react-dom@^19.2.3": "19.2.3_@types+react@19.2.14",
     "npm:@types/react@^19.2.14": "19.2.14",
-    "npm:astro@^5.6.1": "5.17.1_vite@6.4.1__picomatch@4.0.3_zod@3.25.76",
+    "npm:astro@^5.17.1": "5.17.1_vite@6.4.1__picomatch@4.0.3_zod@3.25.76",
     "npm:hono@^4.11.9": "4.11.9",
     "npm:katex@~0.16.28": "0.16.28",
     "npm:marked@^17.0.2": "17.0.2",
     "npm:mitata@^1.0.34": "1.0.34",
-    "npm:openai@^6.21.0": "6.22.0_zod@4.3.6",
+    "npm:openai@^6.21.0": "6.22.0_zod@3.25.76",
     "npm:react-dom@^19.2.4": "19.2.4_react@19.2.4",
     "npm:react@^19.2.4": "19.2.4",
     "npm:rehype-katex@^7.0.1": "7.0.1",
     "npm:remark-math@6": "6.0.0",
     "npm:sharp@~0.34.2": "0.34.5",
     "npm:tiktoken@^1.0.22": "1.0.22",
-    "npm:zod@^4.3.6": "4.3.6"
+    "npm:zod@^3.25.76": "3.25.76"
   },
   "npm": {
     "@astrojs/compiler@2.13.0": {
@@ -83,7 +83,7 @@
       "dependencies": [
         "sitemap",
         "stream-replace-string",
-        "zod@3.25.76"
+        "zod"
       ]
     },
     "@astrojs/starlight@0.34.8_astro@5.17.1__vite@6.4.1___picomatch@4.0.3__zod@3.25.76": {
@@ -496,9 +496,9 @@
     "@jridgewell/sourcemap-codec@1.5.5": {
       "integrity": "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="
     },
-    "@jsr/vixeny__knitting@0.1.8": {
-      "integrity": "sha512-fTn52elyPm6GGLqSc581wo0HNsIQEBZDouD6t8GgmPf5FQz8vItmY0zt8WNhz+pVbqd1wsMRfPZI4m0XJdMc5w==",
-      "tarball": "https://npm.jsr.io/~/11/@jsr/vixeny__knitting/0.1.8.tgz"
+    "@jsr/vixeny__knitting@0.1.13": {
+      "integrity": "sha512-ksEJVv4PUbvZTpQZhF4S6TWCRLOFU+noNri9bJNx7lJu3D+FBx/pZVqZ35T6PFj4hLgs98/4Uo0W2u6L5SfM+g==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/vixeny__knitting/0.1.13.tgz"
     },
     "@mdx-js/mdx@3.1.1_acorn@8.15.0": {
       "integrity": "sha512-f6ZO2ifpwAQIpzGWaBQT2TXxPv6z3RBzQKpVftEWN78Vl/YweF1uwussDx8ECAXVtr3Rs89fKyG9YlzUs9DyGQ==",
@@ -944,7 +944,7 @@
         "xxhash-wasm",
         "yargs-parser",
         "yocto-spinner",
-        "zod@3.25.76",
+        "zod",
         "zod-to-json-schema",
         "zod-to-ts"
       ],
@@ -2341,13 +2341,13 @@
         "regex-recursion"
       ]
     },
-    "openai@6.22.0_zod@4.3.6": {
+    "openai@6.22.0_zod@3.25.76": {
       "integrity": "sha512-7Yvy17F33Bi9RutWbsaYt5hJEEJ/krRPOrwan+f9aCPuMat1WVsb2VNSII5W1EksKT6fF69TG/xj4XzodK3JZw==",
       "dependencies": [
-        "zod@4.3.6"
+        "zod"
       ],
       "optionalPeers": [
-        "zod@4.3.6"
+        "zod"
       ],
       "bin": true
     },
@@ -3114,21 +3114,18 @@
     "zod-to-json-schema@3.25.1_zod@3.25.76": {
       "integrity": "sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==",
       "dependencies": [
-        "zod@3.25.76"
+        "zod"
       ]
     },
     "zod-to-ts@1.2.0_typescript@5.9.3_zod@3.25.76": {
       "integrity": "sha512-x30XE43V+InwGpvTySRNz9kB7qFU8DlyEy7BsSTCHPH1R0QasMmHWZDCzYm6bVXtj/9NNJAZF3jW8rzFvH5OFA==",
       "dependencies": [
         "typescript",
-        "zod@3.25.76"
+        "zod"
       ]
     },
     "zod@3.25.76": {
       "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
-    },
-    "zod@4.3.6": {
-      "integrity": "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="
     },
     "zwitch@2.0.4": {
       "integrity": "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="
@@ -3139,10 +3136,10 @@
       "dependencies": [
         "npm:@astrojs/starlight@~0.34.4",
         "npm:@hono/node-server@^1.19.9",
-        "npm:@jsr/vixeny__knitting@0.1.8",
+        "npm:@jsr/vixeny__knitting@0.1.13",
         "npm:@types/react-dom@^19.2.3",
         "npm:@types/react@^19.2.14",
-        "npm:astro@^5.6.1",
+        "npm:astro@^5.17.1",
         "npm:hono@^4.11.9",
         "npm:katex@~0.16.28",
         "npm:marked@^17.0.2",
@@ -3154,7 +3151,7 @@
         "npm:remark-math@6",
         "npm:sharp@~0.34.2",
         "npm:tiktoken@^1.0.22",
-        "npm:zod@^4.3.6"
+        "npm:zod@^3.25.76"
       ]
     }
   }

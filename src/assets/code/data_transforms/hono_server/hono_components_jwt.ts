@@ -41,7 +41,7 @@ const JwtPayloadSchema = z.object({
   ttlSec: TtlSecSchema.optional().default(900),
 });
 
-async function issueJwtHost(rawPayload: string): Promise<string | null> {
+export async function issueJwtHost(rawPayload: string): Promise<string | null> {
   const parsedResult = ParsedJsonObjectSchema.safeParse(rawPayload);
   if (!parsedResult.success) {
     return null;

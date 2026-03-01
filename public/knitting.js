@@ -1,5 +1,9 @@
 // src/worker/loop.ts
-import { isMainThread as isMainThread3, workerData, MessageChannel } from "node:worker_threads";
+import {
+  isMainThread as isMainThread3,
+  MessageChannel,
+  workerData,
+} from "node:worker_threads";
 
 // src/ipc/tools/RingQueue.ts
 class RingQueue {
@@ -10,8 +14,9 @@ class RingQueue {
   #size = 0;
   constructor(capacity = 512) {
     let cap = 2;
-    while (cap < capacity)
+    while (cap < capacity) {
       cap <<= 1;
+    }
     this.#buf = new Array(cap).fill(null);
     this.#mask = cap - 1;
   }
@@ -33,16 +38,19 @@ class RingQueue {
     return this.#size === 0 ? undefined : this.#buf[this.#head];
   }
   reserve(minCapacity) {
-    if (minCapacity <= this.capacity)
+    if (minCapacity <= this.capacity) {
       return;
+    }
     let cap = this.capacity;
-    while (cap < minCapacity)
+    while (cap < minCapacity) {
       cap <<= 1;
+    }
     this.#growTo(cap);
   }
   #growIfFull() {
-    if (this.#size !== this.#mask + 1)
+    if (this.#size !== this.#mask + 1) {
       return;
+    }
     this.#growTo(this.#mask + 1 << 1);
   }
   #growTo(newCap) {
@@ -52,10 +60,10 @@ class RingQueue {
     const next = new Array(newCap).fill(null);
     const head = this.#head;
     const firstLen = Math.min(n, oldCap - head);
-    for (let i = 0;i < firstLen; i++) {
+    for (let i = 0; i < firstLen; i++) {
       next[i] = oldBuf[head + i];
     }
-    for (let i = firstLen;i < n; i++) {
+    for (let i = firstLen; i < n; i++) {
       next[i] = oldBuf[i - firstLen];
     }
     this.#buf = next;
@@ -85,8 +93,9 @@ class RingQueue {
   }
   shift() {
     const size = this.#size;
-    if (size === 0)
+    if (size === 0) {
       return;
+    }
     const head = this.#head;
     const buf = this.#buf;
     const v = buf[head];
@@ -97,8 +106,9 @@ class RingQueue {
   }
   shiftNoClear() {
     const size = this.#size;
-    if (size === 0)
+    if (size === 0) {
       return;
+    }
     const head = this.#head;
     const v = this.#buf[head];
     this.#head = head + 1 & this.#mask;
@@ -113,8 +123,9 @@ class RingQueue {
     const n = this.#size;
     while (i < n) {
       const v = buf[idx];
-      if (v !== null)
+      if (v !== null) {
         yield v;
+      }
       idx = idx + 1 & mask;
       i++;
     }
@@ -124,7 +135,7 @@ class RingQueue {
     const buf = this.#buf;
     const mask = this.#mask;
     let idx = this.#head;
-    for (let i = 0;i < out.length; i++) {
+    for (let i = 0; i < out.length; i++) {
       out[i] = buf[idx];
       idx = idx + 1 & mask;
     }
@@ -155,30 +166,36 @@ var register = ({ lockSector }) => {
   let hostLast = 0 | 0;
   let workerLast = 0 | 0;
   let updateTableCounter = 0;
-  const startAndIndexToArray = (length) => Array.from(startAndIndex.subarray(0, length));
+  const startAndIndexToArray = (length) =>
+    Array.from(startAndIndex.subarray(0, length));
   const compactSectorStable = (b) => {
     const sai = startAndIndex;
     let w = 0 | 0;
     let r = 0 | 0;
     b = b | 0;
-    for (;r + 3 < b; r += 4) {
+    for (; r + 3 < b; r += 4) {
       const v0 = sai[r];
       const v1 = sai[r + 1];
       const v2 = sai[r + 2];
       const v3 = sai[r + 3];
-      if (v0 !== EMPTY)
+      if (v0 !== EMPTY) {
         sai[w++] = v0;
-      if (v1 !== EMPTY)
+      }
+      if (v1 !== EMPTY) {
         sai[w++] = v1;
-      if (v2 !== EMPTY)
+      }
+      if (v2 !== EMPTY) {
         sai[w++] = v2;
-      if (v3 !== EMPTY)
+      }
+      if (v3 !== EMPTY) {
         sai[w++] = v3;
+      }
     }
-    for (;r < b; r++) {
+    for (; r < b; r++) {
       const v = sai[r];
-      if (v !== EMPTY)
+      if (v !== EMPTY) {
         sai[w++] = v;
+      }
     }
     return w;
   };
@@ -186,21 +203,24 @@ var register = ({ lockSector }) => {
     const w = a_load(workerBits, 0) | 0;
     const state = (hostLast ^ w) >>> 0;
     let freeBits = ~state >>> 0;
-    if (tableLength === 0 || freeBits === 0)
+    if (tableLength === 0 || freeBits === 0) {
       return;
+    }
     if (freeBits === EMPTY) {
       tableLength = 0;
       usedBits = 0 | 0;
       return;
     }
     freeBits &= usedBits;
-    if (freeBits === 0)
+    if (freeBits === 0) {
       return;
+    }
     const sai = startAndIndex;
-    for (let i = 0;i < tableLength; i++) {
+    for (let i = 0; i < tableLength; i++) {
       const v = sai[i];
-      if (v === EMPTY)
+      if (v === EMPTY) {
         continue;
+      }
       if ((freeBits & 1 << (v & SLOT_MASK)) !== 0) {
         sai[i] = EMPTY;
       }
@@ -210,16 +230,19 @@ var register = ({ lockSector }) => {
   };
   const allocTask = (task) => {
     updateTableCounter = updateTableCounter + 1 & 3;
-    if (updateTableCounter === 0)
+    if (updateTableCounter === 0) {
       updateTable();
+    }
     const payloadLen = task[5 /* PayloadLen */] | 0;
     const size = payloadLen + 63 & ~63;
     const freeBits = ~usedBits >>> 0;
     const freeBit = (freeBits & -freeBits) >>> 0;
-    if (freeBit === 0)
+    if (freeBit === 0) {
       return -1;
-    if (tableLength >= 32 /* slots */)
+    }
+    if (tableLength >= 32 /* slots */) {
       return -1;
+    }
     const slotIndex = 31 - clz32(freeBit);
     const sai = startAndIndex;
     const sz = size64bit;
@@ -246,13 +269,14 @@ var register = ({ lockSector }) => {
       hostLast ^= freeBit;
       return a_store(hostBits, 0, hostLast);
     }
-    for (let at = 0;at + 1 < tl; at++) {
+    for (let at = 0; at + 1 < tl; at++) {
       const cur = sai[at];
       const curStart = cur & START_MASK;
       const curEnd = curStart + (sz[cur & SLOT_MASK] >>> 0) >>> 0;
       const nextStart = sai[at + 1] & START_MASK;
-      if (nextStart - curEnd >>> 0 < size >>> 0)
+      if (nextStart - curEnd >>> 0 < size >>> 0) {
         continue;
+      }
       saiCopyWithin(at + 2, at + 1, tl);
       sai[at + 1] = (curEnd | slotIndex) >>> 0;
       sz[slotIndex] = size;
@@ -281,14 +305,17 @@ var register = ({ lockSector }) => {
   const setSlotLength = (slotIndex, payloadLen) => {
     slotIndex = slotIndex & TASK_SLOT_INDEX_MASK;
     const bit = 1 << slotIndex;
-    if ((usedBits & bit) === 0)
+    if ((usedBits & bit) === 0) {
       return false;
+    }
     const current = size64bit[slotIndex] >>> 0;
     const aligned = (payloadLen | 0) + 63 & ~63;
-    if (aligned < 0)
+    if (aligned < 0) {
       return false;
-    if (aligned >>> 0 > current)
+    }
+    if (aligned >>> 0 > current) {
       return false;
+    }
     size64bit[slotIndex] = aligned >>> 0;
     return true;
   };
@@ -305,7 +332,7 @@ var register = ({ lockSector }) => {
     hostBits,
     workerBits,
     updateTable,
-    startAndIndexToArray
+    startAndIndexToArray,
   };
 };
 
@@ -316,10 +343,14 @@ import { Buffer as NodeBuffer } from "node:buffer";
 var globals = globalThis;
 var IS_DENO = typeof globals.Deno?.version?.deno === "string";
 var IS_BUN = typeof globals.Bun?.version === "string";
-var IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
+var IS_NODE = typeof process !== "undefined" &&
+  typeof process.versions?.node === "string";
 var RUNTIME = IS_DENO ? "deno" : IS_BUN ? "bun" : IS_NODE ? "node" : "unknown";
-var SET_IMMEDIATE = typeof globals.setImmediate === "function" ? globals.setImmediate : undefined;
-var HAS_SAB_GROW = typeof SharedArrayBuffer === "function" && typeof SharedArrayBuffer.prototype.grow === "function";
+var SET_IMMEDIATE = typeof globals.setImmediate === "function"
+  ? globals.setImmediate
+  : undefined;
+var HAS_SAB_GROW = typeof SharedArrayBuffer === "function" &&
+  typeof SharedArrayBuffer.prototype.grow === "function";
 var createSharedArrayBuffer = (byteLength, maxByteLength) => {
   if (HAS_SAB_GROW && typeof maxByteLength === "number") {
     return new SharedArrayBuffer(byteLength, { maxByteLength });
@@ -329,17 +360,18 @@ var createSharedArrayBuffer = (byteLength, maxByteLength) => {
 
 // src/memory/createSharedBufferIO.ts
 var page = 1024 * 4;
-var textEncode = new TextEncoder;
+var textEncode = new TextEncoder();
 var SignalEnumOptions;
 ((SignalEnumOptions2) => {
   SignalEnumOptions2[SignalEnumOptions2["header"] = 64] = "header";
-  SignalEnumOptions2[SignalEnumOptions2["maxByteLength"] = page * page] = "maxByteLength";
+  SignalEnumOptions2[SignalEnumOptions2["maxByteLength"] = page * page] =
+    "maxByteLength";
   SignalEnumOptions2[SignalEnumOptions2["defaultSize"] = page] = "defaultSize";
   SignalEnumOptions2[SignalEnumOptions2["safePadding"] = page] = "safePadding";
 })(SignalEnumOptions ||= {});
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
 var createSharedDynamicBufferIO = ({
-  sab
+  sab,
 }) => {
   const maxBytes = 64 * 1024 * 1024;
   const initialBytes = HAS_SAB_GROW ? 4 * 1024 * 1024 : maxBytes;
@@ -356,18 +388,32 @@ var createSharedDynamicBufferIO = ({
   let f64 = new Float64Array(lockSAB, 64 /* header */);
   const capacityBytes = () => lockSAB.byteLength - 64 /* header */;
   const ensureCapacity = (neededBytes) => {
-    if (capacityBytes() >= neededBytes)
+    if (capacityBytes() >= neededBytes) {
       return true;
-    if (!HAS_SAB_GROW || typeof lockSAB.grow !== "function")
+    }
+    if (!HAS_SAB_GROW || typeof lockSAB.grow !== "function") {
       return false;
+    }
     try {
-      lockSAB.grow(alignUpto64(64 /* header */ + neededBytes + SignalEnumOptions.safePadding));
+      lockSAB.grow(
+        alignUpto64(
+          64 /* header */ + neededBytes + SignalEnumOptions.safePadding,
+        ),
+      );
     } catch {
       return false;
     }
-    u8 = new Uint8Array(lockSAB, 64 /* header */, lockSAB.byteLength - 64 /* header */);
+    u8 = new Uint8Array(
+      lockSAB,
+      64, /* header */
+      lockSAB.byteLength - 64, /* header */
+    );
     buf = requireBufferView(lockSAB);
-    f64 = new Float64Array(lockSAB, 64 /* header */, lockSAB.byteLength - 64 /* header */ >>> 3);
+    f64 = new Float64Array(
+      lockSAB,
+      64, /* header */
+      lockSAB.byteLength - 64 /* header */ >>> 3,
+    );
     return true;
   };
   const readUtf8 = (start, end) => {
@@ -393,28 +439,35 @@ var createSharedDynamicBufferIO = ({
   const readBytesBufferCopy = (start, end) => {
     const length = Math.max(0, end - start | 0);
     const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
+    if (length === 0) {
       return out;
+    }
     buf.copy(out, 0, start, end);
     return out;
   };
   const readBytesArrayBufferCopy = (start, end) => {
     const length = Math.max(0, end - start | 0);
     const out = new Uint8Array(length);
-    if (length === 0)
+    if (length === 0) {
       return out.buffer;
+    }
     buf.copy(out, 0, start, end);
     return out.buffer;
   };
   const read8BytesFloatCopy = (start, end) => f64.slice(start >>> 3, end >>> 3);
-  const read8BytesFloatView = (start, end) => f64.subarray(start >>> 3, end >>> 3);
+  const read8BytesFloatView = (start, end) =>
+    f64.subarray(start >>> 3, end >>> 3);
   const writeUtf8 = (str, start, reservedBytes = str.length * 3) => {
     if (!ensureCapacity(start + reservedBytes)) {
       throw new RangeError("Shared buffer capacity exceeded");
     }
-    const { read, written } = textEncode.encodeInto(str, u8.subarray(start, start + reservedBytes));
-    if (read !== str.length)
+    const { read, written } = textEncode.encodeInto(
+      str,
+      u8.subarray(start, start + reservedBytes),
+    );
+    if (read !== str.length) {
       throw new RangeError("Shared buffer capacity exceeded");
+    }
     return written;
   };
   return {
@@ -427,11 +480,11 @@ var createSharedDynamicBufferIO = ({
     readBytesArrayBufferCopy,
     read8BytesFloatCopy,
     read8BytesFloatView,
-    writeUtf8
+    writeUtf8,
   };
 };
 var createSharedStaticBufferIO = ({
-  headersBuffer
+  headersBuffer,
 }) => {
   const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
   const slotStride = 0 /* header */ + 128 /* TotalBuff */;
@@ -439,32 +492,43 @@ var createSharedStaticBufferIO = ({
   const slotOffset = (at) => at * slotStride + 0 /* header */;
   const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
   const arrU8Sec = Array.from({
-    length: 32 /* slots */
+    length: 32, /* slots */
   }, (_, i) => new Uint8Array(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrBuffSec = Array.from({ length: 32 /* slots */ }, (_, i) => NodeBuffer.from(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrF64Sec = Array.from({
-    length: 32 /* slots */
-  }, (_, i) => new Float64Array(headersBuffer, slotStartBytes(i), writableBytes >>> 3));
-  const canWrite = (start, length) => (start | 0) >= 0 && start + length <= writableBytes;
+  const arrBuffSec = Array.from(
+    { length: 32 /* slots */ },
+    (_, i) => NodeBuffer.from(headersBuffer, slotStartBytes(i), writableBytes),
+  );
+  const arrF64Sec = Array.from(
+    {
+      length: 32, /* slots */
+    },
+    (_, i) =>
+      new Float64Array(headersBuffer, slotStartBytes(i), writableBytes >>> 3),
+  );
+  const canWrite = (start, length) =>
+    (start | 0) >= 0 && start + length <= writableBytes;
   const writeUtf8 = (str, at) => {
     const { read, written } = textEncode.encodeInto(str, arrU8Sec[at]);
-    if (read !== str.length)
+    if (read !== str.length) {
       return -1;
+    }
     return written;
   };
   const readUtf8 = (start, end, at) => {
     return arrBuffSec[at].toString("utf8", start, end);
   };
   const writeBinary = (src, at, start = 0) => {
-    if (!canWrite(start, src.byteLength))
+    if (!canWrite(start, src.byteLength)) {
       return -1;
+    }
     arrU8Sec[at].set(src, start);
     return src.byteLength;
   };
   const write8Binary = (src, at, start = 0) => {
     const bytes = src.byteLength;
-    if (!canWrite(start, bytes))
+    if (!canWrite(start, bytes)) {
       return -1;
+    }
     arrF64Sec[at].set(src, start >>> 3);
     return bytes;
   };
@@ -473,21 +537,25 @@ var createSharedStaticBufferIO = ({
   const readBytesBufferCopy = (start, end, at) => {
     const length = Math.max(0, end - start | 0);
     const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
+    if (length === 0) {
       return out;
+    }
     arrBuffSec[at].copy(out, 0, start, end);
     return out;
   };
   const readBytesArrayBufferCopy = (start, end, at) => {
     const length = Math.max(0, end - start | 0);
     const out = new Uint8Array(length);
-    if (length === 0)
+    if (length === 0) {
       return out.buffer;
+    }
     arrBuffSec[at].copy(out, 0, start, end);
     return out.buffer;
   };
-  const read8BytesFloatCopy = (start, end, at) => arrF64Sec[at].slice(start >>> 3, end >>> 3);
-  const read8BytesFloatView = (start, end, at) => arrF64Sec[at].subarray(start >>> 3, end >>> 3);
+  const read8BytesFloatCopy = (start, end, at) =>
+    arrF64Sec[at].slice(start >>> 3, end >>> 3);
+  const read8BytesFloatView = (start, end, at) =>
+    arrF64Sec[at].subarray(start >>> 3, end >>> 3);
   return {
     writeUtf8,
     readUtf8,
@@ -499,7 +567,7 @@ var createSharedStaticBufferIO = ({
     readBytesArrayBufferCopy,
     read8BytesFloatCopy,
     read8BytesFloatView,
-    maxBytes: writableBytes
+    maxBytes: writableBytes,
   };
 };
 
@@ -528,14 +596,15 @@ class NumericBuffer {
     const arr = new Array(len);
     const rem = len & 3;
     let i = 0;
-    for (;i < len - rem; i += 4) {
+    for (; i < len - rem; i += 4) {
       arr[i] = srcF64[i];
       arr[i + 1] = srcF64[i + 1];
       arr[i + 2] = srcF64[i + 2];
       arr[i + 3] = srcF64[i + 3];
     }
-    for (;i < len; i++)
+    for (; i < len; i++) {
       arr[i] = srcF64[i];
+    }
     return arr;
   }
   static isNumericArray(v) {
@@ -555,8 +624,9 @@ class NumericBuffer {
     return this.arr;
   }
   toFloat64() {
-    if (this.isFloat)
+    if (this.isFloat) {
       return this.arrFloat;
+    }
     return Float64Array.from(this.arr);
   }
 }
@@ -567,22 +637,28 @@ var promisePayloadMarker = Symbol.for("knitting.promise.payload");
 var reasonFrom = (task, type, detail) => {
   switch (type) {
     case 0 /* Function */: {
-      const name = typeof task.value === "function" ? task.value.name || "<anonymous>" : "<unknown>";
+      const name = typeof task.value === "function"
+        ? task.value.name || "<anonymous>"
+        : "<unknown>";
       return `KNT_ERROR_0: Function is not a valid type; name: ${name}`;
     }
     case 1 /* Symbol */:
       return "KNT_ERROR_1: Symbol must use Symbol.for(...) keys";
     case 2 /* Json */:
-      return detail == null || detail.length === 0 ? "KNT_ERROR_2: JSON stringify failed; payload must be JSON-safe" : `KNT_ERROR_2: JSON stringify failed; ${detail}`;
+      return detail == null || detail.length === 0
+        ? "KNT_ERROR_2: JSON stringify failed; payload must be JSON-safe"
+        : `KNT_ERROR_2: JSON stringify failed; ${detail}`;
     case 3 /* Serializable */:
-      return detail == null || detail.length === 0 ? "KNT_ERROR_3: Unsupported payload type; serialize it yourself" : `KNT_ERROR_3: Unsupported payload type; ${detail}`;
+      return detail == null || detail.length === 0
+        ? "KNT_ERROR_3: Unsupported payload type; serialize it yourself"
+        : `KNT_ERROR_3: Unsupported payload type; ${detail}`;
   }
 };
 var encoderError = ({
   task,
   type,
   onPromise,
-  detail
+  detail,
 }) => {
   const reason = reasonFrom(task, type, detail);
   if (!isMainThread) {
@@ -594,8 +670,9 @@ var encoderError = ({
     throw new TypeError(reason);
   }
   const markedTask = task;
-  if (markedTask[promisePayloadMarker] === true)
+  if (markedTask[promisePayloadMarker] === true) {
     return false;
+  }
   markedTask[promisePayloadMarker] = true;
   queueMicrotask(() => {
     markedTask[promisePayloadMarker] = false;
@@ -624,7 +701,8 @@ var float64ArrayPrototype = Float64Array.prototype;
 var bigInt64ArrayPrototype = BigInt64Array.prototype;
 var bigUint64ArrayPrototype = BigUint64Array.prototype;
 var dataViewPrototype = DataView.prototype;
-var UNSUPPORTED_OBJECT_DETAIL = "Unsupported object type. Allowed: plain object, array, Error, Date, Buffer, ArrayBuffer, DataView, and typed arrays. Serialize it yourself.";
+var UNSUPPORTED_OBJECT_DETAIL =
+  "Unsupported object type. Allowed: plain object, array, Error, Date, Buffer, ArrayBuffer, DataView, and typed arrays. Serialize it yourself.";
 var VIEW_KIND_UNKNOWN = 0;
 var VIEW_KIND_INT32_ARRAY = 1;
 var VIEW_KIND_FLOAT64_ARRAY = 2;
@@ -633,28 +711,36 @@ var VIEW_KIND_BIGUINT64_ARRAY = 4;
 var VIEW_KIND_DATA_VIEW = 5;
 var getArrayBufferViewKind = (value) => {
   const proto = objectGetPrototypeOf(value);
-  if (proto === int32ArrayPrototype)
+  if (proto === int32ArrayPrototype) {
     return VIEW_KIND_INT32_ARRAY;
-  if (proto === float64ArrayPrototype)
+  }
+  if (proto === float64ArrayPrototype) {
     return VIEW_KIND_FLOAT64_ARRAY;
-  if (proto === bigInt64ArrayPrototype)
+  }
+  if (proto === bigInt64ArrayPrototype) {
     return VIEW_KIND_BIGINT64_ARRAY;
+  }
   if (proto === bigUint64ArrayPrototype) {
     return VIEW_KIND_BIGUINT64_ARRAY;
   }
-  if (proto === dataViewPrototype)
+  if (proto === dataViewPrototype) {
     return VIEW_KIND_DATA_VIEW;
-  if (value instanceof Int32Array)
+  }
+  if (value instanceof Int32Array) {
     return VIEW_KIND_INT32_ARRAY;
-  if (value instanceof Float64Array)
+  }
+  if (value instanceof Float64Array) {
     return VIEW_KIND_FLOAT64_ARRAY;
-  if (value instanceof BigInt64Array)
+  }
+  if (value instanceof BigInt64Array) {
     return VIEW_KIND_BIGINT64_ARRAY;
+  }
   if (value instanceof BigUint64Array) {
     return VIEW_KIND_BIGUINT64_ARRAY;
   }
-  if (value instanceof DataView)
+  if (value instanceof DataView) {
     return VIEW_KIND_DATA_VIEW;
+  }
   return VIEW_KIND_UNKNOWN;
 };
 var isPlainJsonObject = (value) => {
@@ -662,8 +748,9 @@ var isPlainJsonObject = (value) => {
   return proto === objectPrototype || proto === null;
 };
 var toErrorCause = (cause) => {
-  if (cause === null || cause === undefined)
+  if (cause === null || cause === undefined) {
     return cause;
+  }
   switch (typeof cause) {
     case "string":
     case "number":
@@ -678,10 +765,11 @@ var toErrorCause = (cause) => {
   if (cause instanceof Error) {
     const nested = {
       name: cause.name,
-      message: cause.message
+      message: cause.message,
     };
-    if (typeof cause.stack === "string")
+    if (typeof cause.stack === "string") {
       nested.stack = cause.stack;
+    }
     if (objectHasOwn.call(cause, "cause")) {
       nested.cause = toErrorCause(cause.cause);
     }
@@ -696,10 +784,11 @@ var toErrorCause = (cause) => {
 var toErrorPayload = (error) => {
   const payload = {
     name: error.name,
-    message: error.message
+    message: error.message,
   };
-  if (typeof error.stack === "string")
+  if (typeof error.stack === "string") {
     payload.stack = error.stack;
+  }
   if (objectHasOwn.call(error, "cause")) {
     payload.cause = toErrorCause(error.cause);
   }
@@ -716,7 +805,9 @@ var parseErrorPayload = (raw) => {
     return new Error(String(parsed));
   }
   const payload = parsed;
-  const err = new Error(typeof payload.message === "string" ? payload.message : "");
+  const err = new Error(
+    typeof payload.message === "string" ? payload.message : "",
+  );
   if (typeof payload.name === "string" && payload.name.length > 0) {
     err.name = payload.name;
   }
@@ -733,7 +824,7 @@ var parseErrorPayload = (raw) => {
 var decodeBigIntBinary = (bytes) => {
   const sign = bytes[0];
   let value = 0n;
-  for (let i = bytes.length - 1;i >= 1; i--) {
+  for (let i = bytes.length - 1; i >= 1; i--) {
     value = value << 8n | BigInt(bytes[i]);
   }
   return sign === 1 ? -value : value;
@@ -745,10 +836,11 @@ var initStaticIO = (headersBuffer) => {
   const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
   const writableBytes = (128 /* TotalBuff */ - 8 /* Size */) * u32Bytes;
   const requiredBytes = slotStartBytes(32 /* slots */ - 1) + writableBytes;
-  if (headersBuffer.byteLength < requiredBytes)
+  if (headersBuffer.byteLength < requiredBytes) {
     return null;
+  }
   return createSharedStaticBufferIO({
-    headersBuffer: headersBuffer.buffer
+    headersBuffer: headersBuffer.buffer,
   });
 };
 var requireStaticIO = (headersBuffer) => {
@@ -762,36 +854,38 @@ var encodePayload = ({
   lockSector,
   sab,
   headersBuffer,
-  onPromise
+  onPromise,
 }) => {
   const { allocTask, setSlotLength, free } = register({
-    lockSector
+    lockSector,
   });
   const {
     writeBinary: writeDynamicBinary,
     write8Binary: writeDynamic8Binary,
-    writeUtf8: writeDynamicUtf8
+    writeUtf8: writeDynamicUtf8,
   } = createSharedDynamicBufferIO({
-    sab
+    sab,
   });
   const {
     maxBytes: staticMaxBytes,
     writeBinary: writeStaticBinary,
     write8Binary: writeStatic8Binary,
-    writeUtf8: writeStaticUtf8
+    writeUtf8: writeStaticUtf8,
   } = requireStaticIO(headersBuffer);
   const slotOf = (task) => getTaskSlotIndex(task);
   const reserveDynamic = (task, bytes) => {
     task[5 /* PayloadLen */] = bytes;
-    if (allocTask(task) === -1)
+    if (allocTask(task) === -1) {
       return false;
+    }
     return true;
   };
   let objectDynamicSlot = -1;
   const reserveDynamicObject = (task, bytes) => {
     task[5 /* PayloadLen */] = bytes;
-    if (allocTask(task) === -1)
+    if (allocTask(task) === -1) {
       return false;
+    }
     objectDynamicSlot = slotOf(task);
     return true;
   };
@@ -830,25 +924,34 @@ var encodePayload = ({
     try {
       text = stringifyJSON(toErrorPayload(error));
     } catch (encodeErrorReason) {
-      const detail = encodeErrorReason instanceof Error ? encodeErrorReason.message : String(encodeErrorReason);
+      const detail = encodeErrorReason instanceof Error
+        ? encodeErrorReason.message
+        : String(encodeErrorReason);
       return encoderError({
         task,
-        type: 3 /* Serializable */,
+        type: 3, /* Serializable */
         onPromise,
-        detail
+        detail,
       });
     }
     const estimatedBytes = text.length * 3;
     task[2 /* Type */] = 24 /* Error */;
-    if (!reserveDynamicObject(task, estimatedBytes))
+    if (!reserveDynamicObject(task, estimatedBytes)) {
       return false;
+    }
     const written = writeDynamicUtf8(text, task[3 /* Start */]);
     task[5 /* PayloadLen */] = written;
     setSlotLength(slotOf(task), written);
     task.value = null;
     return true;
   };
-  const encodeObjectBinary = (task, slotIndex, bytesView, dynamicType, staticType) => {
+  const encodeObjectBinary = (
+    task,
+    slotIndex,
+    bytesView,
+    dynamicType,
+    staticType,
+  ) => {
     const bytes = bytesView.byteLength;
     if (bytes <= staticMaxBytes) {
       const written = writeStaticBinary(bytesView, slotIndex);
@@ -860,8 +963,9 @@ var encodePayload = ({
       }
     }
     task[2 /* Type */] = dynamicType;
-    if (!reserveDynamicObject(task, bytes))
+    if (!reserveDynamicObject(task, bytes)) {
       return false;
+    }
     writeDynamicBinary(bytesView, task[3 /* Start */]);
     task.value = null;
     return true;
@@ -878,13 +982,15 @@ var encodePayload = ({
       }
     }
     task[2 /* Type */] = 20 /* Float64Array */;
-    if (!reserveDynamicObject(task, bytes))
+    if (!reserveDynamicObject(task, bytes)) {
       return false;
+    }
     writeDynamic8Binary(float64, task[3 /* Start */]);
     task.value = null;
     return true;
   };
-  const toUint8View = (value) => new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  const toUint8View = (value) =>
+    new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   return (task, slotIndex) => {
     const args = task.value;
     switch (typeof args) {
@@ -921,8 +1027,8 @@ var encodePayload = ({
       case "function":
         return encoderError({
           task,
-          type: 0 /* Function */,
-          onPromise
+          type: 0, /* Function */
+          onPromise,
         });
       case "number":
         if (args !== args) {
@@ -955,12 +1061,14 @@ var encodePayload = ({
             try {
               text = stringifyJSON(objectValue);
             } catch (error) {
-              const detail = error instanceof Error ? error.message : String(error);
+              const detail = error instanceof Error
+                ? error.message
+                : String(error);
               return encoderError({
                 task,
-                type: 2 /* Json */,
+                type: 2, /* Json */
                 onPromise,
-                detail
+                detail,
               });
             }
             if (text.length <= staticMaxBytes) {
@@ -973,8 +1081,9 @@ var encodePayload = ({
               }
             }
             task[2 /* Type */] = 12 /* Json */;
-            if (!reserveDynamicObject(task, text.length * 3))
+            if (!reserveDynamicObject(task, text.length * 3)) {
               return false;
+            }
             const written = writeDynamicUtf8(text, task[3 /* Start */]);
             task[5 /* PayloadLen */] = written;
             setSlotLength(slotOf(task), written);
@@ -982,19 +1091,38 @@ var encodePayload = ({
             return true;
           }
           if (NodeBuffer2.isBuffer(objectValue)) {
-            return encodeObjectBinary(task, slotIndex, objectValue, 38 /* Buffer */, 39 /* StaticBuffer */);
+            return encodeObjectBinary(
+              task,
+              slotIndex,
+              objectValue,
+              38, /* Buffer */
+              39, /* StaticBuffer */
+            );
           }
           if (objectValue instanceof Uint8Array) {
-            return encodeObjectBinary(task, slotIndex, objectValue, 17 /* Binary */, 18 /* StaticBinary */);
+            return encodeObjectBinary(
+              task,
+              slotIndex,
+              objectValue,
+              17, /* Binary */
+              18, /* StaticBinary */
+            );
           }
           if (objectValue instanceof ArrayBuffer) {
-            return encodeObjectBinary(task, slotIndex, new Uint8Array(objectValue), 36 /* ArrayBuffer */, 37 /* StaticArrayBuffer */);
+            return encodeObjectBinary(
+              task,
+              slotIndex,
+              new Uint8Array(objectValue),
+              36, /* ArrayBuffer */
+              37, /* StaticArrayBuffer */
+            );
           }
           if (objectValue instanceof NumericBuffer) {
             const float64 = objectValue.toFloat64();
             task[2 /* Type */] = 14 /* NumericBuffer */;
-            if (!reserveDynamicObject(task, float64.byteLength))
+            if (!reserveDynamicObject(task, float64.byteLength)) {
               return false;
+            }
             writeDynamic8Binary(float64, task[3 /* Start */]);
             task.value = null;
             return true;
@@ -1002,15 +1130,39 @@ var encodePayload = ({
           if (arrayBufferIsView(objectValue)) {
             switch (getArrayBufferViewKind(objectValue)) {
               case VIEW_KIND_INT32_ARRAY:
-                return encodeObjectBinary(task, slotIndex, toUint8View(objectValue), 19 /* Int32Array */, 31 /* StaticInt32Array */);
+                return encodeObjectBinary(
+                  task,
+                  slotIndex,
+                  toUint8View(objectValue),
+                  19, /* Int32Array */
+                  31, /* StaticInt32Array */
+                );
               case VIEW_KIND_FLOAT64_ARRAY:
                 return encodeObjectFloat64Array(task, slotIndex, objectValue);
               case VIEW_KIND_BIGINT64_ARRAY:
-                return encodeObjectBinary(task, slotIndex, toUint8View(objectValue), 21 /* BigInt64Array */, 33 /* StaticBigInt64Array */);
+                return encodeObjectBinary(
+                  task,
+                  slotIndex,
+                  toUint8View(objectValue),
+                  21, /* BigInt64Array */
+                  33, /* StaticBigInt64Array */
+                );
               case VIEW_KIND_BIGUINT64_ARRAY:
-                return encodeObjectBinary(task, slotIndex, toUint8View(objectValue), 22 /* BigUint64Array */, 34 /* StaticBigUint64Array */);
+                return encodeObjectBinary(
+                  task,
+                  slotIndex,
+                  toUint8View(objectValue),
+                  22, /* BigUint64Array */
+                  34, /* StaticBigUint64Array */
+                );
               case VIEW_KIND_DATA_VIEW:
-                return encodeObjectBinary(task, slotIndex, toUint8View(objectValue), 23 /* DataView */, 35 /* StaticDataView */);
+                return encodeObjectBinary(
+                  task,
+                  slotIndex,
+                  toUint8View(objectValue),
+                  23, /* DataView */
+                  35, /* StaticDataView */
+                );
             }
           }
           if (objectValue instanceof Date) {
@@ -1042,18 +1194,18 @@ var encodePayload = ({
           }
           return encoderError({
             task,
-            type: 3 /* Serializable */,
+            type: 3, /* Serializable */
             onPromise,
-            detail: UNSUPPORTED_OBJECT_DETAIL
+            detail: UNSUPPORTED_OBJECT_DETAIL,
           });
         } catch (error) {
           rollbackObjectDynamic();
           const detail = error instanceof Error ? error.message : String(error);
           return encoderError({
             task,
-            type: 3 /* Serializable */,
+            type: 3, /* Serializable */
             onPromise,
-            detail
+            detail,
           });
         }
       case "string": {
@@ -1068,9 +1220,14 @@ var encodePayload = ({
           }
         }
         task[2 /* Type */] = 11 /* String */;
-        if (!reserveDynamic(task, estimatedBytes))
+        if (!reserveDynamic(task, estimatedBytes)) {
           return false;
-        const written = writeDynamicUtf8(text, task[3 /* Start */], estimatedBytes);
+        }
+        const written = writeDynamicUtf8(
+          text,
+          task[3 /* Start */],
+          estimatedBytes,
+        );
         task[5 /* PayloadLen */] = written;
         setSlotLength(slotOf(task), written);
         return true;
@@ -1080,8 +1237,8 @@ var encodePayload = ({
         if (key === undefined) {
           return encoderError({
             task,
-            type: 1 /* Symbol */,
-            onPromise
+            type: 1, /* Symbol */
+            onPromise,
           });
         }
         const estimatedBytes = key.length * 3;
@@ -1094,8 +1251,9 @@ var encodePayload = ({
           }
         }
         task[2 /* Type */] = 26 /* Symbol */;
-        if (!reserveDynamic(task, estimatedBytes))
+        if (!reserveDynamic(task, estimatedBytes)) {
           return false;
+        }
         const written = writeDynamicUtf8(key, task[3 /* Start */]);
         task[5 /* PayloadLen */] = written;
         setSlotLength(slotOf(task), written);
@@ -1111,10 +1269,10 @@ var decodePayload = ({
   lockSector,
   sab,
   headersBuffer,
-  host
+  host,
 }) => {
   const { free } = register({
-    lockSector
+    lockSector,
   });
   const freeTaskSlot = (task) => free(getTaskSlotIndex(task));
   const {
@@ -1123,16 +1281,16 @@ var decodePayload = ({
     readBytesBufferCopy: readDynamicBufferCopy,
     readBytesArrayBufferCopy: readDynamicArrayBufferCopy,
     read8BytesFloatCopy: readDynamic8BytesFloatCopy,
-    read8BytesFloatView: readDynamic8BytesFloatView
+    read8BytesFloatView: readDynamic8BytesFloatView,
   } = createSharedDynamicBufferIO({
-    sab
+    sab,
   });
   const {
     readUtf8: readStaticUtf8,
     readBytesCopy: readStaticBytesCopy,
     readBytesBufferCopy: readStaticBufferCopy,
     readBytesArrayBufferCopy: readStaticArrayBufferCopy,
-    read8BytesFloatCopy: readStatic8BytesFloatCopy
+    read8BytesFloatCopy: readStatic8BytesFloatCopy,
   } = requireStaticIO(headersBuffer);
   return (task, slotIndex, specialFlags) => {
     switch (task[2 /* Type */]) {
@@ -1168,83 +1326,174 @@ var decodePayload = ({
         task.value = undefined;
         return;
       case 11 /* String */:
-        task.value = readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicUtf8(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         freeTaskSlot(task);
         return;
       case 15 /* StaticString */:
         task.value = readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex);
         return;
       case 12 /* Json */:
-        task.value = parseJSON(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = parseJSON(
+          readDynamicUtf8(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         freeTaskSlot(task);
         return;
       case 16 /* StaticJson */:
-        task.value = parseJSON(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = parseJSON(
+          readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 28 /* BigInt */:
-        task.value = decodeBigIntBinary(readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = decodeBigIntBinary(
+          readDynamicBytesCopy(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         freeTaskSlot(task);
         return;
       case 29 /* StaticBigInt */:
-        task.value = decodeBigIntBinary(readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = decodeBigIntBinary(
+          readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 26 /* Symbol */:
-        task.value = symbolFor(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = symbolFor(
+          readDynamicUtf8(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         freeTaskSlot(task);
         return;
       case 27 /* StaticSymbol */:
-        task.value = symbolFor(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+        task.value = symbolFor(
+          readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex),
+        );
         return;
       case 19 /* Int32Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new Int32Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 2,
+        );
         freeTaskSlot(task);
         return;
       }
       case 31 /* StaticInt32Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new Int32Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 2,
+        );
         return;
       }
       case 20 /* Float64Array */: {
-        task.value = readDynamic8BytesFloatCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamic8BytesFloatCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         freeTaskSlot(task);
         return;
       }
       case 32 /* StaticFloat64Array */:
-        task.value = readStatic8BytesFloatCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStatic8BytesFloatCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 21 /* BigInt64Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new BigInt64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         freeTaskSlot(task);
         return;
       }
       case 33 /* StaticBigInt64Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new BigInt64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         return;
       }
       case 22 /* BigUint64Array */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new BigUint64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         freeTaskSlot(task);
         return;
       }
       case 34 /* StaticBigUint64Array */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new BigUint64Array(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength >>> 3,
+        );
         return;
       }
       case 23 /* DataView */: {
-        const bytes = readDynamicBytesCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-        task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const bytes = readDynamicBytesCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
+        task.value = new DataView(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        );
         freeTaskSlot(task);
         return;
       }
       case 35 /* StaticDataView */: {
-        const bytes = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
-        task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const bytes = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
+        task.value = new DataView(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        );
         return;
       }
       case 25 /* Date */:
@@ -1253,35 +1502,70 @@ var decodePayload = ({
         task.value = new Date(Float64View[0]);
         return;
       case 24 /* Error */:
-        task.value = parseErrorPayload(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = parseErrorPayload(
+          readDynamicUtf8(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         freeTaskSlot(task);
         return;
       case 17 /* Binary */:
         {
-          const buffer = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
-          task.value = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+          const buffer = readDynamicBufferCopy(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          );
+          task.value = new Uint8Array(
+            buffer.buffer,
+            buffer.byteOffset,
+            buffer.byteLength,
+          );
         }
         freeTaskSlot(task);
         return;
       case 18 /* StaticBinary */:
-        task.value = readStaticBytesCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticBytesCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 36 /* ArrayBuffer */:
-        task.value = readDynamicArrayBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicArrayBufferCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         freeTaskSlot(task);
         return;
       case 37 /* StaticArrayBuffer */:
-        task.value = readStaticArrayBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticArrayBufferCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 38 /* Buffer */:
-        task.value = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+        task.value = readDynamicBufferCopy(
+          task[3 /* Start */],
+          task[3 /* Start */] + task[5 /* PayloadLen */],
+        );
         freeTaskSlot(task);
         return;
       case 39 /* StaticBuffer */:
-        task.value = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticBufferCopy(
+          0,
+          task[5 /* PayloadLen */],
+          slotIndex,
+        );
         return;
       case 14 /* NumericBuffer */:
-        task.value = NumericBuffer.fromFloat64(readDynamic8BytesFloatView(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+        task.value = NumericBuffer.fromFloat64(
+          readDynamic8BytesFloatView(
+            task[3 /* Start */],
+            task[3 /* Start */] + task[5 /* PayloadLen */],
+          ),
+        );
         freeTaskSlot(task);
         return;
     }
@@ -1300,18 +1584,25 @@ var TASK_FUNCTION_ID_MASK = (1 << TASK_FUNCTION_ID_BITS) - 1;
 var TASK_FUNCTION_META_BITS = 32 - TASK_FUNCTION_ID_BITS;
 var TASK_FUNCTION_META_VALUE_MASK = 4294967295 >>> TASK_FUNCTION_ID_BITS;
 var TASK_FUNCTION_META_PACKED_MASK = ~TASK_FUNCTION_ID_MASK >>> 0;
-var getTaskFunctionMeta = (task) => task[0 /* FunctionID */] >>> TASK_FUNCTION_ID_BITS & TASK_FUNCTION_META_VALUE_MASK;
-var getTaskSlotIndex = (task) => task[6 /* slotBuffer */] & TASK_SLOT_INDEX_MASK;
+var getTaskFunctionMeta = (task) =>
+  task[0 /* FunctionID */] >>> TASK_FUNCTION_ID_BITS &
+  TASK_FUNCTION_META_VALUE_MASK;
+var getTaskSlotIndex = (task) =>
+  task[6 /* slotBuffer */] & TASK_SLOT_INDEX_MASK;
 var setTaskSlotIndex = (task, slotIndex) => {
-  task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & TASK_SLOT_META_PACKED_MASK | slotIndex & TASK_SLOT_INDEX_MASK) >>> 0;
+  task[6 /* slotBuffer */] =
+    (task[6 /* slotBuffer */] & TASK_SLOT_META_PACKED_MASK |
+      slotIndex & TASK_SLOT_INDEX_MASK) >>> 0;
 };
-var getTaskSlotMeta = (task) => task[6 /* slotBuffer */] >>> TASK_SLOT_INDEX_BITS & TASK_SLOT_META_VALUE_MASK;
+var getTaskSlotMeta = (task) =>
+  task[6 /* slotBuffer */] >>> TASK_SLOT_INDEX_BITS & TASK_SLOT_META_VALUE_MASK;
 var LOCK_WORD_BYTES = Int32Array.BYTES_PER_ELEMENT;
 var LOCK_HOST_BITS_OFFSET_BYTES = 64 /* padding */;
 var LOCK_WORKER_BITS_OFFSET_BYTES = 64 /* padding */ * 2;
 var LOCK_SECTOR_BYTE_LENGTH = LOCK_WORKER_BITS_OFFSET_BYTES + LOCK_WORD_BYTES;
 var HEADER_SLOT_STRIDE_U32 = 0 /* header */ + 128 /* TotalBuff */;
-var HEADER_U32_LENGTH = 0 /* header */ + HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
+var HEADER_U32_LENGTH = 0 /* header */ +
+  HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
 var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
 var INDEX_ID = 0;
 var def = (_) => {};
@@ -1363,35 +1654,43 @@ var lock2 = ({
   payloadSector,
   resultList,
   toSentList,
-  recycleList
+  recycleList,
 }) => {
-  const LockBoundSAB = LockBoundSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
+  const LockBoundSAB = LockBoundSector ??
+    new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
   const hostBits = new Int32Array(LockBoundSAB, LOCK_HOST_BITS_OFFSET_BYTES, 1);
-  const workerBits = new Int32Array(LockBoundSAB, LOCK_WORKER_BITS_OFFSET_BYTES, 1);
-  const bufferHeadersBuffer = headers ?? new SharedArrayBuffer(HEADER_BYTE_LENGTH);
+  const workerBits = new Int32Array(
+    LockBoundSAB,
+    LOCK_WORKER_BITS_OFFSET_BYTES,
+    1,
+  );
+  const bufferHeadersBuffer = headers ??
+    new SharedArrayBuffer(HEADER_BYTE_LENGTH);
   const headersBuffer = new Uint32Array(bufferHeadersBuffer);
   const payloadMaxBytes = 64 * 1024 * 1024;
   const payloadInitialBytes = HAS_SAB_GROW ? 4 * 1024 * 1024 : payloadMaxBytes;
-  const payloadSAB = payload ?? createSharedArrayBuffer(payloadInitialBytes, payloadMaxBytes);
-  const payloadLockSAB = payloadSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
+  const payloadSAB = payload ??
+    createSharedArrayBuffer(payloadInitialBytes, payloadMaxBytes);
+  const payloadLockSAB = payloadSector ??
+    new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
   let promiseHandler;
   const encodeTask = encodePayload({
     sab: payloadSAB,
     headersBuffer,
     lockSector: payloadLockSAB,
-    onPromise: (task, result) => promiseHandler?.(task, result)
+    onPromise: (task, result) => promiseHandler?.(task, result),
   });
   const decodeTask = decodePayload({
     sab: payloadSAB,
     headersBuffer,
-    lockSector: payloadLockSAB
+    lockSector: payloadLockSAB,
   });
   let LastLocal = 0 | 0;
   let LastWorker = 0 | 0;
   let lastTake = 32 | 0;
-  const toBeSent = toSentList ?? new RingQueue;
-  const recyclecList = recycleList ?? new RingQueue;
-  const resolved = resultList ?? new RingQueue;
+  const toBeSent = toSentList ?? new RingQueue();
+  const recyclecList = recycleList ?? new RingQueue();
+  const resolved = resultList ?? new RingQueue();
   const a_load = Atomics.load;
   const a_store = Atomics.store;
   const toBeSentPush = (task) => toBeSent.push(task);
@@ -1405,10 +1704,12 @@ var lock2 = ({
   const enlist = (task) => toBeSentPush(task);
   const encodeWithState = (task, state) => {
     const free = ~state;
-    if (free === 0)
+    if (free === 0) {
       return 0;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
+    }
+    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
       return 0;
+    }
     encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
     return selectedSlotBit;
   };
@@ -1418,8 +1719,9 @@ var lock2 = ({
     if (list === toBeSent) {
       while (true) {
         const task = toBeSentShift();
-        if (!task)
+        if (!task) {
           break;
+        }
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
           toBeSentUnshift(task);
@@ -1431,8 +1733,9 @@ var lock2 = ({
     } else {
       while (true) {
         const task = list.shiftNoClear();
-        if (!task)
+        if (!task) {
           break;
+        }
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
           list.unshift(task);
@@ -1445,21 +1748,30 @@ var lock2 = ({
     return encoded;
   };
   const encodeAll = () => {
-    if (toBeSent.isEmpty)
+    if (toBeSent.isEmpty) {
       return true;
+    }
     encodeManyFrom(toBeSent);
     return toBeSent.isEmpty;
   };
   let selectedSlotIndex = 0 | 0, selectedSlotBit = 0 >>> 0;
-  const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
-  const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
+  const storeHost = (bit) =>
+    a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
+  const storeWorker = (bit) =>
+    a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
   const encode = (task, state = LastLocal ^ a_load(workerBits, 0) | 0) => {
     const free = ~state;
-    if (free === 0)
+    if (free === 0) {
       return false;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
+    }
+    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
       return false;
-    return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
+    }
+    return encodeAt(
+      task,
+      selectedSlotIndex,
+      selectedSlotBit = 1 << selectedSlotIndex,
+    );
   };
   const encodeAt = (task, at, bit) => {
     const off = slotOffset(at);
@@ -1476,8 +1788,9 @@ var lock2 = ({
   const hasSpace = () => (hostBits[0] ^ LastWorker) !== 0;
   const decode = () => {
     let diff = a_load(hostBits, 0) ^ LastWorker;
-    if (diff === 0)
+    if (diff === 0) {
       return false;
+    }
     let last = lastTake;
     let consumedBits = 0 | 0;
     try {
@@ -1489,33 +1802,36 @@ var lock2 = ({
       }
       while (diff !== 0) {
         let pick = diff & (1 << last) - 1;
-        if (pick === 0)
+        if (pick === 0) {
           pick = diff;
+        }
         decodeAt(selectedSlotIndex = 31 - clz32(pick));
         selectedSlotBit = 1 << (last = selectedSlotIndex);
         diff ^= selectedSlotBit;
         consumedBits = consumedBits ^ selectedSlotBit | 0;
       }
     } finally {
-      if (consumedBits !== 0)
+      if (consumedBits !== 0) {
         storeWorker(consumedBits);
+      }
     }
     lastTake = last;
     return true;
   };
   const resolveHost = ({
     queue,
-    onResolved
+    onResolved,
   }) => {
     const getTask = takeTask({
-      queue
+      queue,
     });
     const HAS_RESOLVE = onResolved ? true : false;
     let lastResolved = 32;
     return () => {
       let diff = a_load(hostBits, 0) ^ LastWorker | 0;
-      if (diff === 0)
+      if (diff === 0) {
         return 0;
+      }
       let modified = 0;
       let consumedBits = 0 | 0;
       let last = lastResolved;
@@ -1541,8 +1857,9 @@ var lock2 = ({
       while (diff !== 0) {
         const lowerMask = last === 31 ? 2147483647 : (1 << last) - 1;
         let pick = diff & lowerMask;
-        if (pick === 0)
+        if (pick === 0) {
           pick = diff;
+        }
         const idx = 31 - clz32(pick);
         const selectedBit = 1 << idx;
         const task = getTask(headersBuffer, idx);
@@ -1599,7 +1916,7 @@ var lock2 = ({
     resolveHost,
     setPromiseHandler: (handler) => {
       promiseHandler = handler;
-    }
+    },
   };
 };
 
@@ -1607,65 +1924,82 @@ var lock2 = ({
 var ABORT_SIGNAL_META_OFFSET = 1;
 var TIMEOUT_KIND_RESOLVE = 1;
 var p_now = performance.now.bind(performance);
-var raceTimeout = (promise, ms, resolveOnTimeout, timeoutValue) => new Promise((resolve, reject) => {
-  let done = false;
-  const timer = setTimeout(() => {
-    if (done)
-      return;
-    done = true;
-    if (resolveOnTimeout)
-      resolve(timeoutValue);
-    else
-      reject(timeoutValue);
-  }, ms);
-  promise.then((value) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    resolve(value);
-  }, (err) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    reject(err);
+var raceTimeout = (promise, ms, resolveOnTimeout, timeoutValue) =>
+  new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) {
+        return;
+      }
+      done = true;
+      if (resolveOnTimeout) {
+        resolve(timeoutValue);
+      } else {
+        reject(timeoutValue);
+      }
+    }, ms);
+    promise.then((value) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }, (err) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
-});
 var nowStamp = (now) => (Math.floor(now()) & TASK_SLOT_META_VALUE_MASK) >>> 0;
 var applyTimeoutBudget = (promise, slot, spec, now) => {
-  const elapsed = nowStamp(now) - getTaskSlotMeta(slot) & TASK_SLOT_META_VALUE_MASK;
+  const elapsed = nowStamp(now) - getTaskSlotMeta(slot) &
+    TASK_SLOT_META_VALUE_MASK;
   const remaining = spec.ms - elapsed;
   if (!(remaining > 0)) {
     promise.then(() => {}, () => {});
-    return spec.kind === TIMEOUT_KIND_RESOLVE ? Promise.resolve(spec.value) : Promise.reject(spec.value);
+    return spec.kind === TIMEOUT_KIND_RESOLVE
+      ? Promise.resolve(spec.value)
+      : Promise.reject(spec.value);
   }
   const timeoutMs = Math.max(1, Math.floor(remaining));
-  return raceTimeout(promise, timeoutMs, spec.kind === TIMEOUT_KIND_RESOLVE, spec.value);
+  return raceTimeout(
+    promise,
+    timeoutMs,
+    spec.kind === TIMEOUT_KIND_RESOLVE,
+    spec.value,
+  );
 };
 var NO_ABORT_SIGNAL = -1;
 var readSignal = (slot) => {
   const encodedSignal = getTaskFunctionMeta(slot);
-  if (encodedSignal === 0)
+  if (encodedSignal === 0) {
     return NO_ABORT_SIGNAL;
+  }
   const signal = encodedSignal - ABORT_SIGNAL_META_OFFSET | 0;
   return signal >= 0 ? signal : NO_ABORT_SIGNAL;
 };
 var throwIfAborted = (signal, hasAborted) => {
-  if (signal === NO_ABORT_SIGNAL)
+  if (signal === NO_ABORT_SIGNAL) {
     return;
-  if (hasAborted(signal))
+  }
+  if (hasAborted(signal)) {
     throw new Error("Task aborted");
+  }
 };
 var makeToolkitCache = (hasAborted) => {
   const bySignal = [];
   return (signal) => {
     let toolkit = bySignal[signal];
-    if (toolkit)
+    if (toolkit) {
       return toolkit;
+    }
     const hasAbortedMethod = () => hasAborted(signal);
     toolkit = {
-      hasAborted: hasAbortedMethod
+      hasAborted: hasAbortedMethod,
     };
     bySignal[signal] = toolkit;
     return toolkit;
@@ -1675,7 +2009,7 @@ var composeWorkerRunner = ({
   job,
   timeout,
   hasAborted,
-  now
+  now,
 }) => {
   const nowTime = now ?? p_now;
   if (!hasAborted) {
@@ -1684,8 +2018,9 @@ var composeWorkerRunner = ({
     }
     return (slot) => {
       const result = job(slot.value);
-      if (!(result instanceof Promise))
+      if (!(result instanceof Promise)) {
         return result;
+      }
       return applyTimeoutBudget(result, slot, timeout, nowTime);
     };
   }
@@ -1694,17 +2029,21 @@ var composeWorkerRunner = ({
     return (slot) => {
       const signal = readSignal(slot);
       throwIfAborted(signal, hasAborted);
-      if (signal === NO_ABORT_SIGNAL)
+      if (signal === NO_ABORT_SIGNAL) {
         return job(slot.value);
+      }
       return job(slot.value, getToolkit(signal));
     };
   }
   return (slot) => {
     const signal = readSignal(slot);
     throwIfAborted(signal, hasAborted);
-    const result = signal === NO_ABORT_SIGNAL ? job(slot.value) : job(slot.value, getToolkit(signal));
-    if (!(result instanceof Promise))
+    const result = signal === NO_ABORT_SIGNAL
+      ? job(slot.value)
+      : job(slot.value, getToolkit(signal));
+    if (!(result instanceof Promise)) {
       return result;
+    }
     return applyTimeoutBudget(result, slot, timeout, nowTime);
   };
 };
@@ -1716,16 +2055,19 @@ var createWorkerRxQueue = ({
   lock,
   returnLock,
   hasAborted,
-  now
+  now,
 }) => {
   const PLACE_HOLDER = (_) => {
     throw "UNREACHABLE FROM PLACE HOLDER (thread)";
   };
   let hasAnythingFinished = 0;
   let awaiting = 0;
-  const jobs = listOfFunctions.reduce((acc, fixed) => (acc.push(fixed.run), acc), []);
-  const toWork = new RingQueue;
-  const pendingFrames = new RingQueue;
+  const jobs = listOfFunctions.reduce(
+    (acc, fixed) => (acc.push(fixed.run), acc),
+    [],
+  );
+  const toWork = new RingQueue();
+  const pendingFrames = new RingQueue();
   const toWorkPush = (slot) => toWork.push(slot);
   const toWorkShift = () => toWork.shiftNoClear();
   const pendingShift = () => pendingFrames.shiftNoClear();
@@ -1741,16 +2083,19 @@ var createWorkerRxQueue = ({
       job,
       timeout: fixed.timeout,
       hasAborted,
-      now
+      now,
     }));
     return acc;
   }, []);
-  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true ? () => hasAnythingFinished !== 0 && toWork.size === 0 : () => hasAnythingFinished !== 0;
+  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true
+    ? () => hasAnythingFinished !== 0 && toWork.size === 0
+    : () => hasAnythingFinished !== 0;
   const { decode, resolved } = lock;
   const resolvedShift = resolved.shiftNoClear.bind(resolved);
   const enqueueLock = () => {
-    if (!decode())
+    if (!decode()) {
       return false;
+    }
     let task = resolvedShift();
     while (task) {
       task.resolve = PLACE_HOLDER;
@@ -1761,14 +2106,16 @@ var createWorkerRxQueue = ({
     return true;
   };
   const encodeReturnSafe = (slot) => {
-    if (!returnLock.encode(slot))
+    if (!returnLock.encode(slot)) {
       return false;
+    }
     return true;
   };
   const sendReturn = (slot, shouldReject) => {
     slot[IDX_FLAGS] = shouldReject ? FLAG_REJECT : 0;
-    if (!encodeReturnSafe(slot))
+    if (!encodeReturnSafe(slot)) {
       return false;
+    }
     hasAnythingFinished--;
     recyclePush(slot);
     return true;
@@ -1776,16 +2123,19 @@ var createWorkerRxQueue = ({
   const settleNow = (slot, isError, value, wasAwaited) => {
     slot.value = value;
     hasAnythingFinished++;
-    if (wasAwaited && awaiting > 0)
+    if (wasAwaited && awaiting > 0) {
       awaiting--;
+    }
     const shouldReject = isError || slot[IDX_FLAGS] === FLAG_REJECT;
-    if (!sendReturn(slot, shouldReject))
+    if (!sendReturn(slot, shouldReject)) {
       pendingPush(slot);
+    }
   };
   const writeOne = () => {
     const slot = pendingShift();
-    if (!slot)
+    if (!slot) {
       return false;
+    }
     if (!sendReturn(slot, slot[IDX_FLAGS] === FLAG_REJECT)) {
       pendingUnshift(slot);
       return false;
@@ -1798,8 +2148,9 @@ var createWorkerRxQueue = ({
     writeBatch: (max) => {
       let wrote = 0;
       while (wrote < max) {
-        if (!writeOne())
+        if (!writeOne()) {
           break;
+        }
         wrote++;
       }
       return wrote;
@@ -1808,15 +2159,19 @@ var createWorkerRxQueue = ({
       let processed = 0;
       while (processed < 3) {
         const slot = toWorkShift();
-        if (!slot)
+        if (!slot) {
           break;
+        }
         try {
           const fnIndex = slot[0 /* FunctionID */] & FUNCTION_ID_MASK;
           const result = runByIndex[fnIndex](slot);
           slot[IDX_FLAGS] = 0;
           if (result instanceof Promise) {
             awaiting++;
-            result.then((value) => settleNow(slot, false, value, true), (err) => settleNow(slot, true, err, true));
+            result.then(
+              (value) => settleNow(slot, false, value, true),
+              (err) => settleNow(slot, true, err, true),
+            );
           } else {
             settleNow(slot, false, result, false);
           }
@@ -1829,7 +2184,7 @@ var createWorkerRxQueue = ({
     },
     enqueueLock,
     hasAwaiting: () => awaiting > 0,
-    getAwaiting: () => awaiting
+    getAwaiting: () => awaiting,
   };
 };
 
@@ -1840,7 +2195,8 @@ import { isMainThread as isMainThread2 } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
 var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 var WINDOWS_UNC_PATH = /^\\\\[^\\/?]+\\[^\\/?]+/;
-var encodeFilePath = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var encodeFilePath = (path) =>
+  encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
 var toModuleUrl = (specifier) => {
   if (WINDOWS_DRIVE_PATH.test(specifier)) {
     const normalized = specifier.replace(/\\/g, "/");
@@ -1865,7 +2221,7 @@ var genTaskID = ((counter) => () => counter++)(0);
 var getCallerFilePathForBun = (offset) => {
   const originalStackTrace = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, stack2) => stack2;
-  const err = new Error;
+  const err = new Error();
   const stack = err.stack;
   Error.prepareStackTrace = originalStackTrace;
   const caller = stack[offset]?.getFileName();
@@ -1874,7 +2230,7 @@ var getCallerFilePathForBun = (offset) => {
   }
   return toModuleUrl(caller);
 };
-var linkingMap = new Map;
+var linkingMap = new Map();
 var getCallerFilePath = () => {
   const stackOffset = 3;
   const href = getCallerFilePathForBun(stackOffset);
@@ -1887,7 +2243,7 @@ var signalDebuggerV2 = ({
   thread,
   isMain,
   op,
-  startAt
+  startAt,
 }) => {
   const orange = "\x1B[38;5;214m";
   const purple = "\x1B[38;5;129m";
@@ -1896,8 +2252,9 @@ var signalDebuggerV2 = ({
   const color = isMain ? orange : purple;
   const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
   const logDir = join(process.cwd(), "log");
-  if (!existsSync(logDir))
+  if (!existsSync(logDir)) {
     mkdirSync(logDir, { recursive: true });
+  }
   const born = startAt;
   const logFile = join(logDir, `${isMain ? "M" : "T"}_${thread}_${born}.log`);
   const stream = createWriteStream(logFile, { flags: "a" });
@@ -1905,18 +2262,29 @@ var signalDebuggerV2 = ({
   let lastBeat = born;
   let hitsTotal = 0;
   const hitsPerValue = { [last]: 0 };
-  const header = `${color}Thread${tab}Tag${tab}Value${tab}SinceBorn${tab}SinceLast${tab}HitsPrev${tab}TotalHits${reset}`;
-  stream.write(stripAnsi(header) + `
-`);
+  const header =
+    `${color}Thread${tab}Tag${tab}Value${tab}SinceBorn${tab}SinceLast${tab}HitsPrev${tab}TotalHits${reset}`;
+  stream.write(
+    stripAnsi(header) + `
+`,
+  );
   function maybeLog(value, tag) {
     hitsTotal++;
     hitsPerValue[value] = (hitsPerValue[value] ?? 0) + 1;
     if (value !== last) {
       const now = isMain ? beat() : beat() + born;
       const hits = hitsPerValue[last];
-      const line = `${color}${isMain ? "M" : "T"}${thread}${reset}${tab}${tab}` + `${tag}${String(last).padStart(1, " ")}${reset}${tab}` + `${(now - born).toFixed(2).padStart(9)}${tab}` + `${(now - lastBeat).toFixed(2).padStart(9)}${tab}` + `${hits.toString().padStart(8)}${tab}` + `${hitsTotal.toString().padStart(9)}`;
-      stream.write(stripAnsi(line) + `
-`);
+      const line =
+        `${color}${isMain ? "M" : "T"}${thread}${reset}${tab}${tab}` +
+        `${tag}${String(last).padStart(1, " ")}${reset}${tab}` +
+        `${(now - born).toFixed(2).padStart(9)}${tab}` +
+        `${(now - lastBeat).toFixed(2).padStart(9)}${tab}` +
+        `${hits.toString().padStart(8)}${tab}` +
+        `${hitsTotal.toString().padStart(9)}`;
+      stream.write(
+        stripAnsi(line) + `
+`,
+      );
       last = value;
       lastBeat = now;
     }
@@ -1936,7 +2304,7 @@ var signalDebuggerV2 = ({
         maybeLog(value, "PUT ");
       }
       return ok;
-    }
+    },
   });
   return proxied;
 };
@@ -1947,20 +2315,28 @@ var CACHE_LINE_BYTES = 64;
 var SIGNAL_OFFSETS = {
   op: 0,
   rxStatus: CACHE_LINE_BYTES,
-  txStatus: CACHE_LINE_BYTES * 2
+  txStatus: CACHE_LINE_BYTES * 2,
 };
 var a_store = Atomics.store;
-var createSharedMemoryTransport = ({ sabObject, isMain, thread, debug, startTime }) => {
+var createSharedMemoryTransport = (
+  { sabObject, isMain, thread, debug, startTime },
+) => {
   const toGrow = sabObject?.size ?? page2;
-  const sab = sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(toGrow + toGrow % page2, page2 * page2);
+  const sab = sabObject?.sharedSab
+    ? sabObject.sharedSab
+    : createSharedArrayBuffer(toGrow + toGrow % page2, page2 * page2);
   const startAt = beat();
-  const isReflected = typeof debug !== "undefined" && (debug?.logMain === isMain && isMain === true || debug?.logThreads === true && isMain === false);
-  const op = isReflected ? signalDebuggerV2({
-    thread,
-    isMain,
-    startAt: startTime ?? startAt,
-    op: new Int32Array(sab, SIGNAL_OFFSETS.op, 1)
-  }) : new Int32Array(sab, SIGNAL_OFFSETS.op, 1);
+  const isReflected = typeof debug !== "undefined" &&
+    (debug?.logMain === isMain && isMain === true ||
+      debug?.logThreads === true && isMain === false);
+  const op = isReflected
+    ? signalDebuggerV2({
+      thread,
+      isMain,
+      startAt: startTime ?? startAt,
+      op: new Int32Array(sab, SIGNAL_OFFSETS.op, 1),
+    })
+    : new Int32Array(sab, SIGNAL_OFFSETS.op, 1);
   if (isMainThread2) {
     a_store(new Int32Array(sab, SIGNAL_OFFSETS.op, 1), 0, 0);
   }
@@ -1973,7 +2349,7 @@ var createSharedMemoryTransport = ({ sabObject, isMain, thread, debug, startTime
     isReflected,
     opView: new Int32Array(sab, SIGNAL_OFFSETS.op, 1),
     rxStatus,
-    txStatus: new Int32Array(sab, SIGNAL_OFFSETS.txStatus, 1)
+    txStatus: new Int32Array(sab, SIGNAL_OFFSETS.txStatus, 1),
   };
 };
 var mainSignal = ({ op, opView, startAt, rxStatus, txStatus }) => {
@@ -1982,7 +2358,7 @@ var mainSignal = ({ op, opView, startAt, rxStatus, txStatus }) => {
     opView,
     startAt,
     rxStatus,
-    txStatus
+    txStatus,
   };
 };
 
@@ -1994,8 +2370,10 @@ var BLOCKED_BINDING_GETTER = Symbol.for("knitting.strict.blockedBindingGetter");
 var ROOT_GLOBAL = globalThis;
 var OVERLAY_BINDINGS = ["require", "module", "globalThis", "self"];
 var isSelfReferenceBinding = (name) => name === "globalThis" || name === "self";
-var STRICT_DYNAMIC_IMPORT_ERROR = "[Knitting Strict] Dynamic import() is blocked in sandboxed code. All modules must be declared statically in the task definition.";
-var toBlockedBindingMessage = (binding) => `[Knitting Strict] ${binding} is blocked. Use static imports in your task module.`;
+var STRICT_DYNAMIC_IMPORT_ERROR =
+  "[Knitting Strict] Dynamic import() is blocked in sandboxed code. All modules must be declared statically in the task definition.";
+var toBlockedBindingMessage = (binding) =>
+  `[Knitting Strict] ${binding} is blocked. Use static imports in your task module.`;
 var createBlockedGetter = (binding) => {
   const getter = () => {
     throw new Error(toBlockedBindingMessage(binding));
@@ -2003,35 +2381,40 @@ var createBlockedGetter = (binding) => {
   getter[BLOCKED_BINDING_GETTER] = true;
   return getter;
 };
-var isBlockedBindingDescriptor = (descriptor) => typeof descriptor?.get === "function" && descriptor.get[BLOCKED_BINDING_GETTER] === true;
+var isBlockedBindingDescriptor = (descriptor) =>
+  typeof descriptor?.get === "function" &&
+  descriptor.get[BLOCKED_BINDING_GETTER] === true;
 var createBlockedBindingDescriptor = (binding) => ({
   get: createBlockedGetter(binding),
   enumerable: false,
-  configurable: false
+  configurable: false,
 });
 var createEphemeralBlockedBindingDescriptor = (binding) => ({
   get: createBlockedGetter(binding),
   enumerable: false,
-  configurable: true
+  configurable: true,
 });
 var ignoreError = (action) => {
   try {
     action();
   } catch {}
 };
-var tryDefineProperty = (target, key, descriptor) => ignoreError(() => {
-  Object.defineProperty(target, key, descriptor);
-});
+var tryDefineProperty = (target, key, descriptor) =>
+  ignoreError(() => {
+    Object.defineProperty(target, key, descriptor);
+  });
 var mirrorCallableMetadata = ({
   target,
   source,
-  name
+  name,
 }) => {
-  for (const [key, value] of [
-    ["name", name],
-    ["length", source.length],
-    ["toString", () => Function.prototype.toString.call(source)]
-  ]) {
+  for (
+    const [key, value] of [
+      ["name", name],
+      ["length", source.length],
+      ["toString", () => Function.prototype.toString.call(source)],
+    ]
+  ) {
     tryDefineProperty(target, key, { value, configurable: true });
   }
 };
@@ -2049,7 +2432,9 @@ var assertBindingHidden = (sandboxGlobal, binding) => {
       continue;
     }
     const location = isRoot ? "on membrane global" : "on prototype chain";
-    const message = binding === "require" ? `FATAL: require found ${location}` : `FATAL: module object found ${location}`;
+    const message = binding === "require"
+      ? `FATAL: require found ${location}`
+      : `FATAL: module object found ${location}`;
     throw new Error(message);
   }
 };
@@ -2061,22 +2446,30 @@ var createBlockedDynamicImportHook = () => (_specifier) => {
   throw new Error(STRICT_DYNAMIC_IMPORT_ERROR);
 };
 var createNodeVmDynamicImportOptions = () => ({
-  importModuleDynamically: createBlockedDynamicImportHook()
+  importModuleDynamically: createBlockedDynamicImportHook(),
 });
 var createInjectedStrictCallable = (target) => {
   const callable = target;
-  const wrapped = function(...args) {
+  const wrapped = function (...args) {
     const g = ROOT_GLOBAL;
-    const saved = new Map;
+    const saved = new Map();
     const shadow = Object.create(g);
-    Object.defineProperty(shadow, "require", createEphemeralBlockedBindingDescriptor("require"));
-    Object.defineProperty(shadow, "module", createEphemeralBlockedBindingDescriptor("module"));
+    Object.defineProperty(
+      shadow,
+      "require",
+      createEphemeralBlockedBindingDescriptor("require"),
+    );
+    Object.defineProperty(
+      shadow,
+      "module",
+      createEphemeralBlockedBindingDescriptor("module"),
+    );
     for (const name of ["globalThis", "self"]) {
       Object.defineProperty(shadow, name, {
         value: shadow,
         configurable: true,
         writable: true,
-        enumerable: true
+        enumerable: true,
       });
     }
     for (const name of OVERLAY_BINDINGS) {
@@ -2088,7 +2481,7 @@ var createInjectedStrictCallable = (target) => {
             value: shadow,
             configurable: true,
             writable: true,
-            enumerable: current?.enumerable ?? name === "self"
+            enumerable: current?.enumerable ?? name === "self",
           });
         } else if ("value" in current && current.writable === true) {
           ignoreError(() => {
@@ -2097,8 +2490,9 @@ var createInjectedStrictCallable = (target) => {
         }
         continue;
       }
-      if (current && current.configurable !== true)
+      if (current && current.configurable !== true) {
         continue;
+      }
       tryDefineProperty(g, name, createEphemeralBlockedBindingDescriptor(name));
     }
     try {
@@ -2119,7 +2513,7 @@ var createInjectedStrictCallable = (target) => {
   mirrorCallableMetadata({
     target: wrapped,
     source: target,
-    name: target.name || "strictInjectedCallable"
+    name: target.name || "strictInjectedCallable",
   });
   return wrapped;
 };
@@ -2141,14 +2535,14 @@ var NON_EXCLUDABLE_PATTERN_IDS = new Set([
   "FFI-03",
   "FFI-04",
   "FFI-05",
-  "FFI-06"
+  "FFI-06",
 ]);
 var createBlockPattern = (id, regex, category, flags) => ({
   id,
   regex,
   category,
   severity: "block",
-  ...flags
+  ...flags,
 });
 var PATTERN_REGISTRY = [
   createBlockPattern("FFI-01", /\bbun\s*:\s*ffi\b/g, "ffi"),
@@ -2163,12 +2557,14 @@ var PATTERN_REGISTRY = [
   createBlockPattern("THR-01", /\bnode\s*:\s*worker_threads\b/g, "thread"),
   createBlockPattern("THR-02", /\bnode\s*:\s*child_process\b/g, "thread"),
   createBlockPattern("THR-03", /\bnode\s*:\s*cluster\b/g, "thread"),
-  createBlockPattern("EVAL-01", /\beval\s*\(/g, "eval", { preflightOnly: true }),
+  createBlockPattern("EVAL-01", /\beval\s*\(/g, "eval", {
+    preflightOnly: true,
+  }),
   createBlockPattern("EVAL-02", /\bnew\s+Function\s*\(/g, "eval", {
-    preflightOnly: true
+    preflightOnly: true,
   }),
   createBlockPattern("EVAL-03", /\bFunction\s*\(/g, "eval", {
-    preflightOnly: true
+    preflightOnly: true,
   }),
   createBlockPattern("EVAL-04", /\bsetTimeout\s*\(\s*['"`]/g, "eval"),
   createBlockPattern("EVAL-05", /\bsetInterval\s*\(\s*['"`]/g, "eval"),
@@ -2177,40 +2573,55 @@ var PATTERN_REGISTRY = [
   createBlockPattern("IMP-03", /\brequire\s*\.\s*resolve\s*\(/g, "import"),
   createBlockPattern("IMP-04", /\bimport\s*\.\s*meta\b/g, "import"),
   createBlockPattern("IMP-06", /\bmodule\s*\.\s*createRequire\b/g, "import"),
-  createBlockPattern("GLOB-01", /\bFunction\s*\(\s*['"]return\s+this['"]\s*\)/g, "global"),
-  createBlockPattern("GLOB-02", /\bconstructor\s*\.\s*constructor\s*\(/g, "global")
+  createBlockPattern(
+    "GLOB-01",
+    /\bFunction\s*\(\s*['"]return\s+this['"]\s*\)/g,
+    "global",
+  ),
+  createBlockPattern(
+    "GLOB-02",
+    /\bconstructor\s*\.\s*constructor\s*\(/g,
+    "global",
+  ),
 ];
 var clampMaxDepth = (value) => {
-  if (!Number.isFinite(value))
+  if (!Number.isFinite(value)) {
     return DEFAULT_MAX_EVAL_DEPTH;
+  }
   const int = Math.floor(value);
-  if (int < MIN_MAX_EVAL_DEPTH)
+  if (int < MIN_MAX_EVAL_DEPTH) {
     return MIN_MAX_EVAL_DEPTH;
-  if (int > MAX_MAX_EVAL_DEPTH)
+  }
+  if (int > MAX_MAX_EVAL_DEPTH) {
     return MAX_MAX_EVAL_DEPTH;
+  }
   return int;
 };
 var toFrozenScanResult = (result) => ({
   passed: result.passed,
-  violations: Object.freeze(result.violations.map((v) => Object.freeze({ ...v })))
+  violations: Object.freeze(
+    result.violations.map((v) => Object.freeze({ ...v })),
+  ),
 });
 var AST_CACHE_LIMIT = 256;
-var astViolationCache = new Map;
+var astViolationCache = new Map();
 var FUNCTION_CONSTRUCTOR_ORIGINS = new Set([
   "Function",
   "GeneratorFunction",
   "AsyncFunction",
-  "AsyncGeneratorFunction"
+  "AsyncGeneratorFunction",
 ]);
-var isFunctionConstructorOrigin = (origin) => FUNCTION_CONSTRUCTOR_ORIGINS.has(origin);
+var isFunctionConstructorOrigin = (origin) =>
+  FUNCTION_CONSTRUCTOR_ORIGINS.has(origin);
 var toAstCacheKey = ({
   source,
-  context
+  context,
 }) => `${isFunctionConstructorOrigin(context.origin) ? "fn" : "src"}:${source}`;
 var getCachedAstViolations = (key) => {
   const cached = astViolationCache.get(key);
-  if (!cached)
+  if (!cached) {
     return;
+  }
   astViolationCache.delete(key);
   astViolationCache.set(key, cached);
   return cached.map((entry) => ({ ...entry }));
@@ -2221,12 +2632,17 @@ var storeAstViolations = (key, violations) => {
 };
 var setCachedAstViolations = (key, violations) => {
   astViolationCache.delete(key);
-  astViolationCache.set(key, Object.freeze(violations.map((entry) => Object.freeze({ ...entry }))));
-  if (astViolationCache.size <= AST_CACHE_LIMIT)
+  astViolationCache.set(
+    key,
+    Object.freeze(violations.map((entry) => Object.freeze({ ...entry }))),
+  );
+  if (astViolationCache.size <= AST_CACHE_LIMIT) {
     return;
+  }
   const oldest = astViolationCache.keys().next().value;
-  if (typeof oldest === "string")
+  if (typeof oldest === "string") {
     astViolationCache.delete(oldest);
+  }
 };
 var require2 = createRequire(import.meta.url);
 var tsApi = (() => {
@@ -2240,20 +2656,20 @@ var toAstViolation = ({
   pattern,
   match,
   line,
-  column
+  column,
 }) => ({
   pattern,
   match,
   line: Math.max(1, line),
   column: Math.max(1, column),
   category: "import",
-  severity: "block"
+  severity: "block",
 });
 var toLineColumnFromIndex = (source, index) => {
   const bounded = Math.max(0, Math.min(index, source.length));
   let line = 1;
   let column = 1;
-  for (let i = 0;i < bounded; i++) {
+  for (let i = 0; i < bounded; i++) {
     const ch = source.charCodeAt(i);
     if (ch === 10) {
       line++;
@@ -2266,19 +2682,22 @@ var toLineColumnFromIndex = (source, index) => {
 };
 var forEachRegexMatch = (source, regex, cb) => {
   regex.lastIndex = 0;
-  for (const found of source.matchAll(regex))
+  for (const found of source.matchAll(regex)) {
     cb(found);
+  }
 };
 var scanAstHeuristic = ({
   source,
-  context
+  context,
 }) => {
   const out = [];
-  for (const [regex, pattern, match] of [
-    [/\bimport\s*\(/g, "AST-ImportExpression", "import(...)"],
-    [/\bimport\s*\.\s*meta\b/g, "AST-MetaProperty", "import.meta"],
-    [/\brequire\s*\(/g, "AST-CallExpression:require", "require(...)"]
-  ]) {
+  for (
+    const [regex, pattern, match] of [
+      [/\bimport\s*\(/g, "AST-ImportExpression", "import(...)"],
+      [/\bimport\s*\.\s*meta\b/g, "AST-MetaProperty", "import.meta"],
+      [/\brequire\s*\(/g, "AST-CallExpression:require", "require(...)"],
+    ]
+  ) {
     forEachRegexMatch(source, regex, (found) => {
       const { line, column } = toLineColumnFromIndex(source, found.index ?? 0);
       out.push(toAstViolation({ pattern, match, line, column }));
@@ -2292,7 +2711,7 @@ var scanAstHeuristic = ({
         pattern: "AST-PARSE",
         match: String(error?.message ?? error).slice(0, 120),
         line: 1,
-        column: 1
+        column: 1,
       }));
     }
   }
@@ -2300,33 +2719,43 @@ var scanAstHeuristic = ({
 };
 var parseSourceWithTs = ({
   source,
-  context
+  context,
 }) => {
   const ts = tsApi;
   if (!ts) {
     return {
-      lineOffset: 0
+      lineOffset: 0,
     };
   }
   const fileName = context.source ?? "strict-scan-input.ts";
   const wrapAsFunctionBody = isFunctionConstructorOrigin(context.origin);
-  const wrappedSource = wrapAsFunctionBody ? `function __knitting_scan_wrapper__(){
+  const wrappedSource = wrapAsFunctionBody
+    ? `function __knitting_scan_wrapper__(){
 ${source}
-}` : source;
+}`
+    : source;
   const lineOffset = wrapAsFunctionBody ? -1 : 0;
-  const sourceFile = ts.createSourceFile(fileName, wrappedSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    wrappedSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
   const diagnostics = sourceFile.parseDiagnostics ?? [];
   if (diagnostics.length === 0) {
     return {
       sourceFile,
-      lineOffset
+      lineOffset,
     };
   }
   const first = diagnostics[0];
   const start = typeof first?.start === "number" ? first.start : 0;
   const position = sourceFile.getLineAndCharacterOfPosition(start);
   const rawMessage = first?.messageText;
-  const message = typeof rawMessage === "string" ? rawMessage : rawMessage?.messageText ?? "syntax parse failure";
+  const message = typeof rawMessage === "string"
+    ? rawMessage
+    : rawMessage?.messageText ?? "syntax parse failure";
   return {
     sourceFile,
     lineOffset,
@@ -2334,35 +2763,43 @@ ${source}
       pattern: "AST-PARSE",
       match: String(message).slice(0, 120),
       line: position.line + 1 + lineOffset,
-      column: position.character + 1
-    })
+      column: position.character + 1,
+    }),
   };
 };
 var scanAst = ({
   source,
-  context
+  context,
 }) => {
   const cacheKey = toAstCacheKey({ source, context });
   const cached = getCachedAstViolations(cacheKey);
-  if (cached)
+  if (cached) {
     return cached;
-  if (!tsApi)
+  }
+  if (!tsApi) {
     return storeAstViolations(cacheKey, scanAstHeuristic({ source, context }));
+  }
   const parsed = parseSourceWithTs({ source, context });
   const sourceFile = parsed.sourceFile;
-  if (!sourceFile)
+  if (!sourceFile) {
     return storeAstViolations(cacheKey, scanAstHeuristic({ source, context }));
-  if (parsed.parseError)
+  }
+  if (parsed.parseError) {
     return storeAstViolations(cacheKey, [parsed.parseError]);
+  }
   const out = [];
   const syntaxKind = tsApi.SyntaxKind;
   const toLineColumn = (node) => {
     const nodeAny = node;
-    const start = typeof nodeAny.getStart === "function" ? nodeAny.getStart(sourceFile) : typeof nodeAny.pos === "number" ? nodeAny.pos : 0;
+    const start = typeof nodeAny.getStart === "function"
+      ? nodeAny.getStart(sourceFile)
+      : typeof nodeAny.pos === "number"
+      ? nodeAny.pos
+      : 0;
     const pos = sourceFile.getLineAndCharacterOfPosition(start);
     return {
       line: pos.line + 1 + parsed.lineOffset,
-      column: pos.character + 1
+      column: pos.character + 1,
     };
   };
   const pushNodeViolation = (node, pattern, match) => {
@@ -2371,13 +2808,24 @@ var scanAst = ({
   };
   const visit = (node) => {
     const n = node;
-    if (n.kind === syntaxKind.CallExpression && n.expression?.kind === syntaxKind.ImportKeyword) {
+    if (
+      n.kind === syntaxKind.CallExpression &&
+      n.expression?.kind === syntaxKind.ImportKeyword
+    ) {
       pushNodeViolation(node, "AST-ImportExpression", "import(...)");
     }
-    if (n.kind === syntaxKind.MetaProperty && n.keywordToken === syntaxKind.ImportKeyword && n.name?.escapedText === "meta") {
+    if (
+      n.kind === syntaxKind.MetaProperty &&
+      n.keywordToken === syntaxKind.ImportKeyword &&
+      n.name?.escapedText === "meta"
+    ) {
       pushNodeViolation(node, "AST-MetaProperty", "import.meta");
     }
-    if (n.kind === syntaxKind.CallExpression && n.expression?.kind === syntaxKind.Identifier && n.expression.escapedText === "require") {
+    if (
+      n.kind === syntaxKind.CallExpression &&
+      n.expression?.kind === syntaxKind.Identifier &&
+      n.expression.escapedText === "require"
+    ) {
       pushNodeViolation(node, "AST-CallExpression:require", "require(...)");
     }
     tsApi.forEachChild(node, visit);
@@ -2386,7 +2834,7 @@ var scanAst = ({
   return storeAstViolations(cacheKey, out);
 };
 var validatePatternRegistry = (patterns) => {
-  const seen = new Set;
+  const seen = new Set();
   const out = [];
   for (const pattern of patterns) {
     if (seen.has(pattern.id)) {
@@ -2409,7 +2857,7 @@ var resolvePatternRegistry = (options) => {
   }
   return validatePatternRegistry([
     ...PATTERN_REGISTRY,
-    ...options?.additionalPatterns ?? []
+    ...options?.additionalPatterns ?? [],
   ]).filter((pattern) => !exclude.has(pattern.id));
 };
 
@@ -2425,16 +2873,22 @@ class StrictModeViolationError extends Error {
     depth,
     source,
     violations,
-    scannedCode
+    scannedCode,
   }) {
     const first = violations[0];
-    const details = first ? `${first.pattern} at ${first.line}:${first.column} (${first.match})` : "unknown violation";
-    super(`KNT_ERROR_PERMISSION_DENIED: strict mode blocked ${origin} at depth ${depth}: ${details}`);
+    const details = first
+      ? `${first.pattern} at ${first.line}:${first.column} (${first.match})`
+      : "unknown violation";
+    super(
+      `KNT_ERROR_PERMISSION_DENIED: strict mode blocked ${origin} at depth ${depth}: ${details}`,
+    );
     this.violations = violations;
     this.origin = origin;
     this.depth = depth;
     this.source = source;
-    this.scannedCode = typeof scannedCode === "string" ? scannedCode.slice(0, 200) : undefined;
+    this.scannedCode = typeof scannedCode === "string"
+      ? scannedCode.slice(0, 200)
+      : undefined;
   }
 }
 
@@ -2446,9 +2900,11 @@ class StrictModeDepthError extends Error {
   constructor({
     currentDepth,
     maxDepth,
-    origin
+    origin,
   }) {
-    super(`KNT_ERROR_PERMISSION_DENIED: strict mode depth limit reached in ${origin} (${currentDepth}/${maxDepth})`);
+    super(
+      `KNT_ERROR_PERMISSION_DENIED: strict mode depth limit reached in ${origin} (${currentDepth}/${maxDepth})`,
+    );
     this.currentDepth = currentDepth;
     this.maxDepth = maxDepth;
     this.origin = origin;
@@ -2466,7 +2922,9 @@ var scanCode = (code, context, options) => {
   }
   const registry = resolvePatternRegistry(options);
   const isPreflight = context.depth === 0;
-  const patterns = registry.filter((pattern) => isPreflight ? pattern.runtimeOnly !== true : pattern.preflightOnly !== true);
+  const patterns = registry.filter((pattern) =>
+    isPreflight ? pattern.runtimeOnly !== true : pattern.preflightOnly !== true
+  );
   const violations = [];
   for (const pattern of patterns) {
     forEachRegexMatch(source, pattern.regex, (match) => {
@@ -2475,17 +2933,18 @@ var scanCode = (code, context, options) => {
         match: match[0],
         ...toLineColumnFromIndex(source, match.index ?? 0),
         category: pattern.category,
-        severity: pattern.severity
+        severity: pattern.severity,
       };
       violations.push(violation);
-      if (violation.severity === "warn")
+      if (violation.severity === "warn") {
         options?.onWarning?.(violation);
+      }
     });
   }
   violations.push(...scanAst({ source, context }));
   const out = {
     passed: violations.every((violation) => violation.severity !== "block"),
-    violations
+    violations,
   };
   options?.onScan?.(context, toFrozenScanResult(out));
   return out;
@@ -2496,7 +2955,7 @@ var resolveStrictModeOptions = (input) => ({
   additionalPatterns: input?.additionalPatterns ?? [],
   excludePatterns: input?.excludePatterns ?? [],
   onWarning: input?.onWarning,
-  onScan: input?.onScan
+  onScan: input?.onScan,
 });
 
 // src/worker/safety/strict-membrane.ts
@@ -2541,7 +3000,7 @@ var SAFE_CORE_GLOBAL_NAMES = [
   "URL",
   "URLSearchParams",
   "AbortController",
-  "AbortSignal"
+  "AbortSignal",
 ];
 var SAFE_FUNCTION_GLOBAL_NAMES = [
   "parseInt",
@@ -2557,12 +3016,12 @@ var SAFE_FUNCTION_GLOBAL_NAMES = [
   "structuredClone",
   "queueMicrotask",
   "clearTimeout",
-  "clearInterval"
+  "clearInterval",
 ];
 var SAFE_LITERAL_GLOBAL_NAMES = [
   "Infinity",
   "NaN",
-  "undefined"
+  "undefined",
 ];
 var SAFE_CONSOLE_METHODS = [
   "log",
@@ -2570,7 +3029,7 @@ var SAFE_CONSOLE_METHODS = [
   "error",
   "info",
   "debug",
-  "trace"
+  "trace",
 ];
 var SAFE_REFLECT_METHODS = [
   "apply",
@@ -2583,7 +3042,7 @@ var SAFE_REFLECT_METHODS = [
   "isExtensible",
   "ownKeys",
   "preventExtensions",
-  "set"
+  "set",
 ];
 var BLOCKED_ADDITIONAL_GLOBAL_NAMES = new Set([
   "Bun",
@@ -2598,51 +3057,59 @@ var BLOCKED_ADDITIONAL_GLOBAL_NAMES = new Set([
   "XMLHttpRequest",
   "WebSocket",
   "EventSource",
-  "Proxy"
+  "Proxy",
 ]);
 var BLOCKED_ADDITIONAL_GLOBAL_PREFIXES = [
   "Bun.",
   "Deno.",
   "process.",
-  "globalThis."
+  "globalThis.",
 ];
 var CONSTRUCTOR_ROUTE_ENTRIES = [
   ["originalFunction", "secureFunction"],
   ["originalGeneratorFunction", "secureGeneratorFunction"],
   ["originalAsyncFunction", "secureAsyncFunction"],
-  ["originalAsyncGeneratorFunction", "secureAsyncGeneratorFunction"]
+  ["originalAsyncGeneratorFunction", "secureAsyncGeneratorFunction"],
 ];
 var hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
 var defineLockedValue = (target, key, value) => {
   if (hasOwn(target, key)) {
-    throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict membrane attempted to overwrite ${String(key)}`);
+    throw new Error(
+      `KNT_ERROR_PERMISSION_DENIED: strict membrane attempted to overwrite ${
+        String(key)
+      }`,
+    );
   }
   Object.defineProperty(target, key, {
     value,
     writable: false,
     configurable: false,
-    enumerable: true
+    enumerable: true,
   });
 };
 var getHostGlobalValue = (name) => globalThis[name];
 var bindGlobalFunction = (name) => {
   const candidate = getHostGlobalValue(name);
-  if (typeof candidate !== "function")
+  if (typeof candidate !== "function") {
     return;
+  }
   return candidate.bind(globalThis);
 };
 var createFrozenNamespace = (namespace) => {
   const out = Object.create(null);
   for (const key of Reflect.ownKeys(namespace)) {
     const descriptor = Object.getOwnPropertyDescriptor(namespace, key);
-    if (!descriptor)
+    if (!descriptor) {
       continue;
+    }
     const nextDescriptor = {
       enumerable: descriptor.enumerable ?? false,
-      configurable: false
+      configurable: false,
     };
     if ("value" in descriptor) {
-      const value = typeof descriptor.value === "function" ? descriptor.value.bind(namespace) : descriptor.value;
+      const value = typeof descriptor.value === "function"
+        ? descriptor.value.bind(namespace)
+        : descriptor.value;
       nextDescriptor.value = value;
       nextDescriptor.writable = false;
     } else {
@@ -2658,23 +3125,31 @@ var createSafeConsole = () => {
   const out = Object.create(null);
   for (const method of SAFE_CONSOLE_METHODS) {
     const target = hostConsole?.[method];
-    const wrapped = typeof target === "function" ? (...args) => Reflect.apply(target, hostConsole, args) : () => {
-      return;
-    };
+    const wrapped = typeof target === "function"
+      ? (...args) => Reflect.apply(target, hostConsole, args)
+      : () => {
+        return;
+      };
     defineLockedValue(out, method, wrapped);
   }
   return Object.freeze(out);
 };
 var defineAppliedMethod = (target, source, methodName) => {
   const method = source[methodName];
-  if (typeof method !== "function")
+  if (typeof method !== "function") {
     return;
-  defineLockedValue(target, methodName, (...args) => Reflect.apply(method, source, args));
+  }
+  defineLockedValue(
+    target,
+    methodName,
+    (...args) => Reflect.apply(method, source, args),
+  );
 };
 var createSafeCrypto = () => {
   const hostCrypto = globalThis.crypto;
-  if (!hostCrypto || typeof hostCrypto !== "object")
+  if (!hostCrypto || typeof hostCrypto !== "object") {
     return;
+  }
   const out = Object.create(null);
   defineAppliedMethod(out, hostCrypto, "getRandomValues");
   defineAppliedMethod(out, hostCrypto, "randomUUID");
@@ -2682,12 +3157,14 @@ var createSafeCrypto = () => {
 };
 var createSafePerformance = () => {
   const hostPerformance = globalThis.performance;
-  if (!hostPerformance || typeof hostPerformance !== "object")
+  if (!hostPerformance || typeof hostPerformance !== "object") {
     return;
+  }
   const out = Object.create(null);
   defineAppliedMethod(out, hostPerformance, "now");
-  if (out.now === undefined)
+  if (out.now === undefined) {
     return;
+  }
   return Object.freeze(out);
 };
 var blockedReferences = () => {
@@ -2706,70 +3183,90 @@ var blockedReferences = () => {
     g.XMLHttpRequest,
     g.WebSocket,
     g.EventSource,
-    g.Proxy
+    g.Proxy,
   ].filter((entry) => entry != null);
 };
 var assertAdditionalGlobalName = (name) => {
   if (name.length === 0) {
-    throw new Error("KNT_ERROR_PERMISSION_DENIED: strict membrane additional global name must not be empty");
+    throw new Error(
+      "KNT_ERROR_PERMISSION_DENIED: strict membrane additional global name must not be empty",
+    );
   }
   if (BLOCKED_ADDITIONAL_GLOBAL_NAMES.has(name)) {
-    throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" maps to runtime-native API`);
+    throw new Error(
+      `KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" maps to runtime-native API`,
+    );
   }
   for (const prefix of BLOCKED_ADDITIONAL_GLOBAL_PREFIXES) {
     if (name.startsWith(prefix)) {
-      throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" maps to runtime-native API`);
+      throw new Error(
+        `KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" maps to runtime-native API`,
+      );
     }
   }
 };
 var assertAdditionalGlobalValue = (name, value) => {
   for (const blocked of blockedReferences()) {
     if (value === blocked) {
-      throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" references runtime-native API`);
+      throw new Error(
+        `KNT_ERROR_PERMISSION_DENIED: strict membrane additional global "${name}" references runtime-native API`,
+      );
     }
   }
 };
-var freezeDeep = (value, seen = new WeakSet) => {
+var freezeDeep = (value, seen = new WeakSet()) => {
   if (!value || typeof value !== "object" && typeof value !== "function") {
     return value;
   }
   const objectValue = value;
-  if (seen.has(objectValue))
+  if (seen.has(objectValue)) {
     return value;
+  }
   seen.add(objectValue);
   for (const key of Reflect.ownKeys(objectValue)) {
     const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
-    if (!descriptor)
+    if (!descriptor) {
       continue;
-    if ("value" in descriptor)
+    }
+    if ("value" in descriptor) {
       freezeDeep(descriptor.value, seen);
-    if (typeof descriptor.get === "function")
+    }
+    if (typeof descriptor.get === "function") {
       freezeDeep(descriptor.get, seen);
-    if (typeof descriptor.set === "function")
+    }
+    if (typeof descriptor.set === "function") {
       freezeDeep(descriptor.set, seen);
+    }
   }
   try {
     Object.freeze(objectValue);
   } catch (error) {
-    throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict membrane additional global is not freezable (${String(error)})`);
+    throw new Error(
+      `KNT_ERROR_PERMISSION_DENIED: strict membrane additional global is not freezable (${
+        String(error)
+      })`,
+    );
   }
   return value;
 };
 var routeConstructor = (candidate, constructors) => {
-  if (!constructors || typeof candidate !== "function")
+  if (!constructors || typeof candidate !== "function") {
     return;
+  }
   for (const [originalKey, secureKey] of CONSTRUCTOR_ROUTE_ENTRIES) {
     const original = constructors[originalKey];
     const secure = constructors[secureKey];
-    if (original && secure && candidate === original)
+    if (original && secure && candidate === original) {
       return secure;
+    }
   }
   return;
 };
 var toConstructor = (candidate, constructors) => {
   const routed = routeConstructor(candidate, constructors);
-  if (routed)
+  if (routed) {
     return routed;
+  }
   if (typeof candidate !== "function") {
     throw new TypeError("Reflect.construct target must be a constructor");
   }
@@ -2779,13 +3276,16 @@ var createSafeReflect = (constructors) => {
   const out = Object.create(null);
   for (const method of SAFE_REFLECT_METHODS) {
     const reflectMethod = Reflect[method];
-    if (typeof reflectMethod !== "function")
+    if (typeof reflectMethod !== "function") {
       continue;
+    }
     defineLockedValue(out, method, reflectMethod.bind(Reflect));
   }
   defineLockedValue(out, "construct", (target, argArray, newTarget) => {
     const targetCtor = toConstructor(target, constructors);
-    const newTargetCtor = newTarget == null ? targetCtor : toConstructor(newTarget, constructors);
+    const newTargetCtor = newTarget == null
+      ? targetCtor
+      : toConstructor(newTarget, constructors);
     return Reflect.construct(targetCtor, Array.from(argArray), newTargetCtor);
   });
   return Object.freeze(out);
@@ -2797,8 +3297,9 @@ var createMembraneGlobal = (config = {}) => {
   const membraneGlobal = Object.create(null);
   for (const name of SAFE_CORE_GLOBAL_NAMES) {
     const value = getHostGlobalValue(name);
-    if (value === undefined)
+    if (value === undefined) {
       continue;
+    }
     defineLockedValue(membraneGlobal, name, value);
   }
   for (const name of SAFE_LITERAL_GLOBAL_NAMES) {
@@ -2806,33 +3307,43 @@ var createMembraneGlobal = (config = {}) => {
   }
   for (const name of SAFE_FUNCTION_GLOBAL_NAMES) {
     const bound = bindGlobalFunction(name);
-    if (!bound)
+    if (!bound) {
       continue;
+    }
     defineLockedValue(membraneGlobal, name, bound);
   }
   defineLockedValue(membraneGlobal, "Math", createFrozenNamespace(Math));
-  defineLockedValue(membraneGlobal, "JSON", Object.freeze(Object.create(null, {
-    parse: {
-      value: JSON.parse.bind(JSON),
-      writable: false,
-      configurable: false,
-      enumerable: true
-    },
-    stringify: {
-      value: JSON.stringify.bind(JSON),
-      writable: false,
-      configurable: false,
-      enumerable: true
-    }
-  })));
-  defineLockedValue(membraneGlobal, "Reflect", createSafeReflect(config.reflectConstructors));
+  defineLockedValue(
+    membraneGlobal,
+    "JSON",
+    Object.freeze(Object.create(null, {
+      parse: {
+        value: JSON.parse.bind(JSON),
+        writable: false,
+        configurable: false,
+        enumerable: true,
+      },
+      stringify: {
+        value: JSON.stringify.bind(JSON),
+        writable: false,
+        configurable: false,
+        enumerable: true,
+      },
+    })),
+  );
+  defineLockedValue(
+    membraneGlobal,
+    "Reflect",
+    createSafeReflect(config.reflectConstructors),
+  );
   if (allowConsole) {
     defineLockedValue(membraneGlobal, "console", createSafeConsole());
   }
   if (allowCrypto) {
     const safeCrypto = createSafeCrypto();
-    if (safeCrypto)
+    if (safeCrypto) {
       defineLockedValue(membraneGlobal, "crypto", safeCrypto);
+    }
   }
   if (allowPerformance) {
     const safePerformance = createSafePerformance();
@@ -2844,7 +3355,9 @@ var createMembraneGlobal = (config = {}) => {
   const wrappers = config.customWrappers ?? {};
   for (const [name, originalValue] of Object.entries(additionalGlobals)) {
     assertAdditionalGlobalName(name);
-    const wrapped = typeof wrappers[name] === "function" ? wrappers[name](originalValue) : originalValue;
+    const wrapped = typeof wrappers[name] === "function"
+      ? wrappers[name](originalValue)
+      : originalValue;
     assertAdditionalGlobalValue(name, wrapped);
     freezeDeep(wrapped);
     defineLockedValue(membraneGlobal, name, wrapped);
@@ -2871,17 +3384,20 @@ var STRICT_BLOCKED_GLOBALS = [
   "EventSource",
   "Proxy",
   "require",
-  "module"
+  "module",
 ];
 var STRICT_IMPORT_OVERLAY_GLOBALS = [
   "Bun",
   "Deno",
   "process",
   "require",
-  "module"
+  "module",
 ];
-var STRICT_VM_BLOCKED_GLOBALS = STRICT_BLOCKED_GLOBALS.filter((name) => name !== "require" && name !== "module");
-var BLOCKED_REQUIRE_MODULE_MESSAGE = (binding) => `[Knitting Strict] ${binding} is blocked. Use static imports in your task module.`;
+var STRICT_VM_BLOCKED_GLOBALS = STRICT_BLOCKED_GLOBALS.filter((name) =>
+  name !== "require" && name !== "module"
+);
+var BLOCKED_REQUIRE_MODULE_MESSAGE = (binding) =>
+  `[Knitting Strict] ${binding} is blocked. Use static imports in your task module.`;
 var toFrozenIssue = (error) => String(error?.message ?? error).slice(0, 160);
 var ignoreError2 = (action) => {
   try {
@@ -2896,19 +3412,19 @@ var tryDefineProperty2 = (target, key, descriptor) => {
 var tryMirrorCallableMetadata = ({
   target,
   source,
-  name
+  name,
 }) => {
   tryDefineProperty2(target, "name", {
     value: name,
-    configurable: true
+    configurable: true,
   });
   tryDefineProperty2(target, "length", {
     value: source.length,
-    configurable: true
+    configurable: true,
   });
   tryDefineProperty2(target, "toString", {
     value: () => Function.prototype.toString.call(source),
-    configurable: true
+    configurable: true,
   });
 };
 var require3 = createRequire2(import.meta.url);
@@ -2926,19 +3442,23 @@ var nodeVm = (() => {
     return;
   }
 })();
-var shouldUseStrictSandbox = (protocol) => protocol?.enabled === true && protocol.unsafe !== true && protocol.mode === "strict" && protocol.strict.recursiveScan !== false && protocol.strict.sandbox === true;
+var shouldUseStrictSandbox = (protocol) =>
+  protocol?.enabled === true && protocol.unsafe !== true &&
+  protocol.mode === "strict" && protocol.strict.recursiveScan !== false &&
+  protocol.strict.sandbox === true;
 var toMutableMembraneGlobal = (frozenMembrane) => {
   const mutable = Object.create(null);
   for (const key of Reflect.ownKeys(frozenMembrane)) {
     const descriptor = Object.getOwnPropertyDescriptor(frozenMembrane, key);
-    if (!descriptor)
+    if (!descriptor) {
       continue;
+    }
     if ("value" in descriptor) {
       Object.defineProperty(mutable, key, {
         value: descriptor.value,
         writable: true,
         configurable: true,
-        enumerable: descriptor.enumerable ?? true
+        enumerable: descriptor.enumerable ?? true,
       });
       continue;
     }
@@ -2946,20 +3466,20 @@ var toMutableMembraneGlobal = (frozenMembrane) => {
       get: descriptor.get,
       set: descriptor.set,
       configurable: true,
-      enumerable: descriptor.enumerable ?? false
+      enumerable: descriptor.enumerable ?? false,
     });
   }
   Object.defineProperty(mutable, "globalThis", {
     value: mutable,
     writable: true,
     configurable: true,
-    enumerable: true
+    enumerable: true,
   });
   Object.defineProperty(mutable, "self", {
     value: mutable,
     writable: true,
     configurable: true,
-    enumerable: true
+    enumerable: true,
   });
   return mutable;
 };
@@ -2967,14 +3487,15 @@ var lockMembraneGlobal = (membraneGlobal) => {
   const ownKeys = Reflect.ownKeys(membraneGlobal);
   for (const key of ownKeys) {
     const descriptor = Object.getOwnPropertyDescriptor(membraneGlobal, key);
-    if (!descriptor)
+    if (!descriptor) {
       continue;
+    }
     if ("value" in descriptor) {
       Object.defineProperty(membraneGlobal, key, {
         value: descriptor.value,
         writable: false,
         configurable: false,
-        enumerable: descriptor.enumerable ?? true
+        enumerable: descriptor.enumerable ?? true,
       });
       continue;
     }
@@ -2982,7 +3503,7 @@ var lockMembraneGlobal = (membraneGlobal) => {
       get: descriptor.get,
       set: undefined,
       configurable: false,
-      enumerable: descriptor.enumerable ?? false
+      enumerable: descriptor.enumerable ?? false,
     });
   }
   Object.freeze(membraneGlobal);
@@ -2992,13 +3513,14 @@ var defineMembraneValue = (membraneGlobal, key, value) => {
     value,
     writable: true,
     configurable: true,
-    enumerable: true
+    enumerable: true,
   });
 };
 var installVmBlockedGlobals = (membraneGlobal) => {
   for (const key of STRICT_VM_BLOCKED_GLOBALS) {
-    if (Object.prototype.hasOwnProperty.call(membraneGlobal, key))
+    if (Object.prototype.hasOwnProperty.call(membraneGlobal, key)) {
       continue;
+    }
     defineMembraneValue(membraneGlobal, key, undefined);
   }
 };
@@ -3008,18 +3530,26 @@ var wrapMembraneConstructor = ({
   runScan,
   enter,
   begin,
-  end
+  end,
 }) => {
   if (originalCtor[STRICT_SECURE_CONSTRUCTOR] === true) {
     return originalCtor;
   }
-  const secure = function(...args) {
+  const secure = function (...args) {
     const nextDepth = enter(origin);
-    runScan(args.map((value) => String(value)).join(`
-`), origin, nextDepth);
+    runScan(
+      args.map((value) => String(value)).join(`
+`),
+      origin,
+      nextDepth,
+    );
     begin();
     try {
-      return Reflect.construct(originalCtor, args, new.target ? new.target : originalCtor);
+      return Reflect.construct(
+        originalCtor,
+        args,
+        new.target ? new.target : originalCtor,
+      );
     } finally {
       end();
     }
@@ -3027,11 +3557,11 @@ var wrapMembraneConstructor = ({
   tryMirrorCallableMetadata({
     target: secure,
     source: originalCtor,
-    name: origin
+    name: origin,
   });
   tryDefineProperty2(secure, STRICT_SECURE_CONSTRUCTOR, {
     value: true,
-    configurable: true
+    configurable: true,
   });
   ignoreError2(() => {
     Object.setPrototypeOf(secure, originalCtor);
@@ -3047,14 +3577,15 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
   const runScan = (code, origin, depth) => {
     const source = `${origin}@depth-${depth}`;
     const result = scanCode(code, { depth, origin, source }, strictOptions);
-    if (result.passed === true)
+    if (result.passed === true) {
       return;
+    }
     throw new StrictModeViolationError({
       origin,
       depth,
       source,
       violations: result.violations,
-      scannedCode: code
+      scannedCode: code,
     });
   };
   const enter = (origin) => {
@@ -3063,7 +3594,7 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
       throw new StrictModeDepthError({
         currentDepth: nextDepth,
         maxDepth: maxEvalDepth,
-        origin
+        origin,
       });
     }
     return nextDepth;
@@ -3076,24 +3607,33 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
   };
   const OriginalFunction = membraneGlobal.Function ?? Function;
   const GeneratorFunction = Object.getPrototypeOf(function* () {}).constructor;
-  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-  const AsyncGeneratorFunction = Object.getPrototypeOf(async function* () {}).constructor;
-  const wrapConstructor = (originalCtor, origin) => wrapMembraneConstructor({
-    originalCtor,
-    origin,
-    runScan,
-    enter,
-    begin,
-    end
-  });
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const AsyncGeneratorFunction =
+    Object.getPrototypeOf(async function* () {}).constructor;
+  const wrapConstructor = (originalCtor, origin) =>
+    wrapMembraneConstructor({
+      originalCtor,
+      origin,
+      runScan,
+      enter,
+      begin,
+      end,
+    });
   const SecureFunction = wrapConstructor(OriginalFunction, "Function");
-  const SecureGeneratorFunction = wrapConstructor(GeneratorFunction, "GeneratorFunction");
+  const SecureGeneratorFunction = wrapConstructor(
+    GeneratorFunction,
+    "GeneratorFunction",
+  );
   const SecureAsyncFunction = wrapConstructor(AsyncFunction, "AsyncFunction");
-  const SecureAsyncGeneratorFunction = wrapConstructor(AsyncGeneratorFunction, "AsyncGeneratorFunction");
+  const SecureAsyncGeneratorFunction = wrapConstructor(
+    AsyncGeneratorFunction,
+    "AsyncGeneratorFunction",
+  );
   const originalEval = membraneGlobal.eval ?? globalThis.eval;
   const secureEval = (code) => {
-    if (typeof code !== "string")
+    if (typeof code !== "string") {
       return code;
+    }
     const nextDepth = enter("eval");
     runScan(code, "eval", nextDepth);
     begin();
@@ -3105,16 +3645,20 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
   };
   defineMembraneValue(membraneGlobal, "eval", secureEval);
   defineMembraneValue(membraneGlobal, "Function", SecureFunction);
-  defineMembraneValue(membraneGlobal, "Reflect", createSafeReflect({
-    originalFunction: OriginalFunction,
-    secureFunction: SecureFunction,
-    originalGeneratorFunction: GeneratorFunction,
-    secureGeneratorFunction: SecureGeneratorFunction,
-    originalAsyncFunction: AsyncFunction,
-    secureAsyncFunction: SecureAsyncFunction,
-    originalAsyncGeneratorFunction: AsyncGeneratorFunction,
-    secureAsyncGeneratorFunction: SecureAsyncGeneratorFunction
-  }));
+  defineMembraneValue(
+    membraneGlobal,
+    "Reflect",
+    createSafeReflect({
+      originalFunction: OriginalFunction,
+      secureFunction: SecureFunction,
+      originalGeneratorFunction: GeneratorFunction,
+      secureGeneratorFunction: SecureGeneratorFunction,
+      originalAsyncFunction: AsyncFunction,
+      secureAsyncFunction: SecureAsyncFunction,
+      originalAsyncGeneratorFunction: AsyncGeneratorFunction,
+      secureAsyncGeneratorFunction: SecureAsyncGeneratorFunction,
+    }),
+  );
   const wrapTimer = (originalTimer, origin) => (handler, ...rest) => {
     if (typeof handler === "string") {
       const nextDepth = enter(origin);
@@ -3122,19 +3666,23 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
     }
     return Reflect.apply(originalTimer, globalThis, [handler, ...rest]);
   };
-  for (const [name, origin] of [
-    ["setTimeout", "setTimeout"],
-    ["setInterval", "setInterval"]
-  ]) {
+  for (
+    const [name, origin] of [
+      ["setTimeout", "setTimeout"],
+      ["setInterval", "setInterval"],
+    ]
+  ) {
     const timer = globalThis[name];
-    if (typeof timer !== "function")
+    if (typeof timer !== "function") {
       continue;
+    }
     defineMembraneValue(membraneGlobal, name, wrapTimer(timer, origin));
   }
   for (const name of ["clearTimeout", "clearInterval"]) {
     const clear = globalThis[name];
-    if (typeof clear !== "function")
+    if (typeof clear !== "function") {
       continue;
+    }
     defineMembraneValue(membraneGlobal, name, clear.bind(globalThis));
   }
   return {
@@ -3145,23 +3693,29 @@ var installInterceptorsOnMembrane = (membraneGlobal, strictOptions) => {
     SecureFunction,
     SecureGeneratorFunction,
     SecureAsyncFunction,
-    SecureAsyncGeneratorFunction
+    SecureAsyncGeneratorFunction,
   };
 };
 var freezePrototypeChains = (bundle) => {
-  for (const [prototype, constructorValue] of [
-    [bundle.OriginalFunction.prototype, bundle.SecureFunction],
-    [bundle.GeneratorFunction.prototype, bundle.SecureGeneratorFunction],
-    [bundle.AsyncFunction.prototype, bundle.SecureAsyncFunction],
-    [bundle.AsyncGeneratorFunction.prototype, bundle.SecureAsyncGeneratorFunction]
-  ]) {
-    if (!prototype)
+  for (
+    const [prototype, constructorValue] of [
+      [bundle.OriginalFunction.prototype, bundle.SecureFunction],
+      [bundle.GeneratorFunction.prototype, bundle.SecureGeneratorFunction],
+      [bundle.AsyncFunction.prototype, bundle.SecureAsyncFunction],
+      [
+        bundle.AsyncGeneratorFunction.prototype,
+        bundle.SecureAsyncGeneratorFunction,
+      ],
+    ]
+  ) {
+    if (!prototype) {
       continue;
+    }
     tryDefineProperty2(prototype, "constructor", {
       value: constructorValue,
       writable: false,
       configurable: false,
-      enumerable: false
+      enumerable: false,
     });
   }
 };
@@ -3170,7 +3724,7 @@ var createBlockedRequireOrModuleDescriptor = (name) => ({
     throw new Error(BLOCKED_REQUIRE_MODULE_MESSAGE(name));
   },
   configurable: true,
-  enumerable: false
+  enumerable: false,
 });
 var applyGlobalOverlay = (targetName, overlayDescriptor, state) => {
   const g = ROOT_GLOBAL_RECORD;
@@ -3181,24 +3735,36 @@ var applyGlobalOverlay = (targetName, overlayDescriptor, state) => {
       Object.defineProperty(g, targetName, overlayDescriptor);
       defined = true;
     });
-    state.set(targetName, defined ? {
-      mode: "defined",
-      descriptor: existing
-    } : { mode: "skipped" });
+    state.set(
+      targetName,
+      defined
+        ? {
+          mode: "defined",
+          descriptor: existing,
+        }
+        : { mode: "skipped" },
+    );
     return;
   }
   if ("value" in existing && existing.writable === true) {
     const previousValue = existing.value;
-    const nextValue = "value" in overlayDescriptor ? overlayDescriptor.value : undefined;
+    const nextValue = "value" in overlayDescriptor
+      ? overlayDescriptor.value
+      : undefined;
     let assigned = false;
     ignoreError2(() => {
       g[targetName] = nextValue;
       assigned = true;
     });
-    state.set(targetName, assigned ? {
-      mode: "assigned",
-      previousValue
-    } : { mode: "skipped" });
+    state.set(
+      targetName,
+      assigned
+        ? {
+          mode: "assigned",
+          previousValue,
+        }
+        : { mode: "skipped" },
+    );
     return;
   }
   state.set(targetName, { mode: "skipped" });
@@ -3226,22 +3792,29 @@ var restoreGlobalOverlay = (state) => {
 var applyMembraneOverlay = (membraneGlobal, explicitNames) => {
   const globalNames = explicitNames ? new Set(explicitNames) : new Set([
     ...STRICT_BLOCKED_GLOBALS,
-    ...Reflect.ownKeys(membraneGlobal).filter((key) => typeof key === "string")
+    ...Reflect.ownKeys(membraneGlobal).filter((key) => typeof key === "string"),
   ]);
-  const overlayState = new Map;
+  const overlayState = new Map();
   for (const name of globalNames) {
-    const isMembraneValue = Object.prototype.hasOwnProperty.call(membraneGlobal, name);
-    const descriptor = isMembraneValue ? {
-      value: membraneGlobal[name],
-      writable: true,
-      configurable: true,
-      enumerable: true
-    } : name === "require" || name === "module" ? createBlockedRequireOrModuleDescriptor(name) : {
-      value: undefined,
-      writable: true,
-      configurable: true,
-      enumerable: true
-    };
+    const isMembraneValue = Object.prototype.hasOwnProperty.call(
+      membraneGlobal,
+      name,
+    );
+    const descriptor = isMembraneValue
+      ? {
+        value: membraneGlobal[name],
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      }
+      : name === "require" || name === "module"
+      ? createBlockedRequireOrModuleDescriptor(name)
+      : {
+        value: undefined,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      };
     applyGlobalOverlay(name, descriptor, overlayState);
   }
   return overlayState;
@@ -3269,7 +3842,7 @@ var withOverlayQueue = async (runtime, work) => {
 };
 var createMembraneInjectedCallable = (target, membraneGlobal) => {
   const callable = target;
-  const wrapped = function(...args) {
+  const wrapped = function (...args) {
     const overlayState = applyMembraneOverlay(membraneGlobal);
     try {
       return Reflect.apply(callable, this, args);
@@ -3280,35 +3853,50 @@ var createMembraneInjectedCallable = (target, membraneGlobal) => {
   tryMirrorCallableMetadata({
     target: wrapped,
     source: target,
-    name: target.name || "strictSandboxInjectedCallable"
+    name: target.name || "strictSandboxInjectedCallable",
   });
   return wrapped;
 };
 var tryCreateVmContext = (membraneGlobal) => {
-  if (!nodeVm)
+  if (!nodeVm) {
     return;
+  }
   try {
-    return nodeVm.createContext(membraneGlobal, createNodeVmDynamicImportOptions());
+    return nodeVm.createContext(
+      membraneGlobal,
+      createNodeVmDynamicImportOptions(),
+    );
   } catch {
     return;
   }
 };
 var lockVmContextGlobalPrototype = (context, issues) => {
-  if (!nodeVm)
+  if (!nodeVm) {
     return;
+  }
   try {
-    const script = new nodeVm.Script("Object.setPrototypeOf(globalThis, null);");
+    const script = new nodeVm.Script(
+      "Object.setPrototypeOf(globalThis, null);",
+    );
     script.runInContext(context);
   } catch (error) {
-    issues.push(`[strict-sandbox] failed to lock vm global prototype: ${toFrozenIssue(error)}`);
+    issues.push(
+      `[strict-sandbox] failed to lock vm global prototype: ${
+        toFrozenIssue(error)
+      }`,
+    );
   }
 };
-var isTypeScriptFilePath = (filePath) => filePath.endsWith(".ts") || filePath.endsWith(".mts") || filePath.endsWith(".cts") || filePath.endsWith(".tsx");
+var isTypeScriptFilePath = (filePath) =>
+  filePath.endsWith(".ts") || filePath.endsWith(".mts") ||
+  filePath.endsWith(".cts") || filePath.endsWith(".tsx");
 var toModuleIdentifier = (specifier, parentIdentifier) => {
-  if (specifier.startsWith("node:"))
+  if (specifier.startsWith("node:")) {
     return specifier;
-  if (path.isAbsolute(specifier))
+  }
+  if (path.isAbsolute(specifier)) {
     return pathToFileURL2(specifier).href;
+  }
   if (parentIdentifier) {
     try {
       return new URL(specifier, parentIdentifier).href;
@@ -3322,8 +3910,9 @@ var toModuleIdentifier = (specifier, parentIdentifier) => {
 var toModuleFilePath = (identifier) => {
   try {
     const parsed = new URL(identifier);
-    if (parsed.protocol !== "file:")
+    if (parsed.protocol !== "file:") {
       return;
+    }
     return fileURLToPath(parsed);
   } catch {
     return;
@@ -3332,12 +3921,15 @@ var toModuleFilePath = (identifier) => {
 var transpileModuleSource = ({
   source,
   filePath,
-  runtime
+  runtime,
 }) => {
-  if (!isTypeScriptFilePath(filePath))
+  if (!isTypeScriptFilePath(filePath)) {
     return source;
+  }
   if (!tsTranspiler) {
-    runtime.issues.push(`[strict-sandbox] typescript transpiler unavailable for ${filePath}; using raw source`);
+    runtime.issues.push(
+      `[strict-sandbox] typescript transpiler unavailable for ${filePath}; using raw source`,
+    );
     return source;
   }
   try {
@@ -3348,41 +3940,47 @@ var transpileModuleSource = ({
         target: tsTranspiler.ScriptTarget.ES2022,
         sourceMap: false,
         inlineSources: false,
-        inlineSourceMap: false
-      }
+        inlineSourceMap: false,
+      },
     });
     return out.outputText;
   } catch (error) {
-    runtime.issues.push(`[strict-sandbox] transpile failed for ${filePath}: ${toFrozenIssue(error)}`);
+    runtime.issues.push(
+      `[strict-sandbox] transpile failed for ${filePath}: ${
+        toFrozenIssue(error)
+      }`,
+    );
     return source;
   }
 };
 var createHostSyntheticModule = async ({
   identifier,
-  runtime
+  runtime,
 }) => {
   const SyntheticModule = nodeVm?.SyntheticModule;
   if (!SyntheticModule || !runtime.context) {
     throw new Error("SyntheticModule unavailable");
   }
   const hostModule = await import(identifier);
-  const exportNames = Reflect.ownKeys(hostModule).filter((key) => typeof key === "string");
+  const exportNames = Reflect.ownKeys(hostModule).filter((key) =>
+    typeof key === "string"
+  );
   const uniqueExports = [...new Set(exportNames)];
-  const synthetic = new SyntheticModule(uniqueExports, function() {
+  const synthetic = new SyntheticModule(uniqueExports, function () {
     for (const name of uniqueExports) {
       this.setExport(name, hostModule[name]);
     }
   }, {
     context: runtime.context,
     identifier,
-    ...createNodeVmDynamicImportOptions()
+    ...createNodeVmDynamicImportOptions(),
   });
   return synthetic;
 };
 var createSourceTextModule = async ({
   identifier,
   runtime,
-  loadModuleById
+  loadModuleById,
 }) => {
   const filePath = toModuleFilePath(identifier);
   const SourceTextModule = nodeVm?.SourceTextModule;
@@ -3393,7 +3991,7 @@ var createSourceTextModule = async ({
   const preflight = scanCode(source, {
     depth: 0,
     origin: "preflight",
-    source: filePath
+    source: filePath,
   }, runtime.strictOptions);
   if (preflight.passed !== true) {
     throw new StrictModeViolationError({
@@ -3401,13 +3999,13 @@ var createSourceTextModule = async ({
       depth: 0,
       source: filePath,
       violations: preflight.violations,
-      scannedCode: source
+      scannedCode: source,
     });
   }
   const jsSource = transpileModuleSource({
     source,
     filePath,
-    runtime
+    runtime,
   });
   const module = new SourceTextModule(jsSource, {
     context: runtime.context,
@@ -3415,7 +4013,7 @@ var createSourceTextModule = async ({
     initializeImportMeta: (meta) => {
       meta.url = identifier;
     },
-    ...createNodeVmDynamicImportOptions()
+    ...createNodeVmDynamicImportOptions(),
   });
   await module.link((specifier, referencingModule) => {
     const parent = referencingModule.identifier ?? identifier;
@@ -3426,21 +4024,27 @@ var createSourceTextModule = async ({
 };
 var loadVmModuleByIdentifier = (identifier, runtime) => {
   const cached = runtime.vmModuleCache.get(identifier);
-  if (cached)
+  if (cached) {
     return cached;
+  }
   const pending = (async () => {
-    const loadModuleById = (moduleIdentifier, _parentIdentifier) => loadVmModuleByIdentifier(moduleIdentifier, runtime);
+    const loadModuleById = (moduleIdentifier, _parentIdentifier) =>
+      loadVmModuleByIdentifier(moduleIdentifier, runtime);
     try {
       return await createSourceTextModule({
         identifier,
         runtime,
-        loadModuleById
+        loadModuleById,
       });
     } catch (error) {
-      runtime.issues.push(`[strict-sandbox] source module fallback for ${identifier}: ${toFrozenIssue(error)}`);
+      runtime.issues.push(
+        `[strict-sandbox] source module fallback for ${identifier}: ${
+          toFrozenIssue(error)
+        }`,
+      );
       return await createHostSyntheticModule({
         identifier,
-        runtime
+        runtime,
       });
     }
   })();
@@ -3452,16 +4056,27 @@ var loadModuleInSandbox = async (moduleSpecifier, runtime) => {
     if (!runtime) {
       return {
         namespace: await import(moduleSpecifier),
-        loadedInSandbox: false
+        loadedInSandbox: false,
       };
     }
-    const namespace = await withOverlayQueue(runtime, () => withMembraneOverlayAsync(runtime.membraneGlobal, async () => await import(moduleSpecifier), STRICT_IMPORT_OVERLAY_GLOBALS));
+    const namespace = await withOverlayQueue(
+      runtime,
+      () =>
+        withMembraneOverlayAsync(
+          runtime.membraneGlobal,
+          async () => await import(moduleSpecifier),
+          STRICT_IMPORT_OVERLAY_GLOBALS,
+        ),
+    );
     return {
       namespace,
-      loadedInSandbox: false
+      loadedInSandbox: false,
     };
   };
-  if (!runtime || !runtime.context || !runtime.vmEnabled || !nodeVm?.SourceTextModule || !nodeVm?.SyntheticModule) {
+  if (
+    !runtime || !runtime.context || !runtime.vmEnabled ||
+    !nodeVm?.SourceTextModule || !nodeVm?.SyntheticModule
+  ) {
     return await fallbackHostImport();
   }
   const identifier = toModuleIdentifier(moduleSpecifier);
@@ -3469,7 +4084,7 @@ var loadModuleInSandbox = async (moduleSpecifier, runtime) => {
   if (cachedNamespace) {
     return {
       namespace: cachedNamespace,
-      loadedInSandbox: true
+      loadedInSandbox: true,
     };
   }
   try {
@@ -3479,61 +4094,86 @@ var loadModuleInSandbox = async (moduleSpecifier, runtime) => {
     runtime.moduleNamespaceCache.set(identifier, namespace);
     return {
       namespace,
-      loadedInSandbox: true
+      loadedInSandbox: true,
     };
   } catch (error) {
-    runtime.issues.push(`[strict-sandbox] module load failed for ${identifier}: ${toFrozenIssue(error)}`);
+    runtime.issues.push(
+      `[strict-sandbox] module load failed for ${identifier}: ${
+        toFrozenIssue(error)
+      }`,
+    );
     return await fallbackHostImport();
   }
 };
 var tryCompileVmCallable = (runtime, target) => {
-  if (!runtime.context || !nodeVm)
+  if (!runtime.context || !nodeVm) {
     return;
+  }
   const source = Function.prototype.toString.call(target);
   const filename = `strict-sandbox-task-${target.name || "anonymous"}.mjs`;
   try {
     const script = new nodeVm.Script(`(${source})`, {
       filename,
-      ...createNodeVmDynamicImportOptions()
+      ...createNodeVmDynamicImportOptions(),
     });
     const evaluated = script.runInContext(runtime.context, {
-      displayErrors: true
+      displayErrors: true,
     });
     if (typeof evaluated === "function") {
       return evaluated;
     }
-    runtime.issues.push(`[strict-sandbox] vm compile result for ${target.name || "anonymous"} was not callable`);
+    runtime.issues.push(
+      `[strict-sandbox] vm compile result for ${
+        target.name || "anonymous"
+      } was not callable`,
+    );
     return;
   } catch (error) {
-    runtime.issues.push(`[strict-sandbox] vm compile failed for ${target.name || "anonymous"}: ${toFrozenIssue(error)}`);
+    runtime.issues.push(
+      `[strict-sandbox] vm compile failed for ${target.name || "anonymous"}: ${
+        toFrozenIssue(error)
+      }`,
+    );
     return;
   }
 };
 var isUnresolvedSandboxReference = (error) => {
   const message = String(error?.message ?? error);
-  return message.includes("is not defined") || message.includes("Cannot access") || message.includes("before initialization");
+  return message.includes("is not defined") ||
+    message.includes("Cannot access") ||
+    message.includes("before initialization");
 };
 var loadInSandbox = (target, runtime) => {
-  if (!runtime)
+  if (!runtime) {
     return createInjectedStrictCallable(target);
-  const injectedFallback = createMembraneInjectedCallable(target, runtime.membraneGlobal);
+  }
+  const injectedFallback = createMembraneInjectedCallable(
+    target,
+    runtime.membraneGlobal,
+  );
   const vmCallable = tryCompileVmCallable(runtime, target);
-  if (!vmCallable)
+  if (!vmCallable) {
     return injectedFallback;
-  const wrapped = function(...args) {
+  }
+  const wrapped = function (...args) {
     try {
       return Reflect.apply(vmCallable, this, args);
     } catch (error) {
-      if (!isUnresolvedSandboxReference(error))
+      if (!isUnresolvedSandboxReference(error)) {
         throw error;
-      runtime.issues.push(`[strict-sandbox] unresolved reference fallback for ${target.name || "anonymous"}: ${toFrozenIssue(error)}`);
+      }
+      runtime.issues.push(
+        `[strict-sandbox] unresolved reference fallback for ${
+          target.name || "anonymous"
+        }: ${toFrozenIssue(error)}`,
+      );
       return Reflect.apply(injectedFallback, this, args);
     }
   };
   tryMirrorCallableMetadata({
     target: wrapped,
     source: target,
-    name: target.name || "strictSandboxCallable"
+    name: target.name || "strictSandboxCallable",
   });
   return wrapped;
 };
@@ -3548,12 +4188,15 @@ var createStrictSandboxRuntime = (protocol) => {
   const frozenMembrane = createMembraneGlobal({
     allowConsole: protocol.allowConsole === true,
     allowCrypto: true,
-    allowPerformance: true
+    allowPerformance: true,
   });
   const membraneGlobal = toMutableMembraneGlobal(frozenMembrane);
   installVmBlockedGlobals(membraneGlobal);
   verifyNoRequire(membraneGlobal);
-  const interceptors = installInterceptorsOnMembrane(membraneGlobal, strictOptions);
+  const interceptors = installInterceptorsOnMembrane(
+    membraneGlobal,
+    strictOptions,
+  );
   freezePrototypeChains(interceptors);
   const context = tryCreateVmContext(membraneGlobal);
   if (context) {
@@ -3564,27 +4207,35 @@ var createStrictSandboxRuntime = (protocol) => {
   }
   lockMembraneGlobal(membraneGlobal);
   if (!context) {
-    issues.push("[strict-sandbox] node:vm unavailable; using membrane injected call fallback");
+    issues.push(
+      "[strict-sandbox] node:vm unavailable; using membrane injected call fallback",
+    );
   } else if (!nodeVm?.SourceTextModule || !nodeVm?.SyntheticModule) {
-    issues.push("[strict-sandbox] vm modules unavailable (missing --experimental-vm-modules); module-level sandbox loader disabled");
+    issues.push(
+      "[strict-sandbox] vm modules unavailable (missing --experimental-vm-modules); module-level sandbox loader disabled",
+    );
   }
   return {
     membraneGlobal,
     strictOptions,
     context,
-    vmEnabled: Boolean(context && nodeVm?.SourceTextModule && nodeVm?.SyntheticModule),
+    vmEnabled: Boolean(
+      context && nodeVm?.SourceTextModule && nodeVm?.SyntheticModule,
+    ),
     issues,
-    vmModuleCache: new Map,
-    moduleNamespaceCache: new Map,
-    overlayQueue: Promise.resolve()
+    vmModuleCache: new Map(),
+    moduleNamespaceCache: new Map(),
+    overlayQueue: Promise.resolve(),
   };
 };
 var ensureStrictSandboxRuntime = (protocol) => {
-  if (!protocol || !shouldUseStrictSandbox(protocol))
+  if (!protocol || !shouldUseStrictSandbox(protocol)) {
     return;
+  }
   const g = globalThis;
-  if (g.__knittingStrictSandboxRuntime)
+  if (g.__knittingStrictSandboxRuntime) {
     return g.__knittingStrictSandboxRuntime;
+  }
   const runtime = createStrictSandboxRuntime(protocol);
   g.__knittingStrictSandboxRuntime = runtime;
   return runtime;
@@ -3592,32 +4243,40 @@ var ensureStrictSandboxRuntime = (protocol) => {
 
 // src/worker/get-functions.ts
 var normalizeTimeout = (timeout) => {
-  if (timeout == null)
+  if (timeout == null) {
     return;
+  }
   if (typeof timeout === "number") {
     const ms2 = Math.floor(timeout);
-    return ms2 >= 0 ? { ms: ms2, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return ms2 >= 0
+      ? { ms: ms2, kind: 0, /* Reject */ value: new Error("Task timeout") }
+      : undefined;
   }
   const ms = Math.floor(timeout.time);
-  if (!(ms >= 0))
+  if (!(ms >= 0)) {
     return;
+  }
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: 1, /* Resolve */ value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: 1, /* Resolve */ value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: 0, /* Reject */ value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: 0, /* Reject */ value: new Error("Task timeout") };
 };
 var toValueTag = Object.prototype.toString;
-var isPromiseAcrossRealms = (value) => value instanceof Promise || typeof value === "object" && value !== null && toValueTag.call(value) === "[object Promise]";
+var isPromiseAcrossRealms = (value) =>
+  value instanceof Promise ||
+  typeof value === "object" && value !== null &&
+    toValueTag.call(value) === "[object Promise]";
 var cloneToHostRealm = (value) => {
   const clone = globalThis.structuredClone;
-  if (typeof clone !== "function")
+  if (typeof clone !== "function") {
     return value;
+  }
   try {
     return clone(value);
   } catch {
@@ -3630,24 +4289,27 @@ var wrapSandboxLoadedCallable = (fn) => {
     if (!isPromiseAcrossRealms(out)) {
       return cloneToHostRealm(out);
     }
-    return Promise.resolve(out).then((value) => cloneToHostRealm(value), (error) => Promise.reject(cloneToHostRealm(error)));
+    return Promise.resolve(out).then(
+      (value) => cloneToHostRealm(value),
+      (error) => Promise.reject(cloneToHostRealm(error)),
+    );
   };
   try {
     Object.defineProperty(wrapped, "name", {
       value: fn.name || "strictSandboxLoadedCallable",
-      configurable: true
+      configurable: true,
     });
   } catch {}
   try {
     Object.defineProperty(wrapped, "length", {
       value: fn.length,
-      configurable: true
+      configurable: true,
     });
   } catch {}
   try {
     Object.defineProperty(wrapped, "toString", {
       value: () => Function.prototype.toString.call(fn),
-      configurable: true
+      configurable: true,
     });
   } catch {}
   return wrapped;
@@ -3657,9 +4319,12 @@ var composeWorkerCallable = (fixed, permission, loadedInSandbox) => {
   if (loadedInSandbox === true) {
     return wrapSandboxLoadedCallable(fn);
   }
-  const shouldInjectStrictCaller = permission?.enabled === true && permission.unsafe !== true && permission.mode === "strict" && permission.strict.recursiveScan !== false;
-  if (!shouldInjectStrictCaller)
+  const shouldInjectStrictCaller = permission?.enabled === true &&
+    permission.unsafe !== true && permission.mode === "strict" &&
+    permission.strict.recursiveScan !== false;
+  if (!shouldInjectStrictCaller) {
     return fn;
+  }
   const shouldUseStrictSandbox2 = permission?.strict.sandbox === true;
   if (!shouldUseStrictSandbox2) {
     return createInjectedStrictCallable(fn);
@@ -3672,36 +4337,56 @@ var composeWorkerCallable = (fixed, permission, loadedInSandbox) => {
 };
 var getFunctions = async ({ list, ids, at, permission }) => {
   const modules = list.map((specifier) => toModuleUrl(specifier));
-  const shouldUseStrictSandbox2 = permission?.enabled === true && permission.unsafe !== true && permission.mode === "strict" && permission.strict.recursiveScan !== false && permission.strict.sandbox === true;
-  const sandboxRuntime = shouldUseStrictSandbox2 ? ensureStrictSandboxRuntime(permission) : undefined;
+  const shouldUseStrictSandbox2 = permission?.enabled === true &&
+    permission.unsafe !== true && permission.mode === "strict" &&
+    permission.strict.recursiveScan !== false &&
+    permission.strict.sandbox === true;
+  const sandboxRuntime = shouldUseStrictSandbox2
+    ? ensureStrictSandboxRuntime(permission)
+    : undefined;
   const results = await Promise.all(modules.map(async (imports) => {
-    const loadedModule = sandboxRuntime ? await loadModuleInSandbox(imports, sandboxRuntime) : {
-      namespace: await import(imports),
-      loadedInSandbox: false
-    };
+    const loadedModule = sandboxRuntime
+      ? await loadModuleInSandbox(imports, sandboxRuntime)
+      : {
+        namespace: await import(imports),
+        loadedInSandbox: false,
+      };
     const module = loadedModule.namespace;
-    return Object.entries(module).filter(([_, value]) => value != null && typeof value === "object" && value?.[endpointSymbol] === true).map(([name, value]) => ({
+    return Object.entries(module).filter(([_, value]) =>
+      value != null && typeof value === "object" &&
+      value?.[endpointSymbol] === true
+    ).map(([name, value]) => ({
       ...value,
       name,
-      __knittingLoadedInSandbox: loadedModule.loadedInSandbox
+      __knittingLoadedInSandbox: loadedModule.loadedInSandbox,
     }));
   }));
   const flattened = results.flat();
   const useAtFilter = modules.length === 1 && at.length > 0;
   const atSet = useAtFilter ? new Set(at) : null;
   const targetModule = useAtFilter ? modules[0] : null;
-  const flattenedResults = flattened.filter((obj) => useAtFilter ? obj.importedFrom === targetModule && atSet.has(obj.at) : ids.includes(obj.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const flattenedResults = flattened.filter((obj) =>
+    useAtFilter
+      ? obj.importedFrom === targetModule && atSet.has(obj.at)
+      : ids.includes(obj.id)
+  ).sort((a, b) => a.name.localeCompare(b.name));
   return flattenedResults.map((fixed) => ({
     ...fixed,
-    run: composeWorkerCallable(fixed, permission, fixed.__knittingLoadedInSandbox === true),
-    timeout: normalizeTimeout(fixed.timeout)
+    run: composeWorkerCallable(
+      fixed,
+      permission,
+      fixed.__knittingLoadedInSandbox === true,
+    ),
+    timeout: normalizeTimeout(fixed.timeout),
   }));
 };
 
 // src/worker/timers.ts
 var maybeGc = (() => {
   const host = globalThis;
-  const gc = typeof host.gc === "function" ? host.gc.bind(globalThis) : undefined;
+  const gc = typeof host.gc === "function"
+    ? host.gc.bind(globalThis)
+    : undefined;
   if (gc) {
     try {
       delete host.gc;
@@ -3726,8 +4411,9 @@ var p_now2 = performance.now.bind(performance);
 var a_pause = "pause" in Atomics ? Atomics.pause : undefined;
 var whilePausing = ({ pauseInNanoseconds }) => {
   const forNanoseconds = pauseInNanoseconds ?? DEFAULT_PAUSE_TIME;
-  if (!a_pause || forNanoseconds <= 0)
+  if (!a_pause || forNanoseconds <= 0) {
     return () => {};
+  }
   return () => a_pause(forNanoseconds);
 };
 var pauseGeneric = whilePausing({});
@@ -3738,18 +4424,22 @@ var sleepUntilChanged = ({
   rxStatus,
   txStatus,
   enqueueLock,
-  write
+  write,
 }) => {
-  const pause = pauseInNanoseconds !== undefined ? whilePausing({ pauseInNanoseconds }) : pauseGeneric;
+  const pause = pauseInNanoseconds !== undefined
+    ? whilePausing({ pauseInNanoseconds })
+    : pauseGeneric;
   const tryProgress = () => {
     let progressed = false;
-    if (enqueueLock())
+    if (enqueueLock()) {
       progressed = true;
+    }
     if (write) {
       const wrote = write();
       if (typeof wrote === "number") {
-        if (wrote > 0)
+        if (wrote > 0) {
           progressed = true;
+        }
       } else if (wrote === true) {
         progressed = true;
       }
@@ -3761,16 +4451,20 @@ var sleepUntilChanged = ({
     maybeGc();
     let spinChecks = 0;
     while (true) {
-      if (a_load(opView, at) !== value || txStatus[0 /* thisIsAHint */] === 1)
+      if (a_load(opView, at) !== value || txStatus[0 /* thisIsAHint */] === 1) {
         return;
-      if (tryProgress())
+      }
+      if (tryProgress()) {
         return;
+      }
       pause();
-      if ((spinChecks++ & 63) === 0 && p_now2() >= until)
+      if ((spinChecks++ & 63) === 0 && p_now2() >= until) {
         break;
+      }
     }
-    if (tryProgress())
+    if (tryProgress()) {
       return;
+    }
     a_store2(rxStatus, 0, 0);
     a_wait(opView, at, value, parkMs ?? 60);
     a_store2(rxStatus, 0, 1);
@@ -3779,21 +4473,25 @@ var sleepUntilChanged = ({
 
 // src/worker/safety/process.ts
 var installTerminationGuard = () => {
-  if (typeof process === "undefined")
+  if (typeof process === "undefined") {
     return;
+  }
   const proc = process;
-  if (proc.__knittingTerminationGuard === true)
+  if (proc.__knittingTerminationGuard === true) {
     return;
+  }
   proc.__knittingTerminationGuard = true;
   const blocked = (name) => {
-    throw new Error(`KNT_ERROR_PROCESS_GUARD: ${name} is disabled in worker tasks`);
+    throw new Error(
+      `KNT_ERROR_PROCESS_GUARD: ${name} is disabled in worker tasks`,
+    );
   };
   const guardMethod = (name) => {
     try {
       Object.defineProperty(proc, name, {
         configurable: false,
         writable: false,
-        value: (..._args) => blocked(`process.${name}`)
+        value: (..._args) => blocked(`process.${name}`),
       });
     } catch {}
   };
@@ -3807,7 +4505,7 @@ var installTerminationGuard = () => {
       Object.defineProperty(globalScope.Bun, "exit", {
         configurable: false,
         writable: false,
-        value: (_code) => blocked("Bun.exit")
+        value: (_code) => blocked("Bun.exit"),
       });
     } catch {}
   }
@@ -3816,7 +4514,7 @@ var installTerminationGuard = () => {
       Object.defineProperty(globalScope.Deno, "exit", {
         configurable: false,
         writable: false,
-        value: (_code) => blocked("Deno.exit")
+        value: (_code) => blocked("Deno.exit"),
       });
     } catch {}
   }
@@ -3826,20 +4524,23 @@ var installUnhandledRejectionSilencer = () => {
     return;
   }
   const proc = process;
-  if (proc.__knittingUnhandledRejectionSilencer === true)
+  if (proc.__knittingUnhandledRejectionSilencer === true) {
     return;
+  }
   proc.__knittingUnhandledRejectionSilencer = true;
   process.on("unhandledRejection", () => {});
 };
 // src/worker/safety/performance.ts
 var installPerformanceNowGuard = () => {
   const g = globalThis;
-  if (g.__knittingPerformanceNowGuardInstalled === true)
+  if (g.__knittingPerformanceNowGuardInstalled === true) {
     return;
+  }
   g.__knittingPerformanceNowGuardInstalled = true;
   const perf = globalThis.performance;
-  if (!perf || typeof perf.now !== "function")
+  if (!perf || typeof perf.now !== "function") {
     return;
+  }
   try {
     perf.now();
   } catch {}
@@ -3857,7 +4558,9 @@ var fsApi = (() => {
     return;
   }
 })();
-var rawExistsSync = typeof fsApi?.existsSync === "function" ? fsApi.existsSync : undefined;
+var rawExistsSync = typeof fsApi?.existsSync === "function"
+  ? fsApi.existsSync
+  : undefined;
 var rawRealpathSync = (() => {
   const maybe = fsApi?.realpathSync?.native ?? fsApi?.realpathSync;
   return typeof maybe === "function" ? maybe : undefined;
@@ -3872,17 +4575,23 @@ var maybeSyncBuiltinESMExports = (() => {
 })();
 var isPathWithin = (base, candidate) => {
   const relative = path2.relative(base, candidate);
-  return relative === "" || !relative.startsWith("..") && !path2.isAbsolute(relative);
+  return relative === "" ||
+    !relative.startsWith("..") && !path2.isAbsolute(relative);
 };
 var toStringPath = (value) => {
-  if (typeof value === "string")
+  if (typeof value === "string") {
     return value;
+  }
   if (value instanceof URL) {
-    if (value.protocol === "file:")
+    if (value.protocol === "file:") {
       return fileURLToPath2(value);
+    }
     return;
   }
-  if (typeof value === "object" && value !== null && "toString" in value && typeof value.toString === "function") {
+  if (
+    typeof value === "object" && value !== null && "toString" in value &&
+    typeof value.toString === "function"
+  ) {
     const out = String(value.toString());
     return out.length > 0 ? out : undefined;
   }
@@ -3890,15 +4599,17 @@ var toStringPath = (value) => {
 };
 var toAbsolutePath = (value, cwd) => {
   const raw = toStringPath(value);
-  if (!raw)
+  if (!raw) {
     return;
+  }
   if (path2.isAbsolute(raw)) {
     return path2.resolve(raw);
   }
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol !== "file:")
+    if (parsed.protocol !== "file:") {
       return;
+    }
     return path2.resolve(fileURLToPath2(parsed));
   } catch {
     return path2.resolve(cwd, raw);
@@ -3908,16 +4619,18 @@ var shouldDenyPath = (value, cwd, denied) => {
   const resolveCanonical = (candidate) => {
     const realpath = rawRealpathSync;
     const direct = (() => {
-      if (!realpath)
+      if (!realpath) {
         return;
+      }
       try {
         return realpath(candidate);
       } catch {
         return;
       }
     })();
-    if (direct)
+    if (direct) {
       return path2.resolve(direct);
+    }
     if (!rawExistsSync || !realpath) {
       return path2.resolve(candidate);
     }
@@ -3925,8 +4638,9 @@ var shouldDenyPath = (value, cwd, denied) => {
     let cursor = path2.resolve(candidate);
     while (!rawExistsSync(cursor)) {
       const parent = path2.dirname(cursor);
-      if (parent === cursor)
+      if (parent === cursor) {
         return path2.resolve(candidate);
+      }
       missingSegments.push(path2.basename(cursor));
       cursor = parent;
     }
@@ -3935,55 +4649,65 @@ var shouldDenyPath = (value, cwd, denied) => {
       base = realpath(cursor);
     } catch {}
     let rebuilt = base;
-    for (let i = missingSegments.length - 1;i >= 0; i--) {
+    for (let i = missingSegments.length - 1; i >= 0; i--) {
       rebuilt = path2.join(rebuilt, missingSegments[i]);
     }
     return path2.resolve(rebuilt);
   };
   const absolute = toAbsolutePath(value, cwd);
-  if (!absolute)
+  if (!absolute) {
     return false;
+  }
   const resolved = resolveCanonical(absolute);
   return denied.some((deny) => isPathWithin(deny, resolved));
 };
 var isNodeOpenForWrite = (flag) => {
-  if (typeof flag === "string")
+  if (typeof flag === "string") {
     return /[wa+]/.test(flag);
-  if (typeof flag === "number")
+  }
+  if (typeof flag === "number") {
     return true;
+  }
   if (typeof flag === "object" && flag !== null && "flags" in flag) {
     return isNodeOpenForWrite(flag.flags);
   }
   return false;
 };
 var isNodeOpenForRead = (flag) => {
-  if (typeof flag === "string")
+  if (typeof flag === "string") {
     return /r/.test(flag);
-  if (typeof flag === "number")
+  }
+  if (typeof flag === "number") {
     return true;
+  }
   if (typeof flag === "object" && flag !== null && "flags" in flag) {
     return isNodeOpenForRead(flag.flags);
   }
   return true;
 };
 var isDenoOpenForWrite = (options) => {
-  if (!options || typeof options !== "object")
+  if (!options || typeof options !== "object") {
     return false;
+  }
   const o = options;
-  return o.write === true || o.append === true || o.create === true || o.truncate === true;
+  return o.write === true || o.append === true || o.create === true ||
+    o.truncate === true;
 };
 var throwDeniedAccess = (target, mode) => {
-  throw new Error(`KNT_ERROR_PERMISSION_DENIED: ${mode} access denied for ${String(target)}`);
+  throw new Error(
+    `KNT_ERROR_PERMISSION_DENIED: ${mode} access denied for ${String(target)}`,
+  );
 };
 var safeWrap = (target, method, check) => {
   try {
     const original = target[method];
-    if (typeof original !== "function")
+    if (typeof original !== "function") {
       return;
+    }
     if (original[WRAPPED] === true) {
       return;
     }
-    const wrapped = function(...args) {
+    const wrapped = function (...args) {
       const denied = check(args);
       if (denied) {
         return throwDeniedAccess(denied.target, denied.mode);
@@ -3995,8 +4719,9 @@ var safeWrap = (target, method, check) => {
   } catch {}
 };
 var wrapMethods = (target, methods, check) => {
-  for (const method of methods)
+  for (const method of methods) {
     safeWrap(target, method, check);
+  }
 };
 var wrapMethodsAndSync = (target, methods, check) => {
   for (const method of methods) {
@@ -4007,51 +4732,65 @@ var wrapMethodsAndSync = (target, methods, check) => {
 var createAccessChecks = ({
   cwd,
   denyRead,
-  denyWrite
+  denyWrite,
 }) => {
-  const readAt = (index) => (args) => shouldDenyPath(args[index], cwd, denyRead) ? { target: args[index], mode: "read" } : undefined;
-  const writeAt = (index) => (args) => shouldDenyPath(args[index], cwd, denyWrite) ? { target: args[index], mode: "write" } : undefined;
-  const readWriteAt = (readIndex, writeIndex) => (args) => readAt(readIndex)(args) ?? writeAt(writeIndex)(args);
+  const readAt = (index) => (args) =>
+    shouldDenyPath(args[index], cwd, denyRead)
+      ? { target: args[index], mode: "read" }
+      : undefined;
+  const writeAt = (index) => (args) =>
+    shouldDenyPath(args[index], cwd, denyWrite)
+      ? { target: args[index], mode: "write" }
+      : undefined;
+  const readWriteAt = (readIndex, writeIndex) => (args) =>
+    readAt(readIndex)(args) ?? writeAt(writeIndex)(args);
   const nodeOpen = (args) => {
-    if (isNodeOpenForWrite(args[1]))
+    if (isNodeOpenForWrite(args[1])) {
       return writeAt(0)(args);
-    if (isNodeOpenForRead(args[1]))
+    }
+    if (isNodeOpenForRead(args[1])) {
       return readAt(0)(args);
+    }
     return;
   };
-  const denoOpen = (args) => isDenoOpenForWrite(args[1]) ? writeAt(0)(args) : readAt(0)(args);
+  const denoOpen = (args) =>
+    isDenoOpenForWrite(args[1]) ? writeAt(0)(args) : readAt(0)(args);
   return {
     readAt,
     writeAt,
     readWriteAt,
     nodeOpen,
-    denoOpen
+    denoOpen,
   };
 };
 var installConsoleGuard = () => {
   const g = globalThis;
-  if (g.__knittingConsoleGuardInstalled === true)
+  if (g.__knittingConsoleGuardInstalled === true) {
     return;
+  }
   g.__knittingConsoleGuardInstalled = true;
-  if (!g.console || typeof g.console !== "object")
+  if (!g.console || typeof g.console !== "object") {
     return;
+  }
   const noop = () => {};
-  for (const method of [
-    "log",
-    "info",
-    "warn",
-    "error",
-    "debug",
-    "trace",
-    "dir",
-    "dirxml",
-    "table"
-  ]) {
+  for (
+    const method of [
+      "log",
+      "info",
+      "warn",
+      "error",
+      "debug",
+      "trace",
+      "dir",
+      "dirxml",
+      "table",
+    ]
+  ) {
     try {
       Object.defineProperty(g.console, method, {
         configurable: false,
         writable: false,
-        value: noop
+        value: noop,
       });
     } catch {
       try {
@@ -4063,7 +4802,7 @@ var installConsoleGuard = () => {
 var installNodeFsGuard = ({
   cwd,
   denyRead,
-  denyWrite
+  denyWrite,
 }) => {
   try {
     const fsModule = require4("node:fs");
@@ -4089,7 +4828,7 @@ var installNodeFsGuard = ({
       "chownSync",
       "utimes",
       "utimesSync",
-      "createWriteStream"
+      "createWriteStream",
     ], checks.writeAt(0));
     wrapMethods(fsModule, [
       "readFile",
@@ -4110,14 +4849,19 @@ var installNodeFsGuard = ({
       "accessSync",
       "createReadStream",
       "watch",
-      "watchFile"
+      "watchFile",
     ], checks.readAt(0));
-    wrapMethods(fsModule, ["rename", "renameSync", "copyFile", "copyFileSync"], checks.readWriteAt(0, 1));
+    wrapMethods(
+      fsModule,
+      ["rename", "renameSync", "copyFile", "copyFileSync"],
+      checks.readWriteAt(0, 1),
+    );
     safeWrap(fsModule, "open", checks.nodeOpen);
     safeWrap(fsModule, "openSync", checks.nodeOpen);
     const promises = fsModule.promises;
-    if (!promises)
+    if (!promises) {
       return;
+    }
     wrapMethods(promises, [
       "writeFile",
       "appendFile",
@@ -4128,7 +4872,7 @@ var installNodeFsGuard = ({
       "mkdir",
       "chmod",
       "chown",
-      "utimes"
+      "utimes",
     ], checks.writeAt(0));
     wrapMethods(promises, [
       "readFile",
@@ -4139,7 +4883,7 @@ var installNodeFsGuard = ({
       "realpath",
       "opendir",
       "access",
-      "watch"
+      "watch",
     ], checks.readAt(0));
     wrapMethods(promises, ["rename", "copyFile"], checks.readWriteAt(0, 1));
     safeWrap(promises, "open", checks.nodeOpen);
@@ -4151,7 +4895,7 @@ var installNodeProcessGuard = () => {
     const childProcess = require4("node:child_process");
     const runAt = (index, fallback) => (args) => ({
       target: args[index] ?? fallback,
-      mode: "run"
+      mode: "run",
     });
     wrapMethods(childProcess, [
       "spawn",
@@ -4160,25 +4904,30 @@ var installNodeProcessGuard = () => {
       "execSync",
       "execFile",
       "execFileSync",
-      "fork"
+      "fork",
     ], runAt(0, "node:child_process"));
     maybeSyncBuiltinESMExports?.();
   } catch {}
 };
 var installNodeInternalsGuard = () => {
-  if (typeof process === "undefined")
+  if (typeof process === "undefined") {
     return;
+  }
   const proc = process;
   const block = (name) => {
-    throw new Error(`KNT_ERROR_PERMISSION_DENIED: run access denied for ${name}`);
+    throw new Error(
+      `KNT_ERROR_PERMISSION_DENIED: run access denied for ${name}`,
+    );
   };
   const dangerousBindingNames = new Set(["spawn_sync", "spawn_wrap"]);
   const wrapBinding = (method) => {
     const original = proc[method];
-    if (typeof original !== "function")
+    if (typeof original !== "function") {
       return;
-    if (original[WRAPPED] === true)
+    }
+    if (original[WRAPPED] === true) {
       return;
+    }
     const wrapped = (name, ...rest) => {
       if (dangerousBindingNames.has(name)) {
         return block(`process.${method}(${name})`);
@@ -4190,7 +4939,7 @@ var installNodeInternalsGuard = () => {
       Object.defineProperty(proc, method, {
         configurable: false,
         writable: false,
-        value: wrapped
+        value: wrapped,
       });
     } catch {
       try {
@@ -4201,14 +4950,16 @@ var installNodeInternalsGuard = () => {
   wrapBinding("binding");
   wrapBinding("_linkedBinding");
   const originalDlopen = proc.dlopen;
-  if (typeof originalDlopen === "function" && originalDlopen[WRAPPED] !== true) {
+  if (
+    typeof originalDlopen === "function" && originalDlopen[WRAPPED] !== true
+  ) {
     const wrappedDlopen = (..._args) => block("process.dlopen");
     wrappedDlopen[WRAPPED] = true;
     try {
       Object.defineProperty(proc, "dlopen", {
         configurable: false,
         writable: false,
-        value: wrappedDlopen
+        value: wrappedDlopen,
       });
     } catch {
       try {
@@ -4219,15 +4970,21 @@ var installNodeInternalsGuard = () => {
 };
 var installWorkerSpawnGuard = () => {
   const g = globalThis;
-  if (g.__knittingWorkerSpawnGuardInstalled === true)
+  if (g.__knittingWorkerSpawnGuardInstalled === true) {
     return;
+  }
   g.__knittingWorkerSpawnGuardInstalled = true;
   const blockWorker = (name) => {
-    throw new Error(`KNT_ERROR_PERMISSION_DENIED: run access denied for ${name}`);
+    throw new Error(
+      `KNT_ERROR_PERMISSION_DENIED: run access denied for ${name}`,
+    );
   };
   try {
     const workerThreads = require4("node:worker_threads");
-    if (typeof workerThreads.Worker === "function" && workerThreads.Worker[WRAPPED] !== true) {
+    if (
+      typeof workerThreads.Worker === "function" &&
+      workerThreads.Worker[WRAPPED] !== true
+    ) {
       const original = workerThreads.Worker;
       const wrapped = new Proxy(original, {
         apply() {
@@ -4235,7 +4992,7 @@ var installWorkerSpawnGuard = () => {
         },
         construct() {
           return blockWorker("node:worker_threads.Worker");
-        }
+        },
       });
       wrapped[WRAPPED] = true;
       workerThreads.Worker = wrapped;
@@ -4248,7 +5005,7 @@ var installWorkerSpawnGuard = () => {
       const wrapped = new Proxy(globalWorker, {
         construct() {
           return blockWorker("Worker");
-        }
+        },
       });
       wrapped[WRAPPED] = true;
       g.Worker = wrapped;
@@ -4259,12 +5016,13 @@ var installDenoGuard = ({
   cwd,
   denyRead,
   denyWrite,
-  allowRun
+  allowRun,
 }) => {
   const g = globalThis;
   const deno = g.Deno;
-  if (!deno)
+  if (!deno) {
     return;
+  }
   const checks = createAccessChecks({ cwd, denyRead, denyWrite });
   wrapMethodsAndSync(deno, [
     "writeFile",
@@ -4274,7 +5032,7 @@ var installDenoGuard = ({
     "mkdir",
     "chmod",
     "chown",
-    "create"
+    "create",
   ], checks.writeAt(0));
   wrapMethodsAndSync(deno, [
     "readFile",
@@ -4284,24 +5042,32 @@ var installDenoGuard = ({
     "stat",
     "lstat",
     "realPath",
-    "watchFs"
+    "watchFs",
   ], checks.readAt(0));
   safeWrap(deno, "open", checks.denoOpen);
   safeWrap(deno, "openSync", checks.denoOpen);
-  wrapMethodsAndSync(deno, ["rename", "copyFile", "link", "symlink"], checks.readWriteAt(0, 1));
+  wrapMethodsAndSync(
+    deno,
+    ["rename", "copyFile", "link", "symlink"],
+    checks.readWriteAt(0, 1),
+  );
   if (allowRun !== true) {
     const runAt = (index, fallback) => (args) => ({
       target: args[index] ?? fallback,
-      mode: "run"
+      mode: "run",
     });
-    wrapMethods(deno, ["run", "spawn", "spawnSync", "spawnChild"], runAt(0, "Deno.Command"));
+    wrapMethods(
+      deno,
+      ["run", "spawn", "spawnSync", "spawnChild"],
+      runAt(0, "Deno.Command"),
+    );
     try {
       const command = deno.Command;
       if (typeof command === "function" && command[WRAPPED] !== true) {
         const wrapped = new Proxy(command, {
           construct(_target, args) {
             return throwDeniedAccess(args[0] ?? "Deno.Command", "run");
-          }
+          },
         });
         wrapped[WRAPPED] = true;
         deno.Command = wrapped;
@@ -4313,34 +5079,36 @@ var installBunGuard = ({
   cwd,
   denyRead,
   denyWrite,
-  allowRun
+  allowRun,
 }) => {
   const g = globalThis;
   const bun = g.Bun;
-  if (!bun)
+  if (!bun) {
     return;
+  }
   const checks = createAccessChecks({ cwd, denyRead, denyWrite });
   safeWrap(bun, "write", checks.writeAt(0));
   safeWrap(bun, "file", checks.readAt(0));
   safeWrap(bun, "dlopen", (_args) => ({
     target: "Bun.dlopen",
-    mode: "run"
+    mode: "run",
   }));
   safeWrap(bun, "linkSymbols", (_args) => ({
     target: "Bun.linkSymbols",
-    mode: "run"
+    mode: "run",
   }));
   if (allowRun !== true) {
     const runAt = (index, fallback) => (args) => ({
       target: args[index] ?? fallback,
-      mode: "run"
+      mode: "run",
     });
     wrapMethods(bun, ["spawn", "spawnSync", "$"], runAt(0, "Bun.spawn"));
   }
 };
 var installWritePermissionGuard = (protocol) => {
-  if (!protocol || protocol.enabled !== true)
+  if (!protocol || protocol.enabled !== true) {
     return;
+  }
   if (protocol.allowConsole !== true) {
     installConsoleGuard();
   }
@@ -4348,8 +5116,9 @@ var installWritePermissionGuard = (protocol) => {
     return;
   }
   const g = globalThis;
-  if (g.__knittingPermissionGuardInstalled === true)
+  if (g.__knittingPermissionGuardInstalled === true) {
     return;
+  }
   g.__knittingPermissionGuardInstalled = true;
   if (protocol.node.allowChildProcess !== true) {
     installNodeProcessGuard();
@@ -4357,7 +5126,10 @@ var installWritePermissionGuard = (protocol) => {
     installWorkerSpawnGuard();
   }
   const { cwd, denyRead, denyWrite } = protocol;
-  if ((!Array.isArray(denyRead) || denyRead.length === 0) && (!Array.isArray(denyWrite) || denyWrite.length === 0)) {
+  if (
+    (!Array.isArray(denyRead) || denyRead.length === 0) &&
+    (!Array.isArray(denyWrite) || denyWrite.length === 0)
+  ) {
     return;
   }
   installNodeFsGuard({ cwd, denyRead, denyWrite });
@@ -4365,17 +5137,19 @@ var installWritePermissionGuard = (protocol) => {
     cwd,
     denyRead,
     denyWrite,
-    allowRun: protocol.deno.allowRun
+    allowRun: protocol.deno.allowRun,
   });
   installBunGuard({
     cwd,
     denyRead,
     denyWrite,
-    allowRun: protocol.bun.allowRun
+    allowRun: protocol.bun.allowRun,
   });
 };
 // src/worker/safety/strict-mode.ts
-var STRICT_SECURE_CONSTRUCTOR2 = Symbol.for("knitting.strict.secureConstructor");
+var STRICT_SECURE_CONSTRUCTOR2 = Symbol.for(
+  "knitting.strict.secureConstructor",
+);
 var ignoreError3 = (action) => {
   try {
     action();
@@ -4387,41 +5161,66 @@ var tryDefineProperty3 = (defineProperty, target, property, descriptor) => {
   });
 };
 var markProtectedProperty = (state, target, property) => {
-  const set = state.get(target) ?? new Set;
+  const set = state.get(target) ?? new Set();
   set.add(property);
   state.set(target, set);
 };
-var isProtectedProperty = (state, target, property) => state.get(target)?.has(property) === true;
-var defineLockedProperty = (defineProperty, protectedState, target, property, value) => defineLockedDescriptor(defineProperty, protectedState, target, property, {
+var isProtectedProperty = (state, target, property) =>
+  state.get(target)?.has(property) === true;
+var defineLockedProperty = (
+  defineProperty,
+  protectedState,
+  target,
+  property,
   value,
-  writable: false,
-  enumerable: true
-});
-var defineLockedDescriptor = (defineProperty, protectedState, target, property, descriptor) => {
+) =>
+  defineLockedDescriptor(defineProperty, protectedState, target, property, {
+    value,
+    writable: false,
+    enumerable: true,
+  });
+var defineLockedDescriptor = (
+  defineProperty,
+  protectedState,
+  target,
+  property,
+  descriptor,
+) => {
   defineProperty(target, property, {
     ...descriptor,
     configurable: false,
-    enumerable: descriptor.enumerable ?? false
+    enumerable: descriptor.enumerable ?? false,
   });
   markProtectedProperty(protectedState, target, property);
 };
-var shouldInstallStrictRuntimeGuard = (protocol) => protocol?.enabled === true && protocol.unsafe !== true && protocol.mode === "strict";
+var shouldInstallStrictRuntimeGuard = (protocol) =>
+  protocol?.enabled === true && protocol.unsafe !== true &&
+  protocol.mode === "strict";
 var installStrictModeRuntimeGuard = (protocol) => {
-  if (!shouldInstallStrictRuntimeGuard(protocol))
+  if (!shouldInstallStrictRuntimeGuard(protocol)) {
     return;
+  }
   const strictOptions = resolveStrictModeOptions(protocol?.strict);
-  if (strictOptions.recursiveScan === false)
+  if (strictOptions.recursiveScan === false) {
     return;
+  }
   const g = globalThis;
-  if (g.__knittingStrictRuntimeGuardInstalled === true)
+  if (g.__knittingStrictRuntimeGuardInstalled === true) {
     return;
+  }
   try {
     const maxEvalDepth = strictOptions.maxEvalDepth;
-    const protectedState = new WeakMap;
+    const protectedState = new WeakMap();
     const originalDefineProperty = Object.defineProperty;
     let evalDepth = 0;
     const lockValue = (target, property, value) => {
-      defineLockedProperty(originalDefineProperty, protectedState, target, property, value);
+      defineLockedProperty(
+        originalDefineProperty,
+        protectedState,
+        target,
+        property,
+        value,
+      );
     };
     const withScannedExecution = (origin, source, run) => {
       const nextDepth = enter(origin);
@@ -4436,24 +5235,36 @@ var installStrictModeRuntimeGuard = (protocol) => {
     if (RUNTIME === "bun") {
       for (const binding of ["require", "module"]) {
         const existing = Object.getOwnPropertyDescriptor(globalThis, binding);
-        if (existing?.configurable === false && isBlockedBindingDescriptor(existing) !== true) {
-          throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict mode cannot lock global ${binding}`);
+        if (
+          existing?.configurable === false &&
+          isBlockedBindingDescriptor(existing) !== true
+        ) {
+          throw new Error(
+            `KNT_ERROR_PERMISSION_DENIED: strict mode cannot lock global ${binding}`,
+          );
         }
-        defineLockedDescriptor(originalDefineProperty, protectedState, globalThis, binding, createBlockedBindingDescriptor(binding));
+        defineLockedDescriptor(
+          originalDefineProperty,
+          protectedState,
+          globalThis,
+          binding,
+          createBlockedBindingDescriptor(binding),
+        );
       }
       verifyNoRequire(globalThis);
     }
     const runScan = (code, origin, depth) => {
       const source = `${origin}@depth-${depth}`;
       const result = scanCode(code, { depth, origin, source }, strictOptions);
-      if (result.passed === true)
+      if (result.passed === true) {
         return;
+      }
       throw new StrictModeViolationError({
         origin,
         depth,
         source,
         violations: result.violations,
-        scannedCode: code
+        scannedCode: code,
       });
     };
     const enter = (origin) => {
@@ -4462,7 +5273,7 @@ var installStrictModeRuntimeGuard = (protocol) => {
         throw new StrictModeDepthError({
           currentDepth: nextDepth,
           maxDepth: maxEvalDepth,
-          origin
+          origin,
         });
       }
       return nextDepth;
@@ -4471,36 +5282,68 @@ var installStrictModeRuntimeGuard = (protocol) => {
       if (originalCtor[STRICT_SECURE_CONSTRUCTOR2] === true) {
         return originalCtor;
       }
-      const secure = function(...args) {
-        return withScannedExecution(origin, args.map((value) => String(value)).join(`
-`), () => Reflect.construct(originalCtor, args, new.target ? new.target : originalCtor));
+      const secure = function (...args) {
+        return withScannedExecution(
+          origin,
+          args.map((value) => String(value)).join(`
+`),
+          () =>
+            Reflect.construct(
+              originalCtor,
+              args,
+              new.target ? new.target : originalCtor,
+            ),
+        );
       };
-      tryDefineProperty3(originalDefineProperty, secure, "name", { value: origin });
-      tryDefineProperty3(originalDefineProperty, secure, STRICT_SECURE_CONSTRUCTOR2, { value: true });
+      tryDefineProperty3(originalDefineProperty, secure, "name", {
+        value: origin,
+      });
+      tryDefineProperty3(
+        originalDefineProperty,
+        secure,
+        STRICT_SECURE_CONSTRUCTOR2,
+        { value: true },
+      );
       return secure;
     };
     const originalEval = globalThis.eval;
-    const secureEval = function(code) {
-      if (typeof code !== "string")
+    const secureEval = function (code) {
+      if (typeof code !== "string") {
         return code;
-      return withScannedExecution("eval", code, () => Reflect.apply(originalEval, globalThis, [code]));
+      }
+      return withScannedExecution(
+        "eval",
+        code,
+        () => Reflect.apply(originalEval, globalThis, [code]),
+      );
     };
     const OriginalFunction = Function;
-    const GeneratorFunction = Object.getPrototypeOf(function* () {}).constructor;
-    const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-    const AsyncGeneratorFunction = Object.getPrototypeOf(async function* () {}).constructor;
+    const GeneratorFunction =
+      Object.getPrototypeOf(function* () {}).constructor;
+    const AsyncFunction =
+      Object.getPrototypeOf(async function () {}).constructor;
+    const AsyncGeneratorFunction =
+      Object.getPrototypeOf(async function* () {}).constructor;
     const SecureFunction = wrapConstructor(OriginalFunction, "Function");
-    const SecureGeneratorFunction = wrapConstructor(GeneratorFunction, "GeneratorFunction");
+    const SecureGeneratorFunction = wrapConstructor(
+      GeneratorFunction,
+      "GeneratorFunction",
+    );
     const SecureAsyncFunction = wrapConstructor(AsyncFunction, "AsyncFunction");
-    const SecureAsyncGeneratorFunction = wrapConstructor(AsyncGeneratorFunction, "AsyncGeneratorFunction");
+    const SecureAsyncGeneratorFunction = wrapConstructor(
+      AsyncGeneratorFunction,
+      "AsyncGeneratorFunction",
+    );
     lockValue(globalThis, "eval", secureEval);
     lockValue(globalThis, "Function", SecureFunction);
-    for (const [prototype, ctor] of [
-      [OriginalFunction.prototype, SecureFunction],
-      [GeneratorFunction.prototype, SecureGeneratorFunction],
-      [AsyncFunction.prototype, SecureAsyncFunction],
-      [AsyncGeneratorFunction.prototype, SecureAsyncGeneratorFunction]
-    ]) {
+    for (
+      const [prototype, ctor] of [
+        [OriginalFunction.prototype, SecureFunction],
+        [GeneratorFunction.prototype, SecureGeneratorFunction],
+        [AsyncFunction.prototype, SecureAsyncFunction],
+        [AsyncGeneratorFunction.prototype, SecureAsyncGeneratorFunction],
+      ]
+    ) {
       lockValue(prototype, "constructor", ctor);
     }
     const wrapTimer = (originalTimer, origin) => (handler, ...rest) => {
@@ -4510,20 +5353,31 @@ var installStrictModeRuntimeGuard = (protocol) => {
       }
       return Reflect.apply(originalTimer, globalThis, [handler, ...rest]);
     };
-    for (const [name, origin] of [
-      ["setTimeout", "setTimeout"],
-      ["setInterval", "setInterval"]
-    ]) {
+    for (
+      const [name, origin] of [
+        ["setTimeout", "setTimeout"],
+        ["setInterval", "setInterval"],
+      ]
+    ) {
       const timer = globalThis[name];
-      if (typeof timer !== "function")
+      if (typeof timer !== "function") {
         continue;
+      }
       lockValue(globalThis, name, wrapTimer(timer, origin));
     }
     const secureDefineProperty = (target, property, descriptor) => {
       if (isProtectedProperty(protectedState, target, property)) {
-        throw new Error(`KNT_ERROR_PERMISSION_DENIED: strict mode lock for ${String(property)}`);
+        throw new Error(
+          `KNT_ERROR_PERMISSION_DENIED: strict mode lock for ${
+            String(property)
+          }`,
+        );
       }
-      return Reflect.apply(originalDefineProperty, Object, [target, property, descriptor]);
+      return Reflect.apply(originalDefineProperty, Object, [
+        target,
+        property,
+        descriptor,
+      ]);
     };
     lockValue(Object, "defineProperty", secureDefineProperty);
     g.__knittingStrictRuntimeGuardInstalled = true;
@@ -4558,7 +5412,9 @@ var scrubWorkerDataSensitiveBuffers = (value) => {
   } catch {}
 };
 // src/worker/safety/startup.ts
-var hasLockBuffers = (value) => !!value?.headers && !!value?.lockSector && !!value?.payload && !!value?.payloadSector;
+var hasLockBuffers = (value) =>
+  !!value?.headers && !!value?.lockSector && !!value?.payload &&
+  !!value?.payloadSector;
 var assertWorkerSharedMemoryBootData = ({ sab, lock, returnLock }) => {
   if (!sab) {
     throw new Error("worker missing transport SAB");
@@ -4574,8 +5430,9 @@ var assertWorkerImportsResolved = ({ debug, list, ids, listOfFunctions }) => {
   if (debug?.logImportedUrl === true) {
     console.log(list);
   }
-  if (listOfFunctions.length > 0)
+  if (listOfFunctions.length > 0) {
     return;
+  }
   console.log(list);
   console.log(ids);
   console.log(listOfFunctions);
@@ -4588,36 +5445,43 @@ var AbortSignalPoolExhausted = Symbol.for("knitting.abortSignal.poolExhausted");
 var EnqueuedAbortSignal = Symbol.for("knitting.abortSignal.enqueuedSignal");
 var signalAbortFactory = ({
   sab,
-  maxSignals
+  maxSignals,
 }) => {
   const atomicView = new Uint32Array(sab);
   const size = atomicView.length;
   const inUse = new Uint32Array(size);
   const physicalMax = size * SLOT_BITS;
   const max = (() => {
-    if (!Number.isFinite(maxSignals))
+    if (!Number.isFinite(maxSignals)) {
       return physicalMax;
+    }
     const parsed = Math.floor(maxSignals);
-    if (parsed <= 0)
+    if (parsed <= 0) {
       return physicalMax;
+    }
     return Math.min(parsed, physicalMax);
   })();
   const closeNow = max + 1;
   let current = 0;
   let cursor = 0;
   const getSignal = () => {
-    if (current >= max)
+    if (current >= max) {
       return closeNow;
-    for (let step = 0;step < size; step++) {
+    }
+    for (let step = 0; step < size; step++) {
       const word = (cursor + step) % size;
       const wordBase = word << 5;
       const remaining = max - wordBase;
-      if (remaining <= 0)
+      if (remaining <= 0) {
         continue;
-      const allowedMask = remaining >= SLOT_BITS ? 4294967295 : (1 << remaining) - 1 >>> 0;
+      }
+      const allowedMask = remaining >= SLOT_BITS
+        ? 4294967295
+        : (1 << remaining) - 1 >>> 0;
       const freeBits = (~inUse[word] & allowedMask) >>> 0;
-      if (freeBits === 0)
+      if (freeBits === 0) {
         continue;
+      }
       const bit = (freeBits & -freeBits) >>> 0;
       inUse[word] = (inUse[word] | bit) >>> 0;
       current = current + 1 | 0;
@@ -4629,49 +5493,60 @@ var signalAbortFactory = ({
     return closeNow;
   };
   const setSignal = (signal) => {
-    if (signal === closeNow)
+    if (signal === closeNow) {
       return 0;
-    if (!Number.isInteger(signal))
+    }
+    if (!Number.isInteger(signal)) {
       return -1;
-    if (signal < 0 || signal >= max)
+    }
+    if (signal < 0 || signal >= max) {
       return -1;
+    }
     const word = signal >>> 5;
     const bit = 1 << (signal & SLOT_MASK);
     Atomics.or(atomicView, word, bit);
     return 1;
   };
   const abortAll = () => {
-    for (let word = 0;word < size; word++) {
+    for (let word = 0; word < size; word++) {
       Atomics.store(atomicView, word, inUse[word]);
     }
     return current;
   };
   const hasAborted = (signal) => {
-    if (signal === closeNow)
+    if (signal === closeNow) {
       return true;
-    if (!Number.isInteger(signal))
+    }
+    if (!Number.isInteger(signal)) {
       return false;
-    if (signal < 0 || signal >= max)
+    }
+    if (signal < 0 || signal >= max) {
       return false;
+    }
     const word = signal >>> 5;
     const bit = 1 << (signal & SLOT_MASK);
     return (Atomics.load(atomicView, word) & bit) !== 0;
   };
   const resetSignal = (signal) => {
-    if (signal === closeNow)
+    if (signal === closeNow) {
       return false;
-    if (!Number.isInteger(signal))
+    }
+    if (!Number.isInteger(signal)) {
       return false;
-    if (signal < 0 || signal >= max)
+    }
+    if (signal < 0 || signal >= max) {
       return false;
+    }
     const word = signal >>> 5;
     const bit = 1 << (signal & SLOT_MASK);
     const used = (inUse[word] & bit) !== 0;
-    if (!used)
+    if (!used) {
       return false;
+    }
     inUse[word] = (inUse[word] & ~bit) >>> 0;
-    if (current > 0)
+    if (current > 0) {
       current = current - 1 | 0;
+    }
     cursor = word;
     Atomics.and(atomicView, word, ~bit);
     return true;
@@ -4684,7 +5559,7 @@ var signalAbortFactory = ({
     abortAll,
     hasAborted,
     resetSignal,
-    inUseCount: () => current
+    inUseCount: () => current,
   };
 };
 
@@ -4692,8 +5567,9 @@ class OneShotDeferred {
   #triggered = false;
   constructor(deferred, onSettle) {
     const settleOnce = (fn) => (...args) => {
-      if (this.#triggered)
+      if (this.#triggered) {
         return;
+      }
       this.#triggered = true;
       onSettle();
       fn(...args);
@@ -4724,7 +5600,7 @@ var workerMainLoop = async (startupData) => {
     totalNumberOfThread,
     list,
     ids,
-    at
+    at,
   } = startupData;
   scrubWorkerDataSensitiveBuffers(startupData);
   installWritePermissionGuard(permission);
@@ -4736,30 +5612,33 @@ var workerMainLoop = async (startupData) => {
   })(Comment ||= {});
   const signals = createSharedMemoryTransport({
     sabObject: {
-      sharedSab: sab
+      sharedSab: sab,
     },
     isMain: false,
     thread,
     debug,
-    startTime: startAt
+    startTime: startAt,
   });
   const lockState = lock2({
     headers: lock.headers,
     LockBoundSector: lock.lockSector,
     payload: lock.payload,
-    payloadSector: lock.payloadSector
+    payloadSector: lock.payloadSector,
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
     LockBoundSector: returnLock.lockSector,
     payload: returnLock.payload,
-    payloadSector: returnLock.payloadSector
+    payloadSector: returnLock.payloadSector,
   });
   const timers = workerOptions?.timers;
-  const spinMicroseconds = timers?.spinMicroseconds ?? Math.max(1, totalNumberOfThread) * 50;
+  const spinMicroseconds = timers?.spinMicroseconds ??
+    Math.max(1, totalNumberOfThread) * 50;
   const parkMs = timers?.parkMs ?? Math.max(1, totalNumberOfThread) * 50;
   const pauseSpin = (() => {
-    const fn = typeof timers?.pauseNanoseconds === "number" ? whilePausing({ pauseInNanoseconds: timers.pauseNanoseconds }) : pauseGeneric;
+    const fn = typeof timers?.pauseNanoseconds === "number"
+      ? whilePausing({ pauseInNanoseconds: timers.pauseNanoseconds })
+      : pauseGeneric;
     return () => fn();
   })();
   const { opView, rxStatus, txStatus } = signals;
@@ -4770,26 +5649,28 @@ var workerMainLoop = async (startupData) => {
     isWorker: true,
     ids,
     at,
-    permission
+    permission,
   });
   assertWorkerImportsResolved({ debug, list, ids, listOfFunctions });
-  const abortSignals = abortSignalSAB ? signalAbortFactory({
-    sab: abortSignalSAB,
-    maxSignals: abortSignalMax
-  }) : undefined;
+  const abortSignals = abortSignalSAB
+    ? signalAbortFactory({
+      sab: abortSignalSAB,
+      maxSignals: abortSignalMax,
+    })
+    : undefined;
   const {
     enqueueLock,
     serviceBatchImmediate,
     hasCompleted,
     writeBatch,
     hasPending,
-    getAwaiting
+    getAwaiting,
   } = createWorkerRxQueue({
     listOfFunctions,
     workerOptions,
     lock: lockState,
     returnLock: returnLockState,
-    hasAborted: abortSignals?.hasAborted
+    hasAborted: abortSignals?.hasAborted,
   });
   a_store3(rxStatus, 0, 1);
   const WRITE_MAX = 64;
@@ -4800,9 +5681,9 @@ var workerMainLoop = async (startupData) => {
     txStatus,
     pauseInNanoseconds: timers?.pauseNanoseconds,
     enqueueLock,
-    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0
+    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0,
   });
-  const channel = new MessageChannel;
+  const channel = new MessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
@@ -4812,14 +5693,16 @@ var workerMainLoop = async (startupData) => {
   const MAX_AWAITING_MS = 10;
   let wakeSeq = a_load2(opView, 0);
   const scheduleMacro = () => {
-    if (isInMacro)
+    if (isInMacro) {
       return;
+    }
     isInMacro = true;
     post2(null);
   };
   const scheduleTimer = (delayMs) => {
-    if (isInMacro)
+    if (isInMacro) {
       return;
+    }
     isInMacro = true;
     if (delayMs <= 0 && typeof SET_IMMEDIATE === "function") {
       SET_IMMEDIATE(loop);
@@ -4850,16 +5733,19 @@ var workerMainLoop = async (startupData) => {
     while (true) {
       progressed = _enqueueLock();
       if (_hasCompleted()) {
-        if (_writeBatch(WRITE_MAX) > 0)
+        if (_writeBatch(WRITE_MAX) > 0) {
           progressed = true;
+        }
       }
       if (_hasPending()) {
-        if (_serviceBatchImmediate() > 0)
+        if (_serviceBatchImmediate() > 0) {
           progressed = true;
+        }
       }
       if ((awaiting = _getAwaiting()) > 0) {
-        if (awaiting !== lastAwaiting)
+        if (awaiting !== lastAwaiting) {
           awaitingSpins = 0;
+        }
         lastAwaiting = awaiting;
         awaitingSpins++;
         const delay = Math.min(MAX_AWAITING_MS, Math.max(0, awaitingSpins - 1));
@@ -4889,8 +5775,9 @@ var workerMainLoop = async (startupData) => {
 };
 var isWebWorkerScope = () => {
   const scopeCtor = globalThis.WorkerGlobalScope;
-  if (typeof scopeCtor !== "function")
+  if (typeof scopeCtor !== "function") {
     return false;
+  }
   try {
     return globalThis instanceof scopeCtor;
   } catch {
@@ -4898,29 +5785,44 @@ var isWebWorkerScope = () => {
   }
 };
 var isLockBuffers = (value) => {
-  if (!value || typeof value !== "object")
+  if (!value || typeof value !== "object") {
     return false;
+  }
   const candidate = value;
-  return candidate.headers instanceof SharedArrayBuffer && candidate.lockSector instanceof SharedArrayBuffer && candidate.payload instanceof SharedArrayBuffer && candidate.payloadSector instanceof SharedArrayBuffer;
+  return candidate.headers instanceof SharedArrayBuffer &&
+    candidate.lockSector instanceof SharedArrayBuffer &&
+    candidate.payload instanceof SharedArrayBuffer &&
+    candidate.payloadSector instanceof SharedArrayBuffer;
 };
 var isWorkerBootPayload = (value) => {
-  if (!value || typeof value !== "object")
+  if (!value || typeof value !== "object") {
     return false;
+  }
   const candidate = value;
-  return candidate.sab instanceof SharedArrayBuffer && Array.isArray(candidate.list) && Array.isArray(candidate.ids) && Array.isArray(candidate.at) && typeof candidate.thread === "number" && typeof candidate.totalNumberOfThread === "number" && typeof candidate.startAt === "number" && isLockBuffers(candidate.lock) && isLockBuffers(candidate.returnLock);
+  return candidate.sab instanceof SharedArrayBuffer &&
+    Array.isArray(candidate.list) && Array.isArray(candidate.ids) &&
+    Array.isArray(candidate.at) && typeof candidate.thread === "number" &&
+    typeof candidate.totalNumberOfThread === "number" &&
+    typeof candidate.startAt === "number" && isLockBuffers(candidate.lock) &&
+    isLockBuffers(candidate.returnLock);
 };
 var installWebWorkerBootstrap = () => {
   const g = globalThis;
   const start = (data) => {
-    if (!isWorkerBootPayload(data))
+    if (!isWorkerBootPayload(data)) {
       return;
+    }
     workerMainLoop(data);
   };
-  if (typeof g.addEventListener === "function" && typeof g.removeEventListener === "function") {
+  if (
+    typeof g.addEventListener === "function" &&
+    typeof g.removeEventListener === "function"
+  ) {
     const onMessage = (event) => {
       const data = event?.data;
-      if (!isWorkerBootPayload(data))
+      if (!isWorkerBootPayload(data)) {
         return;
+      }
       try {
         g.removeEventListener?.("message", onMessage);
       } catch {}
@@ -4931,8 +5833,9 @@ var installWebWorkerBootstrap = () => {
   }
   g.onmessage = (event) => {
     const data = event?.data;
-    if (!isWorkerBootPayload(data))
+    if (!isWorkerBootPayload(data)) {
       return;
+    }
     g.onmessage = null;
     start(data);
   };
@@ -4968,7 +5871,7 @@ function createHostTxQueue({
   lock,
   returnLock,
   abortSignals,
-  now
+  now,
 }) {
   const PLACE_HOLDER = (_) => {
     throw "UNREACHABLE FROM PLACE HOLDER (main)";
@@ -4983,9 +5886,12 @@ function createHostTxQueue({
     return task;
   };
   const initialSize = max ?? 10;
-  const queue = Array.from({ length: initialSize }, (_, index) => newSlot(index));
+  const queue = Array.from(
+    { length: initialSize },
+    (_, index) => newSlot(index),
+  );
   const freeSockets = Array.from({ length: initialSize }, (_, i) => i);
-  const toBeSent = new RingQueue;
+  const toBeSent = new RingQueue();
   const toBeSentPush = (task) => toBeSent.push(task);
   const toBeSentShift = () => toBeSent.shiftNoClear();
   const freePush = (id) => freeSockets.push(id);
@@ -5003,7 +5909,7 @@ function createHostTxQueue({
     onResolved: (task) => {
       inUsed = inUsed - 1 | 0;
       freePush(task[1 /* ID */]);
-    }
+    },
   });
   const hasPendingFrames = () => toBeSentCount > 0;
   const txIdle = () => toBeSentCount === 0 && inUsed === pendingPromises;
@@ -5016,7 +5922,7 @@ function createHostTxQueue({
     toBeSentCount = toBeSentCount + 1 | 0;
   };
   const rejectAll = (reason) => {
-    for (let index = 0;index < queue.length; index++) {
+    for (let index = 0; index < queue.length; index++) {
       const slot = queue[index];
       if (slot.reject !== PLACE_HOLDER) {
         try {
@@ -5035,11 +5941,13 @@ function createHostTxQueue({
     pendingPromises = 0 | 0;
   };
   const flushToWorker = () => {
-    if (toBeSentCount === 0)
+    if (toBeSentCount === 0) {
       return false;
+    }
     const encoded = encodeManyFrom(toBeSent) | 0;
-    if (encoded === 0)
+    if (encoded === 0) {
       return false;
+    }
     toBeSentCount = toBeSentCount - encoded | 0;
     return true;
   };
@@ -5058,7 +5966,8 @@ function createHostTxQueue({
     enqueue: (functionID, timeout, abortSignal) => {
       const HAS_TIMER = timeout !== undefined;
       const functionIDMasked = functionID & FUNCTION_ID_MASK;
-      const USE_SIGNAL = abortSignal !== undefined && abortSignals !== undefined;
+      const USE_SIGNAL = abortSignal !== undefined &&
+        abortSignals !== undefined;
       return (rawArgs) => {
         if (inUsed === queue.length) {
           const newSize = inUsed + 32;
@@ -5079,15 +5988,21 @@ function createHostTxQueue({
             return Promise.reject(AbortSignalPoolExhausted);
           }
           new OneShotDeferred(deferred, () => resetSignal?.(maybeSignal));
-          const encodedSignalMeta = (maybeSignal + ABORT_SIGNAL_META_OFFSET2 & FUNCTION_META_MASK) >>> 0;
-          slot[0 /* FunctionID */] = (encodedSignalMeta << FUNCTION_META_SHIFT | functionIDMasked) >>> 0;
+          const encodedSignalMeta =
+            (maybeSignal + ABORT_SIGNAL_META_OFFSET2 & FUNCTION_META_MASK) >>>
+            0;
+          slot[0 /* FunctionID */] =
+            (encodedSignalMeta << FUNCTION_META_SHIFT | functionIDMasked) >>> 0;
         }
         slot.value = rawArgs;
         slot[1 /* ID */] = index;
         slot.resolve = deferred.resolve;
         slot.reject = deferred.reject;
         if (HAS_TIMER) {
-          slot[6 /* slotBuffer */] = (slot[6 /* slotBuffer */] & SLOT_INDEX_MASK | (nowTime() >>> 0 & SLOT_META_MASK) << SLOT_META_SHIFT >>> 0) >>> 0;
+          slot[6 /* slotBuffer */] =
+            (slot[6 /* slotBuffer */] & SLOT_INDEX_MASK |
+              (nowTime() >>> 0 & SLOT_META_MASK) << SLOT_META_SHIFT >>> 0) >>>
+            0;
         }
         if (!encode(slot)) {
           handleEncodeFailure(slot);
@@ -5099,10 +6014,12 @@ function createHostTxQueue({
     flushToWorker,
     enqueueKnown,
     settlePromisePayload: (task, result) => {
-      if (task.reject === PLACE_HOLDER)
+      if (task.reject === PLACE_HOLDER) {
         return false;
-      if (pendingPromises > 0)
+      }
+      if (pendingPromises > 0) {
         pendingPromises = pendingPromises - 1 | 0;
+      }
       if (result.status === "rejected") {
         try {
           task.reject(result.reason);
@@ -5113,7 +6030,7 @@ function createHostTxQueue({
       }
       task.value = result.value;
       return enqueueKnown(task);
-    }
+    },
   };
 }
 
@@ -5123,24 +6040,30 @@ var hostDispatcherLoop = ({
   signalBox: {
     opView,
     txStatus,
-    rxStatus
+    rxStatus,
   },
   queue: {
     completeFrame,
     hasPendingFrames,
     flushToWorker,
-    txIdle
+    txIdle,
   },
   channelHandler,
-  dispatcherOptions
+  dispatcherOptions,
 }) => {
   const a_load2 = Atomics.load;
   const a_store3 = Atomics.store;
   const a_notify = Atomics.notify;
   const notify = channelHandler.notify.bind(channelHandler);
   let stallCount = 0 | 0;
-  const STALL_FREE_LOOPS = Math.max(0, (dispatcherOptions?.stallFreeLoops ?? 128) | 0);
-  const MAX_BACKOFF_MS = Math.max(0, (dispatcherOptions?.maxBackoffMs ?? 10) | 0);
+  const STALL_FREE_LOOPS = Math.max(
+    0,
+    (dispatcherOptions?.stallFreeLoops ?? 128) | 0,
+  );
+  const MAX_BACKOFF_MS = Math.max(
+    0,
+    (dispatcherOptions?.maxBackoffMs ?? 10) | 0,
+  );
   let progressed = false;
   let anyProgressed = false;
   const check = () => {
@@ -5155,8 +6078,9 @@ var hostDispatcherLoop = ({
           anyProgressed = true;
         }
         while (hasPendingFrames()) {
-          if (!flushToWorker())
+          if (!flushToWorker()) {
             break;
+          }
           progressed = true;
           anyProgressed = true;
         }
@@ -5168,8 +6092,9 @@ var hostDispatcherLoop = ({
         anyProgressed = progressed = true;
       }
       while (hasPendingFrames()) {
-        if (!flushToWorker())
+        if (!flushToWorker()) {
           break;
+        }
         anyProgressed = progressed = true;
       }
     } while (progressed);
@@ -5194,10 +6119,11 @@ var hostDispatcherLoop = ({
       return;
     }
     let delay = stallCount - STALL_FREE_LOOPS - 1 | 0;
-    if (delay < 0)
+    if (delay < 0) {
       delay = 0;
-    else if (delay > MAX_BACKOFF_MS)
+    } else if (delay > MAX_BACKOFF_MS) {
       delay = MAX_BACKOFF_MS;
+    }
     setTimeout(check, delay);
   };
   const fastCheck = () => {
@@ -5209,7 +6135,7 @@ var hostDispatcherLoop = ({
   fastCheck.isRunning = false;
   return {
     check,
-    fastCheck
+    fastCheck,
   };
 };
 
@@ -5219,7 +6145,7 @@ class ChannelHandler {
   port2;
   #post2;
   constructor() {
-    this.channel = new MessageChannel2;
+    this.channel = new MessageChannel2();
     this.port1 = this.channel.port1;
     this.port2 = this.channel.port2;
     this.#post2 = this.port2.postMessage.bind(this.port2);
@@ -5250,23 +6176,35 @@ import { Worker } from "node:worker_threads";
 var poliWorker = Worker;
 var isNodeWorkerSafeExecFlag = (flag) => {
   const key = flag.split("=", 1)[0];
-  return key === "--experimental-vm-modules" || key === "--experimental-transform-types" || key === "--expose-gc" || key === "--no-warnings" || key === "--permission" || key === "--experimental-permission" || key === "--allow-fs-read" || key === "--allow-fs-write" || key === "--allow-worker" || key === "--allow-child-process" || key === "--allow-addons" || key === "--allow-wasi";
+  return key === "--experimental-vm-modules" ||
+    key === "--experimental-transform-types" || key === "--expose-gc" ||
+    key === "--no-warnings" || key === "--permission" ||
+    key === "--experimental-permission" || key === "--allow-fs-read" ||
+    key === "--allow-fs-write" || key === "--allow-worker" ||
+    key === "--allow-child-process" || key === "--allow-addons" ||
+    key === "--allow-wasi";
 };
 var isNodePermissionExecFlag = (flag) => {
   const key = flag.split("=", 1)[0];
-  return key === "--permission" || key === "--experimental-permission" || key === "--allow-fs-read" || key === "--allow-fs-write" || key === "--allow-worker" || key === "--allow-child-process" || key === "--allow-addons" || key === "--allow-wasi";
+  return key === "--permission" || key === "--experimental-permission" ||
+    key === "--allow-fs-read" || key === "--allow-fs-write" ||
+    key === "--allow-worker" || key === "--allow-child-process" ||
+    key === "--allow-addons" || key === "--allow-wasi";
 };
 var toWorkerSafeExecArgv = (flags) => {
-  if (!flags || flags.length === 0)
+  if (!flags || flags.length === 0) {
     return;
+  }
   const filtered = flags.filter(isNodeWorkerSafeExecFlag);
-  if (filtered.length === 0)
+  if (filtered.length === 0) {
     return;
-  const seen = new Set;
+  }
+  const seen = new Set();
   const deduped = [];
   for (const flag of filtered) {
-    if (seen.has(flag))
+    if (seen.has(flag)) {
       continue;
+    }
     seen.add(flag);
     deduped.push(flag);
   }
@@ -5274,8 +6212,9 @@ var toWorkerSafeExecArgv = (flags) => {
 };
 var toWorkerCompatExecArgv = (flags) => {
   const safe = toWorkerSafeExecArgv(flags);
-  if (!safe || safe.length === 0)
+  if (!safe || safe.length === 0) {
     return;
+  }
   const compat = safe.filter((flag) => !isNodePermissionExecFlag(flag));
   return compat.length > 0 ? compat : undefined;
 };
@@ -5291,16 +6230,18 @@ var toDenoWorkerPermissions = (protocol) => {
     read: protocol.read.length > 0 ? protocol.read : false,
     run: protocol.deno.allowRun === true ? "inherit" : false,
     sys: "inherit",
-    write: protocol.write.length > 0 ? protocol.write : false
+    write: protocol.write.length > 0 ? protocol.write : false,
   };
 };
 var isUnstableDenoWorkerOptionsError = (error) => {
   const message = String(error?.message ?? error);
-  return message.includes("unstable-worker-options") || message.includes("Worker.deno.permissions");
+  return message.includes("unstable-worker-options") ||
+    message.includes("Worker.deno.permissions");
 };
 var toDenoWorkerScript = (source, fallback) => {
-  if (source instanceof URL)
+  if (source instanceof URL) {
     return source.href;
+  }
   try {
     return new URL(source, fallback).href;
   } catch {
@@ -5323,7 +6264,7 @@ var spawnWorkerContext = ({
   payloadInitialBytes,
   payloadMaxBytes,
   abortSignalCapacity,
-  usesAbortSignal
+  usesAbortSignal,
 }) => {
   const tsFileUrl = new URL(import.meta.url);
   if (debug?.logHref === true) {
@@ -5332,70 +6273,81 @@ var spawnWorkerContext = ({
   }
   const defaultPayloadMaxBytes = 64 * 1024 * 1024;
   const sanitizeBytes = (value) => {
-    if (!Number.isFinite(value))
+    if (!Number.isFinite(value)) {
       return;
+    }
     const bytes = Math.floor(value);
     return bytes > 0 ? bytes : undefined;
   };
   const maxBytes = sanitizeBytes(payloadMaxBytes) ?? defaultPayloadMaxBytes;
   const requestedInitial = sanitizeBytes(payloadInitialBytes);
-  const initialBytes = HAS_SAB_GROW ? Math.min(requestedInitial ?? 4 * 1024 * 1024, maxBytes) : maxBytes;
+  const initialBytes = HAS_SAB_GROW
+    ? Math.min(requestedInitial ?? 4 * 1024 * 1024, maxBytes)
+    : maxBytes;
   const defaultAbortSignalCapacity = 258;
   const requestedAbortSignalCapacity = sanitizeBytes(abortSignalCapacity);
-  const resolvedAbortSignalCapacity = requestedAbortSignalCapacity ?? defaultAbortSignalCapacity;
+  const resolvedAbortSignalCapacity = requestedAbortSignalCapacity ??
+    defaultAbortSignalCapacity;
   const lockBuffers = {
     lockSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     payloadSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     headers: new SharedArrayBuffer(HEADER_BYTE_LENGTH),
-    payload: createSharedArrayBuffer(initialBytes, maxBytes)
+    payload: createSharedArrayBuffer(initialBytes, maxBytes),
   };
   const returnLockBuffers = {
     lockSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     payloadSector: new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH),
     headers: new SharedArrayBuffer(HEADER_BYTE_LENGTH),
-    payload: createSharedArrayBuffer(initialBytes, maxBytes)
+    payload: createSharedArrayBuffer(initialBytes, maxBytes),
   };
   const lock = lock2({
     headers: lockBuffers.headers,
     LockBoundSector: lockBuffers.lockSector,
     payload: lockBuffers.payload,
-    payloadSector: lockBuffers.payloadSector
+    payloadSector: lockBuffers.payloadSector,
   });
   const returnLock = lock2({
     headers: returnLockBuffers.headers,
     LockBoundSector: returnLockBuffers.lockSector,
     payload: returnLockBuffers.payload,
-    payloadSector: returnLockBuffers.payloadSector
+    payloadSector: returnLockBuffers.payloadSector,
   });
-  const abortSignalWords = Math.max(1, Math.ceil(resolvedAbortSignalCapacity / 32));
-  const abortSignalSAB = usesAbortSignal === true ? new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * abortSignalWords) : undefined;
-  const abortSignals = abortSignalSAB ? signalAbortFactory({
-    sab: abortSignalSAB,
-    maxSignals: resolvedAbortSignalCapacity
-  }) : undefined;
+  const abortSignalWords = Math.max(
+    1,
+    Math.ceil(resolvedAbortSignalCapacity / 32),
+  );
+  const abortSignalSAB = usesAbortSignal === true
+    ? new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * abortSignalWords)
+    : undefined;
+  const abortSignals = abortSignalSAB
+    ? signalAbortFactory({
+      sab: abortSignalSAB,
+      maxSignals: resolvedAbortSignalCapacity,
+    })
+    : undefined;
   const signals = createSharedMemoryTransport({
     sabObject: sab,
     isMain: true,
     thread,
-    debug
+    debug,
   });
   const signalBox = mainSignal(signals);
   const queue = createHostTxQueue({
     lock,
     returnLock,
-    abortSignals
+    abortSignals,
   });
   const {
     enqueue,
     rejectAll,
-    txIdle
+    txIdle,
   } = queue;
-  const channelHandler = new ChannelHandler;
+  const channelHandler = new ChannelHandler();
   const { check, fastCheck } = hostDispatcherLoop({
     signalBox,
     queue,
     channelHandler,
-    dispatcherOptions: host
+    dispatcherOptions: host,
   });
   channelHandler.open(check);
   let worker;
@@ -5403,7 +6355,9 @@ var spawnWorkerContext = ({
   const workerDataPayload = {
     sab: signals.sab,
     abortSignalSAB,
-    abortSignalMax: usesAbortSignal === true ? resolvedAbortSignalCapacity : undefined,
+    abortSignalMax: usesAbortSignal === true
+      ? resolvedAbortSignalCapacity
+      : undefined,
     list,
     ids,
     at,
@@ -5414,27 +6368,32 @@ var spawnWorkerContext = ({
     startAt: signalBox.startAt,
     lock: lockBuffers,
     returnLock: returnLockBuffers,
-    permission
+    permission,
   };
   const baseWorkerOptions = {
     type: "module",
-    workerData: workerDataPayload
+    workerData: workerDataPayload,
   };
-  const withExecArgv = workerExecArgv && workerExecArgv.length > 0 ? { ...baseWorkerOptions, execArgv: workerExecArgv } : baseWorkerOptions;
+  const withExecArgv = workerExecArgv && workerExecArgv.length > 0
+    ? { ...baseWorkerOptions, execArgv: workerExecArgv }
+    : baseWorkerOptions;
   const webWorkerCtor = globalThis.Worker;
-  const canUseDenoWebWorker = IS_DENO === true && typeof webWorkerCtor === "function";
+  const canUseDenoWebWorker = IS_DENO === true &&
+    typeof webWorkerCtor === "function";
   if (canUseDenoWebWorker) {
     const scriptURL = toDenoWorkerScript(workerUrl, tsFileUrl);
     const denoPermissions = toDenoWorkerPermissions(permission);
     const baseDenoOptions = {
-      type: "module"
+      type: "module",
     };
-    const withPermissionOptions = denoPermissions ? {
-      ...baseDenoOptions,
-      deno: {
-        permissions: denoPermissions
+    const withPermissionOptions = denoPermissions
+      ? {
+        ...baseDenoOptions,
+        deno: {
+          permissions: denoPermissions,
+        },
       }
-    } : baseDenoOptions;
+      : baseDenoOptions;
     try {
       worker = new webWorkerCtor(scriptURL, withPermissionOptions);
     } catch (error) {
@@ -5452,13 +6411,19 @@ var spawnWorkerContext = ({
         const fallbackExecArgv = toWorkerSafeExecArgv(withExecArgv.execArgv);
         if (fallbackExecArgv && fallbackExecArgv.length > 0) {
           try {
-            worker = new poliWorker(workerUrl, { ...baseWorkerOptions, execArgv: fallbackExecArgv });
+            worker = new poliWorker(workerUrl, {
+              ...baseWorkerOptions,
+              execArgv: fallbackExecArgv,
+            });
           } catch (fallbackError) {
             if (fallbackError?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
               const compatExecArgv = toWorkerCompatExecArgv(fallbackExecArgv);
               if (compatExecArgv && compatExecArgv.length > 0) {
                 try {
-                  worker = new poliWorker(workerUrl, { ...baseWorkerOptions, execArgv: compatExecArgv });
+                  worker = new poliWorker(workerUrl, {
+                    ...baseWorkerOptions,
+                    execArgv: compatExecArgv,
+                  });
                 } catch {
                   worker = new poliWorker(workerUrl, baseWorkerOptions);
                 }
@@ -5483,8 +6448,9 @@ var spawnWorkerContext = ({
   const a_notify = Atomics.notify;
   const scheduleFastCheck = queueMicrotask;
   const send = () => {
-    if (check.isRunning === true)
+    if (check.isRunning === true) {
       return;
+    }
     channelHandler.notify();
     check.isRunning = true;
     if (a_load2(signalBox.rxStatus, 0) === 0) {
@@ -5519,13 +6485,16 @@ var spawnWorkerContext = ({
         Promise.resolve(worker.terminate()).catch(() => {});
       } catch {}
     },
-    lock
+    lock,
   };
   return context;
 };
 
 // src/api.ts
-import { isMainThread as isMainThread4, workerData as workerData2 } from "node:worker_threads";
+import {
+  isMainThread as isMainThread4,
+  workerData as workerData2,
+} from "node:worker_threads";
 import { readFileSync as readFileSync2 } from "node:fs";
 import path4 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -5546,22 +6515,25 @@ var DEFAULT_DENY_RELATIVE = [
   ".git",
   ".npmrc",
   ".docker",
-  ".secrets"
+  ".secrets",
 ];
 var clampStrictMaxEvalDepth = (value) => {
-  if (!Number.isFinite(value))
+  if (!Number.isFinite(value)) {
     return DEFAULT_STRICT_MAX_EVAL_DEPTH;
+  }
   const int = Math.floor(value);
-  if (int < MIN_STRICT_MAX_EVAL_DEPTH)
+  if (int < MIN_STRICT_MAX_EVAL_DEPTH) {
     return MIN_STRICT_MAX_EVAL_DEPTH;
-  if (int > MAX_STRICT_MAX_EVAL_DEPTH)
+  }
+  if (int > MAX_STRICT_MAX_EVAL_DEPTH) {
     return MAX_STRICT_MAX_EVAL_DEPTH;
+  }
   return int;
 };
 var resolveStrictPermissionSettings = (input) => ({
   recursiveScan: input?.recursiveScan !== false,
   maxEvalDepth: clampStrictMaxEvalDepth(input?.maxEvalDepth),
-  sandbox: input?.sandbox === true
+  sandbox: input?.sandbox === true,
 });
 var DEFAULT_DENY_HOME = [
   ".ssh",
@@ -5569,7 +6541,7 @@ var DEFAULT_DENY_HOME = [
   ".aws",
   ".azure",
   ".config/gcloud",
-  ".kube"
+  ".kube",
 ];
 var DEFAULT_DENY_ABSOLUTE_POSIX = [
   "/proc",
@@ -5578,23 +6550,26 @@ var DEFAULT_DENY_ABSOLUTE_POSIX = [
   "/proc/self/mem",
   "/sys",
   "/dev",
-  "/etc"
+  "/etc",
 ];
 var normalizeList = (values) => {
   const out = [];
-  const seen = new Set;
+  const seen = new Set();
   for (const value of values) {
-    if (seen.has(value))
+    if (seen.has(value)) {
       continue;
+    }
     seen.add(value);
     out.push(value);
   }
   return out;
 };
-var normalizeProtocolInput = (input) => !input ? undefined : typeof input === "string" ? { mode: input } : input;
+var normalizeProtocolInput = (input) =>
+  !input ? undefined : typeof input === "string" ? { mode: input } : input;
 var isWindows = () => {
-  if (typeof process !== "undefined")
+  if (typeof process !== "undefined") {
     return process.platform === "win32";
+  }
   const g = globalThis;
   return g.Deno?.build?.os === "windows";
 };
@@ -5606,8 +6581,9 @@ var getCwd = () => {
   } catch {}
   const g = globalThis;
   try {
-    if (typeof g.Deno?.cwd === "function")
+    if (typeof g.Deno?.cwd === "function") {
       return g.Deno.cwd();
+    }
   } catch {}
   return ".";
 };
@@ -5615,23 +6591,28 @@ var getHome = () => {
   try {
     if (typeof process !== "undefined" && typeof process.env === "object") {
       const home = process.env.HOME ?? process.env.USERPROFILE;
-      if (typeof home === "string" && home.length > 0)
+      if (typeof home === "string" && home.length > 0) {
         return home;
+      }
     }
   } catch {}
   const g = globalThis;
   try {
-    const home = g.Deno?.env?.get?.("HOME") ?? g.Deno?.env?.get?.("USERPROFILE");
-    if (typeof home === "string" && home.length > 0)
+    const home = g.Deno?.env?.get?.("HOME") ??
+      g.Deno?.env?.get?.("USERPROFILE");
+    if (typeof home === "string" && home.length > 0) {
       return home;
+    }
   } catch {}
   return;
 };
 var expandHomePath = (value, home) => {
-  if (!home)
+  if (!home) {
     return value;
-  if (value === "~")
+  }
+  if (value === "~") {
     return home;
+  }
   if (value.startsWith("~/") || value.startsWith("~\\")) {
     return path3.resolve(home, value.slice(2));
   }
@@ -5639,8 +6620,9 @@ var expandHomePath = (value, home) => {
 };
 var toAbsolutePath2 = (value, cwd, home) => {
   if (value instanceof URL) {
-    if (value.protocol !== "file:")
+    if (value.protocol !== "file:") {
       return;
+    }
     return path3.resolve(fileURLToPath3(value));
   }
   const expanded = expandHomePath(value, home);
@@ -5649,50 +6631,63 @@ var toAbsolutePath2 = (value, cwd, home) => {
   }
   try {
     const parsed = new URL(expanded);
-    if (parsed.protocol !== "file:")
+    if (parsed.protocol !== "file:") {
       return;
+    }
     return path3.resolve(fileURLToPath3(parsed));
   } catch {
     return path3.resolve(cwd, expanded);
   }
 };
-var toPath = (value, cwd, home) => value == null ? undefined : toAbsolutePath2(value, cwd, home);
+var toPath = (value, cwd, home) =>
+  value == null ? undefined : toAbsolutePath2(value, cwd, home);
 var toPathList = (values, cwd, home) => {
-  if (!values?.length)
+  if (!values?.length) {
     return [];
+  }
   const out = [];
   for (const value of values) {
     const resolved = toPath(value, cwd, home);
-    if (resolved)
+    if (resolved) {
       out.push(resolved);
+    }
   }
   return out;
 };
-var toUniquePathList = (values, cwd, home) => normalizeList(toPathList(values, cwd, home));
+var toUniquePathList = (values, cwd, home) =>
+  normalizeList(toPathList(values, cwd, home));
 var toEnvFiles = (input, cwd, home) => {
-  const values = Array.isArray(input) ? input : input ? [input] : [DEFAULT_ENV_FILE];
+  const values = Array.isArray(input)
+    ? input
+    : input
+    ? [input]
+    : [DEFAULT_ENV_FILE];
   return toUniquePathList(values, cwd, home);
 };
 var toNodeFlags = ({
   read,
   write,
   envFiles,
-  node
+  node,
 }) => {
   const flags = [
     "--permission",
     ...read.map((entry) => `--allow-fs-read=${entry}`),
     ...write.map((entry) => `--allow-fs-write=${entry}`),
-    ...envFiles.map((file) => `--env-file-if-exists=${file}`)
+    ...envFiles.map((file) => `--env-file-if-exists=${file}`),
   ];
-  if (node.allowWorker)
+  if (node.allowWorker) {
     flags.push("--allow-worker");
-  if (node.allowChildProcess)
+  }
+  if (node.allowChildProcess) {
     flags.push("--allow-child-process");
-  if (node.allowAddons)
+  }
+  if (node.allowAddons) {
     flags.push("--allow-addons");
-  if (node.allowWasi)
+  }
+  if (node.allowWasi) {
     flags.push("--allow-wasi");
+  }
   return flags;
 };
 var toDenoFlags = ({
@@ -5703,12 +6698,12 @@ var toDenoFlags = ({
   envFiles,
   denoLock,
   frozen,
-  allowRun
+  allowRun,
 }) => {
   const flags = [
     `--allow-read=${read.join(",")}`,
     `--allow-write=${write.join(",")}`,
-    ...envFiles.map((file) => `--env-file=${file}`)
+    ...envFiles.map((file) => `--env-file=${file}`),
   ];
   if (denyRead.length > 0) {
     flags.push(`--deny-read=${denyRead.join(",")}`);
@@ -5718,8 +6713,9 @@ var toDenoFlags = ({
   }
   if (denoLock) {
     flags.push(`--lock=${denoLock}`);
-    if (frozen)
+    if (frozen) {
       flags.push("--frozen=true");
+    }
   }
   if (allowRun === false) {
     flags.push("--deny-run");
@@ -5728,7 +6724,7 @@ var toDenoFlags = ({
 };
 var toBunFlags = ({
   envFiles,
-  allowRun
+  allowRun,
 }) => {
   const flags = envFiles.map((file) => `--env-file=${file}`);
   if (allowRun === false) {
@@ -5738,17 +6734,26 @@ var toBunFlags = ({
 };
 var isPathWithin2 = (base, candidate) => {
   const relative = path3.relative(base, candidate);
-  return relative === "" || !relative.startsWith("..") && !path3.isAbsolute(relative);
+  return relative === "" ||
+    !relative.startsWith("..") && !path3.isAbsolute(relative);
 };
 var defaultSensitiveDenyPaths = (cwd, home) => {
-  const projectSensitive = DEFAULT_DENY_RELATIVE.map((entry) => path3.resolve(cwd, entry));
-  const homeSensitive = home ? DEFAULT_DENY_HOME.map((entry) => path3.resolve(home, entry)) : [];
-  const osSensitive = isWindows() ? [] : DEFAULT_DENY_ABSOLUTE_POSIX.map((entry) => path3.resolve(entry));
+  const projectSensitive = DEFAULT_DENY_RELATIVE.map((entry) =>
+    path3.resolve(cwd, entry)
+  );
+  const homeSensitive = home
+    ? DEFAULT_DENY_HOME.map((entry) => path3.resolve(home, entry))
+    : [];
+  const osSensitive = isWindows()
+    ? []
+    : DEFAULT_DENY_ABSOLUTE_POSIX.map((entry) => path3.resolve(entry));
   return normalizeList([...projectSensitive, ...homeSensitive, ...osSensitive]);
 };
 var collectWritePaths = (cwd, values) => {
   const out = normalizeList(values.length > 0 ? values : [cwd]);
-  if (!out.some((entry) => isPathWithin2(entry, cwd) || isPathWithin2(cwd, entry))) {
+  if (
+    !out.some((entry) => isPathWithin2(entry, cwd) || isPathWithin2(cwd, entry))
+  ) {
     out.unshift(cwd);
   }
   return normalizeList(out);
@@ -5759,24 +6764,27 @@ var collectReadPaths = ({
   moduleFiles,
   envFiles,
   denoLock,
-  bunLock
+  bunLock,
 }) => {
   const out = [
     cwd,
     path3.resolve(cwd, NODE_MODULES_DIR),
     ...read,
     ...moduleFiles,
-    ...envFiles
+    ...envFiles,
   ];
-  if (denoLock)
+  if (denoLock) {
     out.push(denoLock);
-  if (bunLock)
+  }
+  if (bunLock) {
     out.push(bunLock);
+  }
   return normalizeList(out);
 };
 var resolveBunLock = (input, cwd, home) => {
-  if (input === false)
+  if (input === false) {
     return;
+  }
   if (input && input !== true) {
     return toPath(input, cwd, home);
   }
@@ -5792,13 +6800,15 @@ var resolveBunLock = (input, cwd, home) => {
     try {
       if (typeof g.Bun?.file === "function") {
         const file = g.Bun.file(candidate);
-        if (typeof file.exists === "function" && file.exists())
+        if (typeof file.exists === "function" && file.exists()) {
           return candidate;
+        }
       }
     } catch {}
     try {
-      if (existsSync2(candidate))
+      if (existsSync2(candidate)) {
         return candidate;
+      }
     } catch {}
   }
   return path3.resolve(cwd, DEFAULT_BUN_LOCK_FILES[0]);
@@ -5806,11 +6816,12 @@ var resolveBunLock = (input, cwd, home) => {
 var resolvePermisonProtocol = ({
   permission,
   permison,
-  modules
+  modules,
 }) => {
   const input = normalizeProtocolInput(permission ?? permison);
-  if (!input)
+  if (!input) {
     return;
+  }
   const rawMode = input.mode;
   const mode = rawMode === "unsafe" || rawMode === "off" ? "unsafe" : "strict";
   const unsafe = mode === "unsafe";
@@ -5838,17 +6849,17 @@ var resolvePermisonProtocol = ({
         allowChildProcess: true,
         allowAddons: true,
         allowWasi: true,
-        flags: []
+        flags: [],
       },
       deno: {
         frozen: false,
         allowRun: true,
-        flags: []
+        flags: [],
       },
       bun: {
         allowRun: true,
-        flags: []
-      }
+        flags: [],
+      },
     };
   }
   const read = toPathList(input.read, cwd, home);
@@ -5856,30 +6867,37 @@ var resolvePermisonProtocol = ({
   const sensitiveDefaultPaths = defaultSensitiveDenyPaths(cwd, home);
   const denyRead = normalizeList([
     ...toPathList(input.denyRead, cwd, home),
-    ...sensitiveDefaultPaths
+    ...sensitiveDefaultPaths,
   ]);
   const denyWrite = normalizeList([
     ...toPathList(input.denyWrite, cwd, home),
     ...sensitiveDefaultPaths,
-    nodeModulesPath
+    nodeModulesPath,
   ]);
-  const isDeniedRead = (candidate) => denyRead.some((deny) => isPathWithin2(deny, candidate));
-  const envFiles = toEnvFiles(input.env?.files, cwd, home).filter((entry) => !isDeniedRead(entry));
-  const denoLock = input.deno?.lock === false ? undefined : input.deno?.lock === true || input.deno?.lock === undefined ? path3.resolve(cwd, DEFAULT_DENO_LOCK_FILE) : toPath(input.deno.lock, cwd, home);
+  const isDeniedRead = (candidate) =>
+    denyRead.some((deny) => isPathWithin2(deny, candidate));
+  const envFiles = toEnvFiles(input.env?.files, cwd, home).filter((entry) =>
+    !isDeniedRead(entry)
+  );
+  const denoLock = input.deno?.lock === false
+    ? undefined
+    : input.deno?.lock === true || input.deno?.lock === undefined
+    ? path3.resolve(cwd, DEFAULT_DENO_LOCK_FILE)
+    : toPath(input.deno.lock, cwd, home);
   const bunLock = resolveBunLock(input.bun?.lock, cwd, home);
   const moduleFiles = toUniquePathList(modules, cwd, home);
   const nodeSettings = {
     allowWorker: input.node?.allowWorker === true,
     allowChildProcess: input.node?.allowChildProcess === true,
     allowAddons: input.node?.allowAddons === true,
-    allowWasi: input.node?.allowWasi === true
+    allowWasi: input.node?.allowWasi === true,
   };
   const denoSettings = {
     frozen: input.deno?.frozen !== false,
-    allowRun: input.deno?.allowRun === true
+    allowRun: input.deno?.allowRun === true,
   };
   const bunSettings = {
-    allowRun: input.bun?.allowRun === true
+    allowRun: input.bun?.allowRun === true,
   };
   const resolvedRead = collectReadPaths({
     cwd,
@@ -5887,7 +6905,7 @@ var resolvePermisonProtocol = ({
     moduleFiles,
     envFiles,
     denoLock,
-    bunLock
+    bunLock,
   });
   const resolvedWrite = collectWritePaths(cwd, write);
   return {
@@ -5903,7 +6921,7 @@ var resolvePermisonProtocol = ({
     envFiles,
     lockFiles: {
       deno: denoLock,
-      bun: bunLock
+      bun: bunLock,
     },
     strict: strictSettings,
     node: {
@@ -5912,8 +6930,8 @@ var resolvePermisonProtocol = ({
         read: resolvedRead,
         write: resolvedWrite,
         envFiles,
-        node: nodeSettings
-      })
+        node: nodeSettings,
+      }),
     },
     deno: {
       ...denoSettings,
@@ -5925,19 +6943,22 @@ var resolvePermisonProtocol = ({
         envFiles,
         denoLock,
         frozen: denoSettings.frozen,
-        allowRun: denoSettings.allowRun
-      })
+        allowRun: denoSettings.allowRun,
+      }),
     },
     bun: {
       ...bunSettings,
       flags: toBunFlags({
         envFiles,
-        allowRun: bunSettings.allowRun
-      })
-    }
+        allowRun: bunSettings.allowRun,
+      }),
+    },
   };
 };
-var toRuntimePermissionFlags = (protocol) => protocol?.enabled === true && protocol.unsafe !== true && RUNTIME === "node" ? protocol.node.flags : [];
+var toRuntimePermissionFlags = (protocol) =>
+  protocol?.enabled === true && protocol.unsafe !== true && RUNTIME === "node"
+    ? protocol.node.flags
+    : [];
 // src/runtime/balancer.ts
 var selectStrategy = (contexts, handlers, strategy) => {
   switch (strategy ?? "roundRobin") {
@@ -5957,11 +6978,17 @@ var managerMethod = ({
   contexts,
   balancer,
   handlers,
-  inlinerGate
+  inlinerGate,
 }) => {
-  const strategy = typeof balancer === "object" && balancer != null ? balancer.strategy : balancer;
+  const strategy = typeof balancer === "object" && balancer != null
+    ? balancer.strategy
+    : balancer;
   if (contexts.length < 2) {
-    throw new Error(contexts.length === 0 ? "No threads available." : "Cannot rotate with a single thread.");
+    throw new Error(
+      contexts.length === 0
+        ? "No threads available."
+        : "Cannot rotate with a single thread.",
+    );
   }
   if (handlers.length === 0) {
     throw new Error("No handlers provided.");
@@ -5971,7 +6998,9 @@ var managerMethod = ({
     return allInvoker;
   }
   const inlinerIndex = inlinerGate.index | 0;
-  const threshold = Number.isFinite(inlinerGate.threshold) ? Math.max(1, Math.floor(inlinerGate.threshold)) : 1;
+  const threshold = Number.isFinite(inlinerGate.threshold)
+    ? Math.max(1, Math.floor(inlinerGate.threshold))
+    : 1;
   if (threshold <= 1 || inlinerIndex < 0 || inlinerIndex >= handlers.length) {
     return allInvoker;
   }
@@ -5981,14 +7010,19 @@ var managerMethod = ({
   }
   const workerHandlers = new Array(workerLaneCount);
   const workerContexts = new Array(workerLaneCount);
-  for (let source = 0, lane = 0;source < handlers.length; source += 1) {
-    if (source === inlinerIndex)
+  for (let source = 0, lane = 0; source < handlers.length; source += 1) {
+    if (source === inlinerIndex) {
       continue;
+    }
     workerHandlers[lane] = handlers[source];
     workerContexts[lane] = contexts[source];
     lane += 1;
   }
-  const workerOnlyInvoker = selectStrategy(workerContexts, workerHandlers, strategy);
+  const workerOnlyInvoker = selectStrategy(
+    workerContexts,
+    workerHandlers,
+    strategy,
+  );
   let inFlight = 0;
   const releaseResolved = (value) => {
     inFlight -= 1;
@@ -6020,8 +7054,9 @@ function roundRobin(_contexts) {
       return (args) => {
         const lane = rrCursor;
         rrCursor += 1;
-        if (rrCursor === top)
+        if (rrCursor === top) {
           rrCursor = 0;
+        }
         return handlers[lane](args);
       };
     };
@@ -6037,15 +7072,16 @@ function firstIdle(contexts) {
       }
       let rrCursor = 0;
       return (args) => {
-        for (let lane = 0;lane < laneCount; lane += 1) {
+        for (let lane = 0; lane < laneCount; lane += 1) {
           if (isSolved[lane]()) {
             return handlers[lane](args);
           }
         }
         const fallback = rrCursor;
         rrCursor += 1;
-        if (rrCursor === laneCount)
+        if (rrCursor === laneCount) {
           rrCursor = 0;
+        }
         return handlers[fallback](args);
       };
     };
@@ -6074,7 +7110,7 @@ function firstIdleRandom(contexts) {
         return (args) => handlers[0](args);
       }
       return (args) => {
-        for (let lane = 0;lane < laneCount; lane += 1) {
+        for (let lane = 0; lane < laneCount; lane += 1) {
           if (isSolved[lane]()) {
             return handlers[lane](args);
           }
@@ -6089,74 +7125,91 @@ function firstIdleRandom(contexts) {
 // src/runtime/inline-executor.ts
 import { MessageChannel as MessageChannel3 } from "node:worker_threads";
 var normalizeTimeout2 = (timeout) => {
-  if (timeout == null)
+  if (timeout == null) {
     return;
+  }
   if (typeof timeout === "number") {
-    return timeout >= 0 ? { ms: timeout, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return timeout >= 0
+      ? { ms: timeout, kind: 0, /* Reject */ value: new Error("Task timeout") }
+      : undefined;
   }
   const ms = timeout.time;
-  if (!(ms >= 0))
+  if (!(ms >= 0)) {
     return;
+  }
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: 1, /* Resolve */ value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: 1, /* Resolve */ value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: 0, /* Reject */ value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: 0, /* Reject */ value: new Error("Task timeout") };
 };
-var raceTimeout2 = (promise, spec) => new Promise((resolve, reject) => {
-  let done = false;
-  const timer = setTimeout(() => {
-    if (done)
-      return;
-    done = true;
-    if (spec.kind === 1 /* Resolve */) {
-      resolve(spec.value);
-    } else {
-      reject(spec.value);
-    }
-  }, spec.ms);
-  promise.then((value) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    resolve(value);
-  }, (err) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    reject(err);
+var raceTimeout2 = (promise, spec) =>
+  new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) {
+        return;
+      }
+      done = true;
+      if (spec.kind === 1 /* Resolve */) {
+        resolve(spec.value);
+      } else {
+        reject(spec.value);
+      }
+    }, spec.ms);
+    promise.then((value) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }, (err) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
-});
 var INLINE_ABORT_TOOLKIT = (() => {
   const hasAborted = () => false;
   return {
-    hasAborted
+    hasAborted,
   };
 })();
 var composeInlineCallable = (fn, timeout, useAbortToolkit = false) => {
   const normalized = normalizeTimeout2(timeout);
   const run = useAbortToolkit ? (args) => fn(args, INLINE_ABORT_TOOLKIT) : fn;
-  if (!normalized)
+  if (!normalized) {
     return run;
+  }
   return (args) => {
     const result = run(args);
-    return result instanceof Promise ? raceTimeout2(result, normalized) : result;
+    return result instanceof Promise
+      ? raceTimeout2(result, normalized)
+      : result;
   };
 };
 var createInlineExecutor = ({
   tasks,
   genTaskID: genTaskID2,
-  batchSize
+  batchSize,
 }) => {
   const entries = Object.values(tasks).sort((a, b) => a.id - b.id);
-  const runners = entries.map((entry) => composeInlineCallable(entry.f, entry.timeout, entry.abortSignal !== undefined));
+  const runners = entries.map((entry) =>
+    composeInlineCallable(
+      entry.f,
+      entry.timeout,
+      entry.abortSignal !== undefined,
+    )
+  );
   const initCap = 16;
   let fnByIndex = new Int32Array(initCap);
   let stateByIndex = new Int8Array(initCap).fill(-1 /* Free */);
@@ -6165,28 +7218,35 @@ var createInlineExecutor = ({
   let deferredByIndex = new Array(initCap);
   const freeStack = new Array(initCap);
   let freeTop = initCap;
-  for (let i = 0;i < initCap; i++)
+  for (let i = 0; i < initCap; i++) {
     freeStack[i] = initCap - 1 - i;
+  }
   const pendingQueue = new RingQueue(initCap);
   let working = 0;
   let isInMacro = false;
   let isInMicro = false;
-  const batchLimit = Number.isFinite(batchSize) ? Math.max(1, Math.floor(batchSize ?? 1)) : Number.POSITIVE_INFINITY;
-  const channel = new MessageChannel3;
+  const batchLimit = Number.isFinite(batchSize)
+    ? Math.max(1, Math.floor(batchSize ?? 1))
+    : Number.POSITIVE_INFINITY;
+  const channel = new MessageChannel3();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
   const hasPending = () => pendingQueue.isEmpty === false;
-  const queueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (callback) => Promise.resolve().then(callback);
+  const queueMicro = typeof queueMicrotask === "function"
+    ? queueMicrotask
+    : (callback) => Promise.resolve().then(callback);
   const scheduleMacro = () => {
-    if (working === 0 || isInMacro)
+    if (working === 0 || isInMacro) {
       return;
+    }
     isInMacro = true;
     post2(null);
   };
   const send = () => {
-    if (working === 0 || isInMacro || isInMicro)
+    if (working === 0 || isInMacro || isInMicro) {
       return;
+    }
     isInMicro = true;
     queueMicro(runMicroLoop);
   };
@@ -6195,25 +7255,33 @@ var createInlineExecutor = ({
     send();
   };
   const enqueueIfCurrent = (index, taskID) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (
+      stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID
+    ) {
       return;
+    }
     enqueue(index);
   };
   const settleIfCurrent = (index, taskID, isError, value) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (
+      stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID
+    ) {
       return;
+    }
     const deferred = deferredByIndex[index];
     if (deferred) {
-      if (isError)
+      if (isError) {
         deferred.reject(value);
-      else
+      } else {
         deferred.resolve(value);
+      }
     }
     cleanup(index);
   };
   function allocIndex() {
-    if (freeTop > 0)
+    if (freeTop > 0) {
       return freeStack[--freeTop];
+    }
     const oldCap = fnByIndex.length;
     const newCap = oldCap << 1;
     const nextFnByIndex = new Int32Array(newCap);
@@ -6227,7 +7295,7 @@ var createInlineExecutor = ({
     taskIdByIndex.length = newCap;
     taskIdByIndex.fill(-1, oldCap);
     deferredByIndex.length = newCap;
-    for (let i = newCap - 1;i >= oldCap; --i) {
+    for (let i = newCap - 1; i >= oldCap; --i) {
       freeStack[freeTop++] = i;
     }
     return freeStack[--freeTop];
@@ -6236,11 +7304,13 @@ var createInlineExecutor = ({
     let processed = 0;
     while (processed < batchLimit) {
       const maybeIndex = pendingQueue.shiftNoClear();
-      if (maybeIndex === undefined)
+      if (maybeIndex === undefined) {
         break;
+      }
       const index = maybeIndex | 0;
-      if (stateByIndex[index] !== 0 /* Pending */)
+      if (stateByIndex[index] !== 0 /* Pending */) {
         continue;
+      }
       const taskID = taskIdByIndex[index];
       try {
         const args = argsByIndex[index];
@@ -6251,7 +7321,10 @@ var createInlineExecutor = ({
           processed++;
           continue;
         }
-        res.then((value) => settleIfCurrent(index, taskID, false, value), (err) => settleIfCurrent(index, taskID, true, err));
+        res.then(
+          (value) => settleIfCurrent(index, taskID, false, value),
+          (err) => settleIfCurrent(index, taskID, true, err),
+        );
         processed++;
       } catch (err) {
         settleIfCurrent(index, taskID, true, err);
@@ -6271,8 +7344,9 @@ var createInlineExecutor = ({
     }
   }
   function runMicroLoop() {
-    if (!isInMicro)
+    if (!isInMicro) {
       return;
+    }
     processLoop(true);
     isInMicro = false;
   }
@@ -6284,8 +7358,9 @@ var createInlineExecutor = ({
     argsByIndex[index] = undefined;
     deferredByIndex[index] = undefined;
     freeStack[freeTop++] = index;
-    if (working === 0)
+    if (working === 0) {
       isInMacro = false;
+    }
   }
   const call = ({ fnNumber }) => (args) => {
     const taskID = genTaskID2();
@@ -6299,8 +7374,9 @@ var createInlineExecutor = ({
     working++;
     if (args instanceof Promise) {
       args.then((value) => {
-        if (taskIdByIndex[index] !== taskID)
+        if (taskIdByIndex[index] !== taskID) {
           return;
+        }
         argsByIndex[index] = value;
         enqueueIfCurrent(index, taskID);
       }, (err) => settleIfCurrent(index, taskID, true, err));
@@ -6312,9 +7388,10 @@ var createInlineExecutor = ({
   port1.onmessage = () => processLoop(false);
   return {
     kills: async () => {
-      for (let index = 0;index < stateByIndex.length; index++) {
-        if (stateByIndex[index] !== 0 /* Pending */)
+      for (let index = 0; index < stateByIndex.length; index++) {
+        if (stateByIndex[index] !== 0 /* Pending */) {
           continue;
+        }
         try {
           deferredByIndex[index]?.reject("Thread closed");
         } catch {}
@@ -6336,7 +7413,7 @@ var createInlineExecutor = ({
       isInMicro = false;
     },
     call,
-    txIdle: () => working === 0
+    txIdle: () => working === 0,
   };
 };
 
@@ -6346,26 +7423,30 @@ var MAX_FUNCTION_COUNT = MAX_FUNCTION_ID + 1;
 var resolveLocalModulePath = (value) => {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol !== "file:")
+    if (parsed.protocol !== "file:") {
       return;
+    }
     return path4.resolve(fileURLToPath4(parsed));
   } catch {
-    if (!path4.isAbsolute(value))
+    if (!path4.isAbsolute(value)) {
       return;
+    }
     return path4.resolve(value);
   }
 };
 var assertBunStrictModuleSafety = ({
   protocol,
-  modules
+  modules,
 }) => {
-  if (!protocol || protocol.unsafe === true || RUNTIME !== "bun")
+  if (!protocol || protocol.unsafe === true || RUNTIME !== "bun") {
     return;
+  }
   const strictScanOptions = protocol.strict;
   for (const moduleRef of modules) {
     const modulePath = resolveLocalModulePath(moduleRef);
-    if (!modulePath)
+    if (!modulePath) {
       continue;
+    }
     let source;
     try {
       source = readFileSync2(modulePath, "utf8");
@@ -6375,7 +7456,7 @@ var assertBunStrictModuleSafety = ({
     const result = scanCode(source, {
       depth: 0,
       origin: "preflight",
-      source: modulePath
+      source: modulePath,
     }, strictScanOptions);
     if (result.passed !== true) {
       throw new StrictModeViolationError({
@@ -6383,22 +7464,28 @@ var assertBunStrictModuleSafety = ({
         depth: 0,
         source: modulePath,
         violations: result.violations,
-        scannedCode: source
+        scannedCode: source,
       });
     }
   }
 };
 var isMain = isMainThread4;
 var toListAndIds = (args) => {
-  const result = Object.values(args).reduce((acc, v) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc), [
-    new Set,
-    new Set,
-    new Set
-  ]);
+  const result = Object.values(args).reduce(
+    (
+      acc,
+      v,
+    ) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc),
+    [
+      new Set(),
+      new Set(),
+      new Set(),
+    ],
+  );
   return {
     list: [...result[0]],
     ids: [...result[1]],
-    at: [...result[2]]
+    at: [...result[2]],
   };
 };
 var createPool = ({
@@ -6415,130 +7502,173 @@ var createPool = ({
   permission,
   permison,
   dispatcher,
-  host
-}) => (tasks) => {
+  host,
+}) =>
+(tasks) => {
   if (isMainThread4 === false) {
     if (debug?.extras === true) {
-      console.warn("createPool has been called with : " + JSON.stringify(workerData2));
+      console.warn(
+        "createPool has been called with : " + JSON.stringify(workerData2),
+      );
     }
     const notMainThreadError = () => {
       throw new Error("createPool can only be called in the main thread.");
     };
-    const throwingProxyTarget = function() {
+    const throwingProxyTarget = function () {
       return notMainThreadError();
     };
     const throwingProxyHandler = {
-      get: function() {
+      get: function () {
         return notMainThreadError;
-      }
+      },
     };
-    const mainThreadOnlyProxy = new Proxy(throwingProxyTarget, throwingProxyHandler);
+    const mainThreadOnlyProxy = new Proxy(
+      throwingProxyTarget,
+      throwingProxyHandler,
+    );
     return {
       shutdown: mainThreadOnlyProxy,
-      call: mainThreadOnlyProxy
+      call: mainThreadOnlyProxy,
     };
   }
-  const { list, ids, at } = toListAndIds(tasks), listOfFunctions = Object.entries(tasks).map(([k, v]) => ({
-    ...v,
-    name: k
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  const { list, ids, at } = toListAndIds(tasks),
+    listOfFunctions = Object.entries(tasks).map(([k, v]) => ({
+      ...v,
+      name: k,
+    })).sort((a, b) => a.name.localeCompare(b.name));
   if (listOfFunctions.length > MAX_FUNCTION_COUNT) {
-    throw new RangeError(`Too many tasks: received ${listOfFunctions.length}. ` + `Maximum is ${MAX_FUNCTION_COUNT} (Uint16 function IDs: 0..${MAX_FUNCTION_ID}).`);
+    throw new RangeError(
+      `Too many tasks: received ${listOfFunctions.length}. ` +
+        `Maximum is ${MAX_FUNCTION_COUNT} (Uint16 function IDs: 0..${MAX_FUNCTION_ID}).`,
+    );
   }
   const usingInliner = typeof inliner === "object" && inliner != null;
   const totalNumberOfThread = (threads ?? 1) + (usingInliner ? 1 : 0);
   const permissionProtocol = resolvePermisonProtocol({
     permission,
     permison,
-    modules: list
+    modules: list,
   });
   assertBunStrictModuleSafety({
     protocol: permissionProtocol,
-    modules: list
+    modules: list,
   });
   const permissionExecArgv = toRuntimePermissionFlags(permissionProtocol);
-  const allowedFlags = typeof process !== "undefined" && process.allowedNodeEnvironmentFlags ? process.allowedNodeEnvironmentFlags : null;
+  const allowedFlags =
+    typeof process !== "undefined" && process.allowedNodeEnvironmentFlags
+      ? process.allowedNodeEnvironmentFlags
+      : null;
   const isNodePermissionFlag = (flag) => {
     const key = flag.split("=", 1)[0];
-    return key === "--permission" || key === "--experimental-permission" || key === "--allow-fs-read" || key === "--allow-fs-write" || key === "--allow-worker" || key === "--allow-child-process" || key === "--allow-addons" || key === "--allow-wasi";
+    return key === "--permission" || key === "--experimental-permission" ||
+      key === "--allow-fs-read" || key === "--allow-fs-write" ||
+      key === "--allow-worker" || key === "--allow-child-process" ||
+      key === "--allow-addons" || key === "--allow-wasi";
   };
-  const stripNodePermissionFlags = (flags) => flags?.filter((flag) => !isNodePermissionFlag(flag));
+  const stripNodePermissionFlags = (flags) =>
+    flags?.filter((flag) => !isNodePermissionFlag(flag));
   const dedupeFlags = (flags) => {
     const out = [];
-    const seen = new Set;
+    const seen = new Set();
     for (const flag of flags) {
-      if (seen.has(flag))
+      if (seen.has(flag)) {
         continue;
+      }
       seen.add(flag);
       out.push(flag);
     }
     return out;
   };
   const sanitizeExecArgv = (flags) => {
-    if (!flags || flags.length === 0)
+    if (!flags || flags.length === 0) {
       return;
-    if (!allowedFlags)
+    }
+    if (!allowedFlags) {
       return flags;
+    }
     const filtered = flags.filter((flag) => {
       const key = flag.split("=", 1)[0];
       return allowedFlags.has(key);
     });
     return filtered.length > 0 ? filtered : undefined;
   };
-  const defaultExecArgvCandidate = workerExecArgv ?? (typeof process !== "undefined" && Array.isArray(process.execArgv) ? allowedFlags?.has("--expose-gc") === true ? process.execArgv.includes("--expose-gc") ? process.execArgv : [...process.execArgv, "--expose-gc"] : process.execArgv : undefined);
-  const defaultExecArgv = permissionProtocol?.unsafe === true ? stripNodePermissionFlags(defaultExecArgvCandidate) : defaultExecArgvCandidate;
-  const needsVmModuleFlag = RUNTIME === "node" && permissionProtocol?.enabled === true && permissionProtocol.unsafe !== true && permissionProtocol.mode === "strict" && permissionProtocol.strict.sandbox === true;
+  const defaultExecArgvCandidate = workerExecArgv ??
+    (typeof process !== "undefined" && Array.isArray(process.execArgv)
+      ? allowedFlags?.has("--expose-gc") === true
+        ? process.execArgv.includes("--expose-gc")
+          ? process.execArgv
+          : [...process.execArgv, "--expose-gc"]
+        : process.execArgv
+      : undefined);
+  const defaultExecArgv = permissionProtocol?.unsafe === true
+    ? stripNodePermissionFlags(defaultExecArgvCandidate)
+    : defaultExecArgvCandidate;
+  const needsVmModuleFlag = RUNTIME === "node" &&
+    permissionProtocol?.enabled === true &&
+    permissionProtocol.unsafe !== true &&
+    permissionProtocol.mode === "strict" &&
+    permissionProtocol.strict.sandbox === true;
   const combinedExecArgv = dedupeFlags([
     ...needsVmModuleFlag ? ["--experimental-vm-modules"] : [],
     ...permissionExecArgv,
-    ...defaultExecArgv ?? []
+    ...defaultExecArgv ?? [],
   ]);
-  const execArgv = sanitizeExecArgv(combinedExecArgv.length > 0 ? combinedExecArgv : undefined);
+  const execArgv = sanitizeExecArgv(
+    combinedExecArgv.length > 0 ? combinedExecArgv : undefined,
+  );
   const hostDispatcher = host ?? dispatcher;
-  const usesAbortSignal = listOfFunctions.some((fn) => fn.abortSignal !== undefined);
+  const usesAbortSignal = listOfFunctions.some((fn) =>
+    fn.abortSignal !== undefined
+  );
   let workers = Array.from({
-    length: threads ?? 1
-  }).map((_, thread) => spawnWorkerContext({
-    list,
-    ids,
-    at,
-    thread,
-    debug,
-    totalNumberOfThread,
-    source,
-    workerOptions: worker,
-    workerExecArgv: execArgv,
-    host: hostDispatcher,
-    payloadInitialBytes,
-    payloadMaxBytes,
-    abortSignalCapacity,
-    usesAbortSignal,
-    permission: permissionProtocol
-  }));
+    length: threads ?? 1,
+  }).map((_, thread) =>
+    spawnWorkerContext({
+      list,
+      ids,
+      at,
+      thread,
+      debug,
+      totalNumberOfThread,
+      source,
+      workerOptions: worker,
+      workerExecArgv: execArgv,
+      host: hostDispatcher,
+      payloadInitialBytes,
+      payloadMaxBytes,
+      abortSignalCapacity,
+      usesAbortSignal,
+      permission: permissionProtocol,
+    })
+  );
   if (usingInliner) {
     const mainThread = createInlineExecutor({
       tasks,
       genTaskID,
-      batchSize: inliner?.batchSize ?? 1
+      batchSize: inliner?.batchSize ?? 1,
     });
     if (inliner?.position === "first") {
       workers = [
         mainThread,
-        ...workers
+        ...workers,
       ];
     } else {
       workers.push(mainThread);
     }
   }
-  const inlinerIndex = usingInliner ? inliner?.position === "first" ? 0 : workers.length - 1 : -1;
-  const inlinerDispatchThreshold = Number.isFinite(inliner?.dispatchThreshold) ? Math.max(1, Math.floor(inliner?.dispatchThreshold ?? 1)) : 1;
+  const inlinerIndex = usingInliner
+    ? inliner?.position === "first" ? 0 : workers.length - 1
+    : -1;
+  const inlinerDispatchThreshold = Number.isFinite(inliner?.dispatchThreshold)
+    ? Math.max(1, Math.floor(inliner?.dispatchThreshold ?? 1))
+    : 1;
   const indexedFunctions = listOfFunctions.map((fn, index) => ({
     name: fn.name,
     index,
     timeout: fn.timeout,
-    abortSignal: fn.abortSignal
+    abortSignal: fn.abortSignal,
   }));
-  const callHandlers = new Map;
+  const callHandlers = new Map();
   for (const { name } of indexedFunctions) {
     callHandlers.set(name, []);
   }
@@ -6547,47 +7677,55 @@ var createPool = ({
       callHandlers.get(name).push(worker2.call({
         fnNumber: index,
         timeout,
-        abortSignal
+        abortSignal,
       }));
     }
   }
   const useDirectHandler = (threads ?? 1) === 1 && !usingInliner;
-  const buildInvoker = (handlers) => useDirectHandler ? handlers[0] : managerMethod({
-    contexts: workers,
-    balancer,
-    handlers,
-    inlinerGate: usingInliner ? {
-      index: inlinerIndex,
-      threshold: inlinerDispatchThreshold
-    } : undefined
-  });
-  const callEntries = Array.from(callHandlers.entries(), ([name, handlers]) => [name, buildInvoker(handlers)]);
+  const buildInvoker = (handlers) =>
+    useDirectHandler ? handlers[0] : managerMethod({
+      contexts: workers,
+      balancer,
+      handlers,
+      inlinerGate: usingInliner
+        ? {
+          index: inlinerIndex,
+          threshold: inlinerDispatchThreshold,
+        }
+        : undefined,
+    });
+  const callEntries = Array.from(
+    callHandlers.entries(),
+    ([name, handlers]) => [name, buildInvoker(handlers)],
+  );
   return {
     shutdown: async () => {
       await Promise.allSettled(workers.map((worker2) => worker2.kills()));
     },
-    call: Object.fromEntries(callEntries)
+    call: Object.fromEntries(callEntries),
   };
 };
 var SINGLE_TASK_KEY = "__task__";
 var createSingleTaskPool = (single, options) => {
   const pool = createPool(options ?? {})({
-    [SINGLE_TASK_KEY]: single
+    [SINGLE_TASK_KEY]: single,
   });
   return {
     call: pool.call[SINGLE_TASK_KEY],
-    shutdown: pool.shutdown
+    shutdown: pool.shutdown,
   };
 };
 function task(I) {
   const [href, at] = getCallerFilePath();
-  const importedFrom = I?.href != null ? toModuleUrl(I.href) : new URL(href).href;
+  const importedFrom = I?.href != null
+    ? toModuleUrl(I.href)
+    : new URL(href).href;
   const out = {
     ...I,
     id: genTaskID(),
     importedFrom,
     at,
-    [endpointSymbol]: true
+    [endpointSymbol]: true,
   };
   out.createPool = (options) => {
     if (isMainThread4 === false) {
@@ -6597,9 +7735,4 @@ function task(I) {
   };
   return out;
 }
-export {
-  workerMainLoop,
-  task,
-  isMain,
-  createPool
-};
+export { createPool, isMain, task, workerMainLoop };
