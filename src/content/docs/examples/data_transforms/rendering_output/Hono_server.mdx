@@ -102,19 +102,51 @@ curl -s http://localhost:3000/jwt \
 
 ## Performance notes (how to talk about it correctly)
 
-There are two different comparisons here, and they produce different percentages:
+### What the numbers say (hono_only → hono+knitting)
 
-- **SSR-only uplift (single endpoint)**: the run you captured for `/ssr` in isolation was `9647 rps` vs `5079 rps`, which is about **+90%** throughput (about **1.9x**).
-- **Mixed-load uplift (ping + jwt + ssr hammered concurrently)**: the run you captured shows all three routes improving by roughly the same amount:
-  - `/ping`: `3198 → 5082 rps` (**+58.9%**)
-  - `/jwt`: `3188 → 5012 rps` (**+57.2%**)
-  - `/ssr`: `3198 → 5067 rps` (**+58.4%**)
+#### Throughput (RPS)
 
-The mixed-load result supports a clean, defensible statement:
+| Route | Hono only | Hono + Knitting | Delta |
+| --- | ---: | ---: | ---: |
+| `/ping` | `2998` | `5471` | **+82%** |
+| `/ssr` | `2998` | `5421` | **+81%** |
+| `/jwt` | `2916` | `5454` | **+87%** |
 
-> Offloading the expensive work reduces contention on the main server thread/event loop, so even “cheap” routes improve under pressure.
+So: roughly **~1.8× throughput** across the board. Offloading the heavy work frees the main thread, so even the “cheap” routes handle more requests per second when Knitting is in play.
 
-One important wording detail: you do not need JWT itself to be offloaded for `/jwt` throughput to improve. The mixed-load numbers are consistent with “SSR offload freed the main thread,” which reduces shared bottlenecks (CPU scheduling, GC pressure, event loop stalls), improving overall service throughput.
+### Latency improvements (lower is better)
+
+#### PING
+
+| Percentile | Hono only | Hono + Knitting | Delta |
+| --- | ---: | ---: | ---: |
+| `p50` | `16.32ms` | `8.84ms` | **-46%** |
+| `p99` | `27.05ms` | `14.52ms` | **-46%** |
+| `p99.9` | `71.01ms` | `64.59ms` | **-9%** |
+| `p99.99` | `128.70ms` | `99.44ms` | **-23%** |
+| `slowest` | `129.25ms` | `99.90ms` | **-23%** |
+
+#### SSR
+
+| Percentile | Hono only | Hono + Knitting | Delta |
+| --- | ---: | ---: | ---: |
+| `p50` | `16.32ms` | `8.71ms` | **-47%** |
+| `p99` | `27.32ms` | `17.35ms` | **-36%** |
+| `p99.9` | `71.96ms` | `63.97ms` | **-11%** |
+| `p99.99` | `128.61ms` | `98.75ms` | **-23%** |
+| `slowest` | `129.31ms` | `106.73ms` | **-17%** |
+
+#### JWT
+
+| Percentile | Hono only | Hono + Knitting | Delta |
+| --- | ---: | ---: | ---: |
+| `p50` | `16.47ms` | `8.71ms` | **-47%** |
+| `p99` | `34.49ms` | `15.91ms` | **-54%** |
+| `p99.9` | `114.95ms` | `59.48ms` | **-48%** |
+| `p99.99` | `121.47ms` | `101.07ms` | **-17%** |
+| `slowest` | `161.28ms` | `138.48ms` | **-14%** |
+
+Headline: the median and `p99` basically halve, and the JWT tail (`p99.9`) improves dramatically.
 
 ## Why this pattern matters
 
