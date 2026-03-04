@@ -152,6 +152,7 @@ function barScale(speed: number) {
     border: 1px solid rgba(15, 23, 42, 0.12);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
     overflow: hidden;
+    contain: layout paint;
   }
 
   :global(:root[data-theme='dark']) .bench{
@@ -336,8 +337,6 @@ function barScale(speed: number) {
     /* Keep animation composited and avoid expensive filter effects. */
     backface-visibility: hidden;
 
-    will-change: transform;
-
     /* Default travel, replaced by JS with exact pixels */
     --travel: calc(100% - var(--ball));
 
@@ -356,6 +355,18 @@ function barScale(speed: number) {
 
   .bench.is-running .ball{
     animation-play-state: running;
+    will-change: transform;
+  }
+
+  .bench.is-low-power .ball{
+    border-width: 1.5px;
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.07),
+      0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  .bench.is-low-power .bar{
+    box-shadow: none;
   }
 
   .bench.is-bars .ball{
@@ -434,9 +445,9 @@ function barScale(speed: number) {
   };
   const NO_MOTION_SAMPLE_MS = 1100;
   const NO_MOTION_DELTA_PX = 0.8;
-  // Tuned to be noticeably more permissive before falling back to bars mode.
-  const LOW_END_MEMORY_GB = 1;
-  const LOW_END_CORES = 1;
+  // Tuned to keep motion on capable devices while protecting weak hardware.
+  const LOW_END_MEMORY_GB = 2;
+  const LOW_END_CORES = 2;
   const normalizeMode = (value) => {
     if (value === MODES.MOTION || value === MODES.BARS) return value;
     return MODES.AUTO;
@@ -472,25 +483,29 @@ function barScale(speed: number) {
   const control = getGlobalControl();
   const getConnectionInfo = () =>
     navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  const isLowEndDevice = () => {
+    const connection = getConnectionInfo();
+    if (connection?.saveData) return true;
+    const memory = typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : null;
+    const cores =
+      typeof navigator.hardwareConcurrency === "number" ? navigator.hardwareConcurrency : null;
+    const lowMemory = memory !== null && memory <= LOW_END_MEMORY_GB;
+    const lowCores = cores !== null && cores <= LOW_END_CORES;
+    if (memory !== null && cores !== null) return lowMemory && lowCores;
+    return lowMemory || lowCores;
+  };
   const shouldPreferBarsFallback = () => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const connection = getConnectionInfo();
     const effectiveType = String(connection?.effectiveType || "");
     if (connection?.saveData || /2g|slow-2g/i.test(effectiveType)) return true;
 
-    const memory = typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : null;
-    const cores =
-      typeof navigator.hardwareConcurrency === "number" ? navigator.hardwareConcurrency : null;
-    const lowMemory = memory !== null && memory <= LOW_END_MEMORY_GB;
-    const lowCores = cores !== null && cores <= LOW_END_CORES;
+    const lowEnd = isLowEndDevice();
 
     // Be more generous: reduced-motion alone no longer hard-switches to bars.
     // We only force bars if reduced-motion appears alongside an actual low-end signal.
-    if (reducedMotion) return lowMemory || lowCores;
-
-    // Be more generous for auto mode: when both signals exist, require both to be low-end.
-    if (memory !== null && cores !== null) return lowMemory && lowCores;
-    return lowMemory || lowCores;
+    if (reducedMotion) return lowEnd;
+    return lowEnd;
   };
 
   sections.forEach((section) => {
@@ -509,7 +524,9 @@ function barScale(speed: number) {
     let stopTimer = 0;
     let noMotionTimer = 0;
     let ro = null;
+    let io = null;
     let hasWindowResizeListeners = false;
+    let isVisible = true;
 
     let finishRunId = 0;
     let finishActiveRunId = 0;
@@ -636,8 +653,11 @@ function barScale(speed: number) {
         if (!(ball instanceof HTMLElement)) return;
         ball.classList.remove("is-finished");
         ball.style.animation = "none";
-        // Force reflow so the next animation starts from 0.
-        void ball.offsetHeight;
+      });
+      // Force a single reflow so all animations restart together.
+      void section.offsetHeight;
+      balls.forEach((ball) => {
+        if (!(ball instanceof HTMLElement)) return;
         ball.style.animation = "";
       });
     };
@@ -665,7 +685,7 @@ function barScale(speed: number) {
 
     const scheduleNoMotionFallback = () => {
       clearNoMotionWatchdog();
-      if (isBarsMode) return;
+      if (isBarsMode || !isVisible) return;
       const pairs = getBallTrackPairs();
       if (!pairs.length) return;
       const startOffsets = pairs.map(({ ball, track }) => readOffset(ball, track));
@@ -700,7 +720,7 @@ function barScale(speed: number) {
     };
 
     const startRace = () => {
-      if (isBarsMode) return;
+      if (isBarsMode || !isVisible) return;
       window.clearTimeout(stopTimer);
       clearNoMotionWatchdog();
       resetRace();
@@ -751,6 +771,7 @@ function barScale(speed: number) {
 
       disableBarsMode();
       updateTravel();
+      if (!isVisible) return;
 
       if (mode === MODES.MOTION) {
         startRace();
@@ -765,8 +786,34 @@ function barScale(speed: number) {
     };
 
     const onModeChange = () => applyMode();
+    const onIntersection = (entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const nextVisible = entry.isIntersecting || entry.intersectionRatio > 0;
+      if (nextVisible === isVisible) return;
+      isVisible = nextVisible;
+
+      if (!isVisible) {
+        window.clearTimeout(stopTimer);
+        clearNoMotionWatchdog();
+        section.classList.remove("is-running");
+        return;
+      }
+
+      applyMode();
+    };
 
     attachMotionRuntime();
+
+    section.classList.toggle("is-low-power", isLowEndDevice());
+    if ("IntersectionObserver" in window) {
+      io = new IntersectionObserver(onIntersection, {
+        root: null,
+        rootMargin: "120px 0px",
+        threshold: 0,
+      });
+      io.observe(section);
+    }
 
     if (restart instanceof HTMLButtonElement) {
       restart.addEventListener("click", startRace);
@@ -782,6 +829,10 @@ function barScale(speed: number) {
 
     const cleanup = () => {
       teardownMotionRuntime();
+      if (io) {
+        io.disconnect();
+        io = null;
+      }
       if (restart instanceof HTMLButtonElement) {
         restart.removeEventListener("click", startRace);
       }

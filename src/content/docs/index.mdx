@@ -45,6 +45,7 @@ import nodeIpc from "../../assets/charts/node_ipc.png";
 import denoIpc from "../../assets/charts/deno_ipc.png";
 import bunIpc from "../../assets/charts/bun_ipc.png";
 import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
+import ImpactBars from "../../components/ImpactBars.astro";
 
 <AshesBackground />
 
@@ -103,146 +104,203 @@ Knitting lets you run tasks across worker threads as if they were normal functio
 ## Highlights
 
 <div class="home-cards">
-  <CardGrid stagger>
-    <Card title="Multi-threading in 10 lines">
-      This is the whole thing. Define a task, spin up a pool, call it, done.
+  <div class="home-cards-grid">
+    <div class="home-card-slot home-card-slot--code">
+      <Card title="Multi-threading in about 10 lines">
+        Start simple, then add the knobs you need.
 
-      ```ts
-      import { isMain, task } from "@vixeny/knitting";
+        <Tabs>
+          <TabItem label="Basic">
+            ```ts
+            import { createPool, isMain, task } from "@vixeny/knitting";
 
-      export const world = task({
-        f: (args: string) => args + " world",
-      }).createPool({
-        threads: 2,
-      });
+            const hello = task({
+              f: (name: string) => `hello ${name}`,
+            });
 
-      if (isMain) {
-        world.call("hello")
-          .then(console.log)
-          .finally(world.shutdown);
-      }
-      ```
+            const { call, shutdown } = createPool({ 
+              threads: 2 
+            })({ hello });
+
+            if (isMain) {
+              console.log(await call.hello("world"));
+              await shutdown();
+            }
+            ```
+          </TabItem>
+
+          <TabItem label="Abort signal">
+            ```ts
+            import { createPool, isMain, task } from "@vixeny/knitting";
+
+            const slowUpper = task({
+              abortSignal: { hasAborted: true },
+              f: async (value: string, signal) => {
+                if (signal.hasAborted()) return "aborted";
+                await new Promise((r) => setTimeout(r, 200));
+                return value.toUpperCase();
+              },
+            });
+
+            const pool = createPool({})({ slowUpper });
+
+            if (isMain) {
+              const pending = pool.call.slowUpper("hello");
+              pending.reject()
+              // aborted
+              await pending
+              .catch((reason) => console.log(reason))
+              .finally(pool.shutdown);
+            }
+            ```
+          </TabItem>
+
+          <TabItem label="Timeout">
+            ```ts
+            import { isMain, task } from "@vixeny/knitting";
+
+            const timed = task<string, string>({
+              timeout: { time: 50, default: "timeout" },
+              f: async (value) => {
+                await new Promise((r) => setTimeout(r, 100));
+                return value.toUpperCase();
+              },
+            }).createPool({ threads: 1 });
+
+            if (isMain) {
+              console.log(await timed.call("hello").finally(pool.shutdown)); // "timeout"
+            }
+            ```
+          </TabItem>
+
+          <TabItem label="Inliner burst">
+            ```ts
+            import { createPool, isMain, task } from "@vixeny/knitting";
+
+            const score = task({
+              f: (chunk: Uint8Array) => chunk.length,
+            });
+
+            const pool = createPool({
+              threads: 2,
+              inliner: { 
+                position: "last", 
+                batchSize: 32, 
+                dispatchThreshold: 16 },
+              balancer: "firstIdleOrRandom",
+            })({ score });
+
+            if (isMain) {
+              const jobs = Array.from({ length: 64 }, () =>
+                pool.call.score(new Uint8Array(1024)),
+              );
+              await Promise.all(jobs).finally(pool.shutdown);
+            }
+            ```
+          </TabItem>
+        </Tabs>
+
+        See [Defining tasks](/guides/defining-tasks/) and [Creating pools](/guides/creating-pools/) for full options.
+      </Card>
+    </div>
+
+    <div class="home-card-slot home-card-slot--impact">
+      <Card title="One more thread, big impact">
+        Move heavy paths into workers and your main thread stops stalling under mixed traffic.
+
+        <ImpactBars />
+
+        Median and `p99` also drop across routes in the same benchmark, with the JWT
+        `p99.9` tail falling by about half.
+
+        [Try the full Hono + SSR + JWT + Zod example](/examples/data_transforms/rendering_output/hono_server)
+      </Card>
+    </div>
 
 
-      That's it. Batching, balancing, and all the fancy stuff comes later if you need it.
-    </Card>
+    <div class="home-card-slot home-card-slot--throughput">
+      <Card title="Throughput">
+        How fast can you move data? We measured a full `1 MB` echo roundtrip -- host sends `1 MB` to a worker, worker sends `1 MB` back. That's `2 MB` per call.
 
-    <Card title="Throughput">
-      How fast can you move data? We measured a full `1 MB` echo roundtrip -- host sends `1 MB` to a worker, worker sends `1 MB` back. That's `2 MB` per call.
+        **Here's what we saw (GB/s, one-way equivalent):**
 
-      **Here's what we saw (GB/s, one-way equivalent):**
+        | Runtime | `Uint8Array` | `string` |
+        | --- | ---: | ---: |
+        | **Bun** | **11.93** | **9.74** |
+        | **Deno** | **1.17** | **2.68** |
+        | **Node** | **1.15** | **1.32** |
 
-      | Runtime | `Uint8Array` | `string` |
-      | --- | ---: | ---: |
-      | **Bun** | **11.93** | **9.74** |
-      | **Deno** | **1.17** | **2.68** |
-      | **Node** | **1.15** | **1.32** |
+        We report one-way equivalent (half the roundtrip) to keep things honest.
 
-      We report one-way equivalent (half the roundtrip) to keep things honest.
+        [See the full benchmarks](/benchmarks/introduction/)
+      </Card>
+    </div>
 
-      [See the full benchmarks](/benchmarks/introduction/)
-    </Card>
+    <div class="home-card-slot home-card-slot--permissions">
+      <Card title="Permission-aware workers">
+        Worker pools can run with runtime permission policies instead of full access.
 
-    <Card title="How fast?">
-      Same benchmark, three runtimes. Flip the tabs to compare.
+        - `strict` mode applies conservative defaults and blocks sensitive paths.
+        - `unsafe` mode keeps things open for local development/debugging.
+        - Node, Deno, and Bun each get runtime-specific behavior with one API.
 
-      <Tabs>
-        <TabItem label="Node" icon="node">
-          <img
-            src={nodeIpc.src}
-            width={nodeIpc.width}
-            height={nodeIpc.height}
-            alt="Node IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-        <TabItem label="Bun" icon="bun">
-          <img
-            src={bunIpc.src}
-            width={bunIpc.width}
-            height={bunIpc.height}
-            alt="Bun IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-        <TabItem label="Deno" icon="deno">
-          <img
-            src={denoIpc.src}
-            width={denoIpc.width}
-            height={denoIpc.height}
-            alt="Deno IPC benchmark"
-            loading="lazy"
-          />
-        </TabItem>
-      </Tabs>
+        Start with strict defaults, then open only what your tasks actually need.
 
-      These give you the shape of it -- dig into the benchmark pages for the full story.
-    </Card>
+        [See the permissions guide](/guides/permissions/)
+      </Card>
+    </div>
 
+    <div class="home-card-slot home-card-slot--ops">
+      <Card title="Flexible by default">
+        Works the way you'd expect -- promises in, async out, no surprises.
 
+        - Payload rules are explicit, so you always know what's being serialized.
+        - Batching and simple payloads get you the best throughput.
 
+        **And the production knobs are there when you need them:**
 
+        - `balancer` strategies for lane selection.
+        - `inliner` to run tasks on the host when it makes sense.
+        - `permission` to restrict what workers can access (strict/unsafe).
+        - Abort signals to cancel in-flight work.
+        - `spin`/`park`/`backoff`/`timeout` for fine-tuning.
+        - See: [Creating pools](/guides/creating-pools/), [Permissions](/guides/permissions/), [Performance model](/guides/performance/)
 
-    <Card title="One more thread, big impact">
-      The easiest win? Take the heavy stuff -- SSR, parsing, crypto, compression -- and toss it into a worker pool. Your main thread stays free to handle requests.
+      </Card>
+    </div>
 
-      In the Hono server example we saw:
-      - Throughput: `/ping` **2998 → 5471 (+82%)**, `/ssr` **2998 → 5421 (+81%)**, `/jwt` **2916 → 5454 (+87%)** — roughly **1.8× across the board**.
-      - Latency: median and `p99` roughly halve for all routes, and the JWT tail (`p99.9`) falls by **~48%**, so even the slowest hops get faster.
+    <div class="home-card-slot home-card-slot--examples">
+      <Card title="10+ examples (and growing)">
+        Not toy snippets -- real patterns you can actually copy into your project.
+        We add more as new workflows come up.
 
-      It's simple: offloading expensive work keeps the main thread free, so cheap routes keep flowing while heavy work runs in workers.
-
-      Try it yourself:
-      - [Hono + SSR + JWT + Zod](/examples/data_transforms/rendering_output/hono_server)
-    </Card>
-
-    <Card title="10+ examples (and growing)">
-      Not toy snippets -- real patterns you can actually copy into your project.
-      We add more as new workflows come up.
-
-      <FileTree>
-      - examples/
-        - intro_examples.mdx
-        - data_transforms/
-          - intro_data_transforms.mdx
-          - rendering_output/
-            - React_ssr.mdx
-            - Hono_server.mdx
+        <FileTree>
+        - examples/
+          - intro_examples.mdx
+          - data_transforms/
+            - intro_data_transforms.mdx
+            - rendering_output/
+              - React_ssr.mdx
+              - Hono_server.mdx
+              - ...
+            - validation/
+              - Schema_validate.mdx
+              - Jwt_revalidation.mdx
+              - ...
+          - maths/
+            - Big_prime.mdx
+            - Monte_pi.mdx
+            - Physics_loop.mdx
             - ...
-          - validation/
-            - Schema_validate.mdx
-            - Jwt_revalidation.mdx
-            - ...
-        - maths/
-          - Big_prime.mdx
-          - Monte_pi.mdx
-          - Physics_loop.mdx
-          - ...
-      </FileTree>
+        </FileTree>
 
-      - [Browse examples](/examples/intro_examples)
+        - [Browse examples](/examples/intro_examples)
 
-      Guides and benchmarks live in the sidebar. Examples are ready to copy and paste.
-    </Card>
+        Guides and benchmarks live in the sidebar. Examples are ready to copy and paste.
+      </Card>
+    </div>
 
-    <Card title="Flexible by default">
-      Works the way you'd expect -- promises in, async out, no surprises.
-
-      - Payload rules are explicit, so you always know what's being serialized.
-      - Batching and simple payloads get you the best throughput.
-
-      **And the production knobs are there when you need them:**
-
-      - `balancer` strategies for lane selection.
-      - `inliner` to run tasks on the host when it makes sense.
-      - `permission` to restrict what workers can access (strict/unsafe).
-      - Abort signals to cancel in-flight work.
-      - `spin`/`park`/`backoff`/`timeout` for fine-tuning.
-      - See: [Creating pools](/guides/creating-pools/), [Permissions](/guides/permissions/), [Performance model](/guides/performance/)
-
-    </Card>
-
-  </CardGrid>
+  </div>
 </div>
 
 
@@ -265,7 +323,7 @@ The core idea: instead of sending messages through the runtime's queue, Knitting
     When values are too big for the header, they go into reusable payload buffers.
 
     - Each worker gets two `SharedArrayBuffer`s -- one for requests, one for returns.
-    - You control the sizes (`payloadInitialBytes`, `payloadMaxBytes`), so you can trade memory for speed.
+    - You control the sizes (`payload.payloadInitialBytes`, `payload.payloadMaxByteLength`), so you can trade memory for speed.
     - Full details: [Supported payloads](/guides/payloads/).
   </Card>
 

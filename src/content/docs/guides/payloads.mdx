@@ -12,23 +12,31 @@ The transport supports the following payloads:
 - `boolean`
 - `bigint`
 - `undefined` and `null`
-- plain `Object` and `Array` (JSON serialized)
+- plain JSON-like `Object` and `Array`
+- `Envelope<header, payload>` where `header` is JSON-like (or string) and
+  `payload` is `ArrayBuffer`
+- `ArrayBuffer` and `Buffer` (Node.js)
 - `Uint8Array`, `Int32Array`, `Float64Array`, `BigInt64Array`, `BigUint64Array`
 - `DataView`
 - `Error` (name, message, stack, and cause chain)
 - `Date`
 - `symbol` from `Symbol.for(...)` only
-- `ArrayBuffer` and `Buffer` (Node.js)
+- native `Promise<supported>` values at the host call boundary
 
 If you need multiple values, pass a tuple or object as the single argument.
-Functions and `Blob` values are not supported as payloads.
+These types are not supported directly:
+
+- `Map`, `Set`, `WeakMap`, and most custom class instances
+- non-global symbols
+- `Blob`
+- functions
 
 Promise values are accepted at the `call.*()` boundary, but promises
 themselves are runtime state and are not transferred through IPC as payloads.
 Only resolved values are serialized and sent to workers.
 If a promise input rejects, the host call rejects and the worker task is not
-executed. Only native `Promise` is accepted (not arbitrary `PromiseLike` /
-thenables).
+executed. Only native `Promise` is accepted; thenables are treated as regular
+values.
 
 See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs) for details.
 
@@ -52,6 +60,7 @@ type ValidInput =
   | void
   | JSONValue
   | symbol
+  | Envelope<JSONValue | string, ArrayBuffer>
   | Uint8Array
   | Int32Array
   | Float64Array
@@ -81,11 +90,24 @@ overhead. Prefer these whenever possible.
 header.
 
 **Dynamic payload (allocator path):** `Object`, `Array` (JSON-serialized),
-`Error`, `Map`, `Set`. These need allocation, serialization, and copying. Still
-faster than `postMessage`, but measurably heavier in hot loops.
+`Error`, `Date`, and larger strings. These need allocation, serialization, and
+copying. Still faster than `postMessage`, but measurably heavier in hot loops.
 
 See the [Performance guide](/guides/performance) for per-type benchmarks and
 batching guidance.
+
+## Envelope
+
+`Envelope` is optimized for pair-like metadata + binary payload transport:
+
+```ts
+import { Envelope } from "@vixeny/knitting";
+
+const message = new Envelope(
+  { route: "/upload", contentType: "application/octet-stream" },
+  new Uint8Array([1, 2, 3]).buffer,
+);
+```
 
 ## Errors
 

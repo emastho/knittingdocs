@@ -76,7 +76,7 @@ createPool({
     batchSize?: number,
     dispatchThreshold?: number,
   },
-  balancer?: "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
+  balancer?: "roundRobin" | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
 })
 ```
 
@@ -146,6 +146,7 @@ the host thread.
 
 - `roundRobin` -- simple rotation across all lanes. Works well when tasks are
   uniform.
+- `robinRound` -- legacy alias of `roundRobin`.
 - `firstIdle` -- picks the first idle lane. Prioritizes workers when
   `position: "last"`.
 - `firstIdleOrRandom` or `randomLane` -- useful for pools with many registered

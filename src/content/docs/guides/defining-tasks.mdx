@@ -71,6 +71,7 @@ results from `call.*()`.
 - If the input promise resolves, the resolved value is dispatched to the worker.
 - If the input promise rejects, the host call rejects immediately and the task
   is not executed on the worker.
+- Thenables are not awaited; only native `Promise` values are awaited.
 - If the task function returns a promise, Knitting awaits it before resolving or
   rejecting the host call.
 
@@ -176,7 +177,8 @@ export const cpuWork = task({
 
 :::note
 Abort signals use a shared-memory bitset pool. The default capacity is 258
-concurrent abort-aware calls. You can tune this with `abortSignalCapacity` in
+concurrent abort-aware calls and applies when at least one task in the pool
+declares `abortSignal`. You can tune this with `abortSignalCapacity` in
 `createPool`. When all slots are exhausted, subsequent abort-aware calls reject
 immediately with the `AbortSignalPoolExhausted` symbol.
 :::

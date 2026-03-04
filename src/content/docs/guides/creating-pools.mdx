@@ -8,13 +8,12 @@ sidebar:
 `createPool(options)(tasks)` starts worker threads and returns helpers:
 
 - `call.<task>(args)` enqueue a task and return a promise.
-- `shutdown()` stop all workers.
+- `shutdown(delayMs?)` stop workers immediately or after an optional delay.
 
 `call.*()` always returns a promise.
-Inputs may also be promises; they are resolved on the host before dispatch.
-If an input promise rejects, the host call rejects and the worker task is not
-executed. If a task returns a promise, `call.*()` resolves/rejects with the
-awaited task result.
+Inputs may also be native promises; they are resolved on the host before
+dispatch. If an input promise rejects, the host call rejects and the worker
+task is not executed.
 
 See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs).
 
@@ -28,17 +27,19 @@ entrypoints that create pools.
 ```ts
 createPool({
   threads?: number,
-  payloadInitialBytes?: number,
-  payloadMaxBytes?: number,
-  abortSignalCapacity?: number,
   inliner?: {
     position?: "first" | "last",
     batchSize?: number,
     dispatchThreshold?: number,
   },
   balancer?: {
-    strategy?: "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom"
-  } | "roundRobin" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
+    strategy?:
+      | "roundRobin"
+      | "robinRound"
+      | "firstIdle"
+      | "randomLane"
+      | "firstIdleOrRandom"
+  } | "roundRobin" | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
     resolveAfterFinishingAll?: true,
     timers?: {
@@ -46,59 +47,98 @@ createPool({
       parkMs?: number,
       pauseNanoseconds?: number,
     },
+    hardTimeoutMs?: number,
+    resourceLimits?: {
+      maxOldGenerationSizeMb?: number,
+      maxYoungGenerationSizeMb?: number,
+      codeRangeSizeMb?: number,
+      stackSizeMb?: number,
+    },
   },
-  workerExecArgv?: string[],
-  permission?: "strict" | "unsafe" | PermisonProtocol,
+  payload?: {
+    mode?: "growable" | "fixed",
+    payloadInitialBytes?: number,
+    payloadMaxByteLength?: number,
+    maxPayloadBytes?: number,
+  },
+  abortSignalCapacity?: number,
   host?: {
     stallFreeLoops?: number,
     maxBackoffMs?: number,
   },
+  workerExecArgv?: string[],
+  permission?: "strict" | "unsafe" | PermissionProtocol,
+  dispatcher?: DispatcherSettings, // deprecated alias of host
   debug?: {
     extras?: boolean,
     logMain?: boolean,
     logHref?: boolean,
     logImportedUrl?: boolean,
   },
+  source?: string,
 })
 ```
+
+Deprecated payload aliases are still accepted at the top level:
+
+- `payloadInitialBytes` -> `payload.payloadInitialBytes`
+- `payloadMaxBytes` -> `payload.payloadMaxByteLength`
+- `bufferMode` -> `payload.mode`
+- `maxPayloadBytes` -> `payload.maxPayloadBytes`
 
 ### threads
 
 Number of worker threads to spawn (default `1`). The total lane count is
 `threads + (inliner ? 1 : 0)`.
 
+## payload
+
+Payload transport tuning lives under `payload`.
+
+### mode
+
+Selects shared-buffer transport mode:
+
+- `"growable"`: growable shared array buffer mode.
+- `"fixed"`: fixed-size shared array buffer mode.
+
+Default is `"growable"` when SAB growth is available, otherwise `"fixed"`.
+
+### payloadMaxByteLength
+
+Maximum size (in bytes) each payload buffer may grow to. Default is
+`64 MiB`.
+
 ### payloadInitialBytes
 
-Initial size (in bytes) of each payload `SharedArrayBuffer` used by a worker.
-Lower values reduce startup memory; the buffer can grow later (when growable
-SAB is supported).
+Initial payload buffer size in bytes. Default is `4 MiB` in growable mode.
+In fixed mode, startup uses the full `payloadMaxByteLength`.
 
-### payloadMaxBytes
+### maxPayloadBytes
 
-Maximum size (in bytes) each payload `SharedArrayBuffer` is allowed to grow to.
+Hard cap for dynamic payload encoding. Must be `> 0` and
+`<= payloadMaxByteLength >> 3`.
+Default is `payloadMaxByteLength >> 3` (`8 MiB` with defaults).
 
-### Payload buffer behavior
+Calls that exceed this cap are rejected with `KNT_ERROR_3` before dynamic slot
+reservation.
 
-- Defaults:
-  - `payloadMaxBytes = 64 * 1024 * 1024` (`64 MiB`)
-  - `payloadInitialBytes = 4 * 1024 * 1024` (`4 MiB`) when SAB growth is available
-  - If SAB growth is not available, initial size is forced to max size.
-- Validation:
-  - Non-finite or `<= 0` values are ignored (defaults used).
-  - `payloadInitialBytes` is clamped to `payloadMaxBytes`.
-- Scope:
-  - Applied per worker and per direction (request payload + return payload), so each worker allocates two payload buffers with these limits.
+If `payload.mode` is `"fixed"` and payload size is under the cap but still does
+not fit current capacity, the call is rejected with a controlled encoder error.
+
+### Scope
+
+Payload limits apply per worker and per direction (request payload + return
+payload), so each worker allocates two payload buffers with these limits.
 
 ### abortSignalCapacity
 
-Maximum number of concurrent abort-aware calls the pool can track. Defaults
-to `258`. Each call to a task that has `abortSignal` enabled occupies one slot;
-when the pool is exhausted the call throws `AbortSignalPoolExhausted`.
+Maximum number of concurrent abort-aware calls the pool can track.
+Default is `258`, and it applies only when at least one task declares
+`abortSignal`.
 
-Only tasks defined with `abortSignal: true` or `abortSignal: { hasAborted: true }`
-count against this limit. Regular tasks (no abort signal) are unaffected.
-
-Increase this if you fire many abort-aware calls concurrently:
+Only tasks defined with `abortSignal: true` or
+`abortSignal: { hasAborted: true }` count against this limit.
 
 ```ts
 const pool = createPool({
@@ -126,130 +166,89 @@ if (isMain) {
   const jobs = [call.add([1, 2]), call.add([3, 4])];
   const results = await Promise.all(jobs);
   console.log(results);
-  shutdown();
+  await shutdown();
 }
 ```
 
 :::danger
-After `shutdown()` runs, in-flight and future `call.*()` promises reject (reason:
-`"Thread closed"`).
+After `shutdown()` runs, in-flight and future `call.*()` promises reject
+with `"Thread closed"`.
 :::
 
 ## balancer
 
-Controls how calls are routed across lanes (threads, plus the optional inliner).
+Controls how calls are routed across lanes (threads, plus optional inliner).
 Pass a string or an object with a `strategy` key.
 
 - `roundRobin` (default): round-robin rotation through all lanes.
+- `robinRound`: legacy alias of `roundRobin`.
 - `firstIdle`: pick the first idle lane, else fall back to round-robin.
 - `randomLane`: pick a random lane.
 - `firstIdleOrRandom`: pick the first idle lane, else random.
 
-:::note
-`robinRound` is accepted as a legacy alias for `roundRobin`.
-:::
-
 When only one thread is spawned and no inliner is enabled, the balancer is
-bypassed entirely and calls go directly to the single worker.
+bypassed and calls go directly to the single worker.
 
 ## inliner
 
 Adds an extra lane that runs tasks on the main thread.
 
 - `position`: whether the inline lane appears before (`"first"`) or after
-  (`"last"`) the worker lanes for balancing purposes.
+  (`"last"`) the worker lanes for balancing.
 - `batchSize`: max tasks processed per event-loop tick (default `1` when enabled).
-- `dispatchThreshold`: minimum in-flight calls per task invoker before the
-  inline lane is eligible (default `1`).
-  Below the threshold, only worker lanes are scheduled; at/above it, workers
-  plus inline lane are scheduled.
-  This option has effect only when `inliner` is enabled.
+- `dispatchThreshold`: minimum in-flight calls per invoker before inline lane
+  is eligible (default `1`).
 
-See [Inliner guide](/guides/inliner) for more detail.
+See [Inliner guide](/guides/inliner) for detail.
 
 ## worker
 
 ### resolveAfterFinishingAll
 
-When set to `true`, makes workers wait for all pending promises to settle
-before exiting. Useful when tasks spawn background work that should complete
-before shutdown.
+When set to `true`, workers wait for all pending promises to settle before
+exiting.
 
 ### timers
 
-Idle behavior tuning. These affect how workers spin, pause, and park when there
-is no work.
+Idle behavior tuning while workers have no work:
 
-#### spinMicroseconds
+- `spinMicroseconds`: busy-spin budget before parking.
+- `parkMs`: `Atomics.wait` timeout while parked.
+- `pauseNanoseconds`: `Atomics.pause` duration while spinning. Set `0` to disable.
 
-Busy-spin budget before the worker parks (microseconds). Larger values can
-reduce latency under bursty load but increase CPU usage.
+### hardTimeoutMs
 
-Defaults to `max(1, totalLanes) * 35`, where `totalLanes = threads + (inliner ? 1 : 0)`.
+Hard wall-clock timeout for each task call. On timeout, the pool force-shuts
+down to stop runaway CPU execution.
 
-#### parkMs
+### resourceLimits
 
-`Atomics.wait` timeout while parked (milliseconds). Smaller values wake more
-often (lower latency, higher overhead); larger values sleep longer (lower
-overhead, potentially higher latency).
+Node.js worker memory/stack limits:
 
-Defaults to `max(1, totalLanes) * 50`.
-
-#### pauseNanoseconds
-
-`Atomics.pause` duration while spinning (nanoseconds). Use this to reduce power
-draw / contention during spin loops. Set to `0` (or less) to disable pause calls.
+- `maxOldGenerationSizeMb`
+- `maxYoungGenerationSizeMb`
+- `codeRangeSizeMb`
+- `stackSizeMb`
 
 ## workerExecArgv
 
-Extra Node.js `execArgv` flags passed to worker threads, for example
-`["--expose-gc"]`. Defaults to `process.execArgv` plus `--expose-gc` when
-the current Node.js binary supports that flag.
+Extra Node.js `execArgv` flags passed to workers, for example
+`["--expose-gc", "--max-old-space-size=4096"]`.
 
-Knitting deduplicates and validates flags against
-`process.allowedNodeEnvironmentFlags` before passing them to the worker.
-
-When `permission` is set to `"unsafe"`, Node.js permission flags
-(`--allow-fs-read`, `--allow-fs-write`, etc.) are automatically stripped from
-the inherited argv so they do not conflict.
-
-```ts
-const pool = createPool({
-  threads: 2,
-  workerExecArgv: ["--expose-gc", "--max-old-space-size=4096"],
-})({ myTask });
-```
+When `permission` is set to `"unsafe"`, inherited Node permission flags
+(`--allow-fs-read`, `--allow-fs-write`, etc.) are stripped.
 
 ## permission
 
-Runtime permission protocol that restricts what workers can access.
-Accepts a shorthand string or a full configuration object.
+Runtime permission flag policy for workers.
 
-- `"strict"` (default when an object is passed): deny access to sensitive
-  paths and environment variables by default.
-- `"unsafe"`: strip all permission flags (workers run unrestricted).
+- `"strict"` (default when passing an object): computes conservative defaults.
+- `"unsafe"`: disables permission flags and strips inherited Node permission
+  flags.
+- Omit `permission` to disable the permission protocol.
 
-Object form for fine-grained control:
-
-```ts
-createPool({
-  threads: 2,
-  permission: {
-    mode: "strict",
-    console: true,
-    cwd: "/app",
-    read: ["./data"],
-    write: ["./output"],
-    denyRead: [".env", ".git"],
-    denyWrite: ["/etc"],
-    env: { allow: ["NODE_ENV", "PORT"] },
-    node: { worker: true, childProcess: false },
-  },
-})({ myTask });
-```
-
-See [Permissions guide](/guides/permissions) for the full reference (modes,
-allow/deny lists, runtime-specific settings, and strict-mode defaults).
+See [Permissions guide](/guides/permissions) for runtime-specific mapping and
+strict defaults.
 
 ## host
 
@@ -257,32 +256,27 @@ Host dispatcher backoff and scheduling options.
 
 ### stallFreeLoops
 
-How many immediate notify loops run before backoff kicks in (default `128`).
+How many notify loops run before backoff starts (default `128`).
 
 ### maxBackoffMs
 
 Maximum backoff delay in milliseconds once the dispatcher starts stalling
 (default `10`).
 
+## dispatcher
+
+Deprecated alias of `host`.
+
 ## debug
 
-### extras
+- `extras`: extra warnings (for example, accidental `createPool` in a worker).
+- `logMain`: signal logging on the main thread (writes under `./log/`).
+- `logHref`: log worker entry module URL.
+- `logImportedUrl`: log module URLs imported by workers for task discovery.
 
-Enables extra warnings (for example, if `createPool` is accidentally called in a
-worker thread).
+## source
 
-### logMain
-
-Enables signal logging on the main thread. This writes log files under `./log/`.
-
-### logHref
-
-Logs the worker entry module URL used to spawn workers.
-Useful when auditing module resolution (for example `task({ href })` overrides).
-
-### logImportedUrl
-
-Logs the list of module URLs that workers import to discover tasks.
+Override worker entry module URL/path explicitly.
 
 ## Limits
 

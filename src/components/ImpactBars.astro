@@ -1,0 +1,251 @@
+---
+type ThroughputRow = {
+  route: string;
+  before: number;
+  after: number;
+  gainPercent: number;
+};
+
+const rows: ThroughputRow[] = [
+  { route: "/ping", before: 2998, after: 5471, gainPercent: 82 },
+  { route: "/ssr", before: 2998, after: 5421, gainPercent: 81 },
+  { route: "/jwt", before: 2916, after: 5454, gainPercent: 87 },
+];
+
+const maxAfter = Math.max(...rows.map((row) => row.after));
+
+function width(value: number) {
+  return `${((value / maxAfter) * 100).toFixed(2)}%`;
+}
+---
+
+<section class="impact-panel" aria-label="Hono benchmark impact">
+  <header class="impact-header">
+    <p class="impact-kicker">Hono + SSR + JWT + Zod benchmark</p>
+    <p class="impact-subtitle">Throughput (requests/sec, higher is better)</p>
+  </header>
+
+  <ul class="impact-list">
+    {rows.map((row) => (
+      <li class="impact-row">
+        <div class="impact-row-head">
+          <code class="impact-route">{row.route}</code>
+          <span class="impact-chip">+{row.gainPercent}%</span>
+        </div>
+
+        <div class="impact-bars">
+          <div class="impact-bar-track" aria-hidden="true">
+            <div class="impact-bar before" style={`width: ${width(row.before)};`} />
+          </div>
+          <div class="impact-bar-track" aria-hidden="true">
+            <div class="impact-bar after" style={`width: ${width(row.after)};`} />
+          </div>
+        </div>
+
+        <div class="impact-values">
+          <span class="impact-value impact-value-before">before {row.before.toLocaleString()}</span>
+          <span class="impact-value impact-value-after">after {row.after.toLocaleString()}</span>
+        </div>
+      </li>
+    ))}
+  </ul>
+
+  <div class="impact-latency" role="group" aria-label="Tail latency reduction">
+    <div class="impact-latency-head">
+      <span>Overall p99.9 tail latency</span>
+      <strong>48% lower</strong>
+    </div>
+    <div class="impact-latency-track" aria-hidden="true">
+      <div class="impact-latency-fill" style="width: 48%;" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .impact-panel {
+    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 75%, #86efac 25%);
+    --impact-border: color-mix(in srgb, var(--sl-color-text) 12%, transparent);
+    --impact-muted: color-mix(in srgb, var(--sl-color-text) 62%, transparent);
+    --impact-track: color-mix(in srgb, var(--sl-color-text) 10%, transparent);
+    --impact-before: linear-gradient(90deg, #94a3b8, #cbd5e1);
+    --impact-after: linear-gradient(90deg, #16a34a, #22c55e);
+    --impact-latency: linear-gradient(90deg, #f59e0b, #f97316);
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.9rem;
+    border: 1px solid var(--impact-border);
+    border-radius: 0.9rem;
+    background:
+      radial-gradient(120% 110% at 0% 0%, color-mix(in srgb, #22c55e 14%, transparent), transparent 58%),
+      radial-gradient(90% 100% at 100% 0%, color-mix(in srgb, #f59e0b 10%, transparent), transparent 55%),
+      var(--impact-surface);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
+  }
+
+  .impact-header {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .impact-kicker {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--impact-muted);
+  }
+
+  .impact-subtitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--impact-muted);
+  }
+
+  .impact-list {
+    display: grid;
+    gap: 0.8rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .impact-row {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .impact-row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .impact-route {
+    font-weight: 700;
+    color: color-mix(in srgb, var(--sl-color-text) 88%, transparent);
+  }
+
+  .impact-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.3rem;
+    padding: 0.14rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, #22c55e 40%, transparent);
+    background: color-mix(in srgb, #22c55e 16%, transparent);
+    color: color-mix(in srgb, #14532d 82%, #fff 18%);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .impact-bars {
+    display: grid;
+    gap: 0.27rem;
+  }
+
+  .impact-bar-track {
+    width: 100%;
+    height: 0.43rem;
+    border-radius: 999px;
+    overflow: clip;
+    background: var(--impact-track);
+  }
+
+  .impact-bar {
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .impact-bar.before {
+    background: var(--impact-before);
+    opacity: 0.84;
+  }
+
+  .impact-bar.after {
+    background: var(--impact-after);
+    box-shadow: 0 0 18px color-mix(in srgb, #22c55e 35%, transparent);
+  }
+
+  .impact-values {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.74rem;
+    color: var(--impact-muted);
+  }
+
+  .impact-value-after {
+    font-weight: 700;
+    color: color-mix(in srgb, #166534 70%, var(--sl-color-text) 30%);
+  }
+
+  .impact-latency {
+    display: grid;
+    gap: 0.35rem;
+    padding-top: 0.25rem;
+  }
+
+  .impact-latency-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    font-size: 0.8rem;
+    color: var(--impact-muted);
+  }
+
+  .impact-latency-head strong {
+    color: color-mix(in srgb, #b45309 82%, var(--sl-color-text) 18%);
+  }
+
+  .impact-latency-track {
+    width: 100%;
+    height: 0.5rem;
+    border-radius: 999px;
+    overflow: clip;
+    background: color-mix(in srgb, #f59e0b 20%, transparent);
+  }
+
+  .impact-latency-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--impact-latency);
+    box-shadow: 0 0 18px color-mix(in srgb, #f59e0b 40%, transparent);
+  }
+
+  @media (max-width: 800px) {
+    .impact-panel {
+      padding: 0.75rem;
+    }
+
+    .impact-values {
+      font-size: 0.72rem;
+    }
+  }
+
+  :global(:root[data-theme="dark"]) .impact-panel {
+    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 88%, #052e16 12%);
+    --impact-border: color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+    --impact-muted: color-mix(in srgb, var(--sl-color-white) 68%, transparent);
+    --impact-track: color-mix(in srgb, var(--sl-color-white) 14%, transparent);
+    --impact-before: linear-gradient(90deg, #475569, #64748b);
+    --impact-after: linear-gradient(90deg, #22c55e, #4ade80);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+  }
+
+  :global(:root[data-theme="dark"]) .impact-chip {
+    color: #dcfce7;
+    border-color: color-mix(in srgb, #4ade80 45%, transparent);
+    background: color-mix(in srgb, #22c55e 22%, transparent);
+  }
+
+  :global(:root[data-theme="dark"]) .impact-value-after {
+    color: #86efac;
+  }
+
+  :global(:root[data-theme="dark"]) .impact-latency-head strong {
+    color: #fdba74;
+  }
+</style>

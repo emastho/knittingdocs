@@ -230,10 +230,12 @@ running. The cost is one-time and small.
 
 ### Payload sizing
 
-`payloadInitialBytes` and `payloadMaxBytes` control the shared buffer each
-worker allocates. Larger initial buffers avoid runtime growth at the cost of
-upfront memory. If your payloads are consistently small (primitives, short
-strings), the default 4 MiB initial / 64 MiB max is more than enough.
+`payload.payloadInitialBytes`, `payload.payloadMaxByteLength`, and
+`payload.maxPayloadBytes` control the shared buffer each worker allocates.
+Larger initial buffers avoid runtime growth at the cost of upfront memory.
+If your payloads are consistently small (primitives, short strings), the
+defaults (`4 MiB` initial, `64 MiB` max length, `8 MiB` hard dynamic cap) are
+usually enough.
 
 ### Batching
 
