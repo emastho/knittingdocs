@@ -12,7 +12,28 @@ const rows: ThroughputRow[] = [
   { route: "/jwt", before: 2916, after: 5454, gainPercent: 87 },
 ];
 
+const tailLatencyReductionPercent = 48;
 const maxAfter = Math.max(...rows.map((row) => row.after));
+
+const benchmarkMetadata = {
+  benchmark: "hono-ssr-jwt-zod",
+  metricUnits: {
+    throughput: "requests_per_second",
+    gain: "percent",
+    tailLatencyReduction: "percent_lower",
+  },
+  rows: rows.map((row) => ({
+    route: row.route,
+    beforeRequestsPerSecond: row.before,
+    afterRequestsPerSecond: row.after,
+    gainPercent: row.gainPercent,
+  })),
+  tailLatency: {
+    percentile: "p99.9",
+    reductionPercent: tailLatencyReductionPercent,
+  },
+};
+const benchmarkMetadataJson = JSON.stringify(benchmarkMetadata);
 
 function width(value: number) {
   return `${((value / maxAfter) * 100).toFixed(2)}%`;
@@ -27,7 +48,13 @@ function width(value: number) {
 
   <ul class="impact-list">
     {rows.map((row) => (
-      <li class="impact-row">
+      <li
+        class="impact-row"
+        data-route={row.route}
+        data-before-rps={String(row.before)}
+        data-after-rps={String(row.after)}
+        data-gain-percent={String(row.gainPercent)}
+      >
         <div class="impact-row-head">
           <code class="impact-route">{row.route}</code>
           <span class="impact-chip">+{row.gainPercent}%</span>
@@ -50,15 +77,30 @@ function width(value: number) {
     ))}
   </ul>
 
-  <div class="impact-latency" role="group" aria-label="Tail latency reduction">
+  <div
+    class="impact-latency"
+    role="group"
+    aria-label="Tail latency reduction"
+    data-tail-latency-percentile="p99.9"
+    data-tail-latency-reduction-percent={String(tailLatencyReductionPercent)}
+  >
     <div class="impact-latency-head">
       <span>Overall p99.9 tail latency</span>
-      <strong>48% lower</strong>
+      <strong>{tailLatencyReductionPercent}% lower</strong>
     </div>
     <div class="impact-latency-track" aria-hidden="true">
-      <div class="impact-latency-fill" style="width: 48%;" />
+      <div
+        class="impact-latency-fill"
+        style={`width: ${tailLatencyReductionPercent}%;`}
+      />
     </div>
   </div>
+
+  <script
+    type="application/json"
+    data-benchmark-metadata="impact-bars"
+    set:html={benchmarkMetadataJson}
+  ></script>
 </section>
 
 <style>

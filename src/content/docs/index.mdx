@@ -1,6 +1,6 @@
 ---
 title: "Knitting"
-description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun. Build worker pools where tasks feel like normal function calls."
+description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun: worker pools where tasks feel like function calls, with low-overhead coordination and batching."
 template: splash
 head:
   - tag: meta
@@ -50,7 +50,7 @@ import ImpactBars from "../../components/ImpactBars.astro";
 <AshesBackground />
 
 <BenchmarkBalls
-  sourceLabel="based on node.js ipc graph (50 msg) rountrip of a JSON 12 Bytes"
+  sourceLabel="IPC microbenchmark (Node.js, 50-message roundtrip, ~12 B JSON). Measures communication overhead, not end-to-end app throughput."
   items={[
     { label: "Knitting", speed: 2030869, color: "#336244ff" },
     { label: "PostMessage", speed: 573394, color: "#58523bff" },
@@ -59,7 +59,9 @@ import ImpactBars from "../../components/ImpactBars.astro";
   ]}
 />
 
-Knitting lets you run tasks across worker threads as if they were normal function calls. Under the hood it uses shared memory to keep coordination fast, and it works on Node.js, Deno, and Bun. Curious how it actually works? Read the architecture section below, then check the benchmarks to see it in action.
+Knitting lets you run tasks across worker threads as if they were normal function calls. Under the hood it uses shared memory to keep coordination fast, and it works on Node.js, Deno, and Bun.
+Benchmarks here focus on coordination/transfer cost, not guaranteed whole-app speedup.
+Curious how it actually works? Read the architecture section below, then check the benchmarks to see it in action.
 
 ## Where do you want to start?
 
@@ -220,7 +222,7 @@ Knitting lets you run tasks across worker threads as if they were normal functio
 
     <div class="home-card-slot home-card-slot--throughput">
       <Card title="Throughput">
-        How fast can you move data? We measured a full `1 MB` echo roundtrip -- host sends `1 MB` to a worker, worker sends `1 MB` back. That's `2 MB` per call.
+        This is transport capacity, not full app throughput. We measured a `1 MB` echo roundtrip (host -> worker -> host), which is `2 MB` transferred per call.
 
         **Here's what we saw (GB/s, one-way equivalent):**
 
@@ -230,7 +232,9 @@ Knitting lets you run tasks across worker threads as if they were normal functio
         | **Deno** | **1.17** | **2.68** |
         | **Node** | **1.15** | **1.32** |
 
-        We report one-way equivalent (half the roundtrip) to keep things honest.
+        We report one-way equivalent (half the roundtrip) to keep units comparable.
+        Treat these as communication-layer upper bounds: they do **not** mean your app will be `3.5x` faster.
+        Real gains depend on workload shape and bottlenecks (CPU contention, serialization cost, DB/network waits, etc.).
 
         [See the full benchmarks](/benchmarks/introduction/)
       </Card>
@@ -328,17 +332,19 @@ The core idea: instead of sending messages through the runtime's queue, Knitting
   </Card>
 
   <Card title="Worker runtime: the spin-park-wake loop">
-    Each worker is a real OS thread spawned via the runtime's native worker API (`worker_threads` on Node, `Worker` on Deno/Bun). When a worker starts, it:
+    Each worker is a real OS thread (`worker_threads` on Node, `Worker` on Deno/Bun).
 
-    1. **Boots and loads tasks** -- imports your task modules from the URL list passed at spawn time, building an internal function table indexed by task ID.
-    2. **Signals ready** -- writes a status flag into shared memory so the host knows this lane is live.
-    3. **Enters the main loop** -- a tight cycle that checks for work, executes it, and writes results back. The loop runs three phases per iteration:
-       - *Enqueue* -- reads new request slots from the shared mailbox.
-       - *Service* -- executes pending tasks (sync or async) in batches of up to 32.
-       - *Write-back* -- flushes completed results into the response mailbox so the host can resolve promises.
-    4. **Sleeps efficiently** -- when there's no work, the worker spins briefly (configurable via `spinMicroseconds`). If nothing arrives, it triggers a garbage collection (`global.gc()`) -- using idle time productively instead of just spinning. Then it parks using `Atomics.wait` (a futex-style block) until the host writes new work and wakes it. No CPU burn while idle.
+    On startup it:
 
-    Async tasks (functions that return a promise) are awaited inside the worker before the result is written back -- there are no half-resolved surprises crossing the thread boundary.
+    1. **Loads tasks** -- imports task modules from spawn-time URLs and builds a task ID -> function table.
+    2. **Signals ready** -- writes its ready flag in shared memory.
+    3. **Runs the loop** -- per iteration:
+       - *Enqueue* -- reads new request slots.
+       - *Service* -- executes pending tasks (sync or async) in batches up to 32.
+       - *Write-back* -- flushes completed results so host promises can resolve.
+    4. **Idles efficiently** -- spins for `spinMicroseconds`; if still idle, runs `global.gc()`, then parks with `Atomics.wait` until new work arrives.
+
+    Async tasks are awaited inside the worker before write-back, so only settled results cross the thread boundary.
   </Card>
 
 </CardGrid>

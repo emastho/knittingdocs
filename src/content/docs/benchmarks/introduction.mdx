@@ -16,6 +16,9 @@ import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPri
 This page is the high-level benchmark summary across Node, Deno, and Bun.
 For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
 
+These benchmarks quantify communication overhead and scaling behavior in specific benchmark shapes.
+They are not a direct prediction of end-to-end application speedup.
+
 
 ## What these benchmarks measure
 
@@ -24,6 +27,8 @@ For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
 - Payload sensitivity (primitive, structured, and binary types)
 - Throughput at growing payload sizes (up to `1 MiB`)
 - Heavy-task scaling and parallel efficiency under CPU-intensive workloads
+
+Interpretation rule: "`x` faster" here means faster for this benchmark setup (payloads, batching, CPU profile), not universally `x` faster for any app.
 
 ## IPC (combined)
 
@@ -96,6 +101,7 @@ Quick takeaways:
 - Bun is clearly fastest at 1 MiB in this benchmark shape, for both text and binary payloads.
 - Deno's 1 MiB string path is notably stronger than Node, while binary (`Uint8Array`) is close between Deno and Node.
 - This complements the IPC/latency charts by showing behavior when payload size, not just call count, grows.
+- At this size, ceilings are strongly influenced by memory bandwidth and runtime internals, not application logic.
 
 ## Heavy Load: Speedup and Efficiency
 
@@ -106,6 +112,7 @@ Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute w
 - Speedup grows steadily as threads are added, reaching roughly `3.5x-3.8x` at `+4` extra threads in these runs.
 - Efficiency remains strong under contention, staying around `~70-77%` at higher thread counts.
 - Bun and Deno show slightly stronger scaling than Node in this specific heavy-load scenario.
+- This does not imply every app gets `3.5x+`; I/O-heavy services often see smaller changes.
 
 <img
   src={withloadSpeedup.src}

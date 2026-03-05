@@ -43,6 +43,22 @@ const {
 const speeds = items.map((d) => d.speed);
 const maxSpeed = Math.max(...speeds, 1);
 const speedFormatter = new Intl.NumberFormat("en-US");
+const benchmarkMetadata = {
+  metric: "requests_per_second",
+  sourceLabel,
+  items: items.map((item) => ({
+    label: item.label,
+    requestsPerSecond: item.speed,
+  })),
+  normalization: {
+    fastestRequestsPerSecond: maxSpeed,
+    raceDurationSeconds: raceDuration,
+    staggerSeconds: stagger,
+    durationFormula:
+      "raceDurationSeconds * (fastestRequestsPerSecond / itemRequestsPerSecond)",
+  },
+};
+const benchmarkMetadataJson = JSON.stringify(benchmarkMetadata);
 
 // Fastest ball reaches the end in raceDuration seconds.
 // Others scale proportionally by speed ratio.
@@ -69,6 +85,7 @@ function barScale(speed: number) {
 <section
   class="bench not-content"
   data-benchmark-balls
+  data-benchmark-metric="requests_per_second"
   data-bench-infinite={infinite ? "1" : "0"}
   style={`
     --row-h:${rowHeight}px;
@@ -93,6 +110,8 @@ function barScale(speed: number) {
       <div
         class="row"
         role="listitem"
+        data-benchmark-label={it.label}
+        data-benchmark-rps={String(it.speed)}
         style={`
           --dur:${durationFor(it.speed)}s;
           --delay:${(i * stagger).toFixed(3)}s;
@@ -133,6 +152,12 @@ function barScale(speed: number) {
       </button>
     </div>
   </div>
+
+  <script
+    type="application/json"
+    data-benchmark-metadata="benchmark-balls"
+    set:html={benchmarkMetadataJson}
+  ></script>
 </section>
 
   <style>

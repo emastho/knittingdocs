@@ -68,7 +68,8 @@ Three steps:
 - `spin up` a pool,
 - `call` them like functions.
 
-The result is a worker workflow that stays out of your way and runs **4x to 200x faster** than message-based IPC for small-to-medium, high-frequency tasks.
+The result is a worker workflow that stays out of your way and can run **4x to 200x faster** than message-based IPC in communication-focused microbenchmarks for small-to-medium, high-frequency tasks.
+That reflects IPC overhead reduction, not an automatic end-to-end app speedup.
 
 <Tabs>
   <TabItem label="Node">
@@ -197,4 +198,3 @@ Knitting can load task modules from remote sources, but doing so widens your tru
 
 **Not a distributed system**
 Knitting operates within a single process, across threads, using shared memory. If you need cross-machine distribution, Knitting is meant to complement that layer, not replace it.
-
