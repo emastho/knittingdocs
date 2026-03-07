@@ -41,11 +41,9 @@ import {
   Tabs,
   TabItem,
 } from "@astrojs/starlight/components";
-import nodeIpc from "../../assets/charts/node_ipc.png";
-import denoIpc from "../../assets/charts/deno_ipc.png";
-import bunIpc from "../../assets/charts/bun_ipc.png";
 import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 import ImpactBars from "../../components/ImpactBars.astro";
+import TokioCloseUp from "../../components/TokioCloseUp.astro";
 
 <AshesBackground />
 
@@ -59,9 +57,18 @@ import ImpactBars from "../../components/ImpactBars.astro";
   ]}
 />
 
-Knitting lets you run tasks across worker threads as if they were normal function calls. Under the hood it uses shared memory to keep coordination fast, and it works on Node.js, Deno, and Bun.
-Benchmarks here focus on coordination/transfer cost, not guaranteed whole-app speedup.
-Curious how it actually works? Read the architecture section below, then check the benchmarks to see it in action.
+Knitting makes parallel JavaScript feel cheap enough to use everywhere you actually want it.
+It gives you function-call ergonomics on a shared-memory fast path across Node.js, Deno, and Bun, so worker coordination stops being the expensive part.
+The benchmarks isolate coordination and transfer cost — not guaranteed full-app speedup — so you can see the raw fast path before mapping it to your real workload.
+
+<Card title="Close to Tokio on the fast path">
+  For primitives and low binary payloads, Knitting stays in the same microsecond tier as Tokio in these benchmark shapes.
+  That is the interesting part: the shared-memory path is not just fast for JavaScript — it stays competitive with a serious Rust baseline when coordination dominates.
+
+  <TokioCloseUp compact embedded />
+
+  See the full [benchmarks overview](/benchmarks/introduction/) and the dedicated [Tokio comparison](/benchmarks/tokio/).
+</Card>
 
 ## Where do you want to start?
 

@@ -15,7 +15,7 @@ The transport supports the following payloads:
 - plain JSON-like `Object` and `Array`
 - `Envelope<header, payload>` where `header` is JSON-like (or string) and
   `payload` is `ArrayBuffer`
-- `ArrayBuffer` and `Buffer` (Node.js)
+- `Buffer` (Node.js), `ArrayBuffer`
 - `Uint8Array`, `Int32Array`, `Float64Array`, `BigInt64Array`, `BigUint64Array`
 - `DataView`
 - `Error` (name, message, stack, and cause chain)
@@ -26,7 +26,8 @@ The transport supports the following payloads:
 If you need multiple values, pass a tuple or object as the single argument.
 These types are not supported directly:
 
-- `Map`, `Set`, `WeakMap`, and most custom class instances
+- `Map`, `Set`, `WeakMap`, and custom class instances
+  (except `Envelope` and subclasses)
 - non-global symbols
 - `Blob`
 - functions

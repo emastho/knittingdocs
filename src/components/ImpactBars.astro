@@ -105,21 +105,29 @@ function width(value: number) {
 
 <style>
   .impact-panel {
-    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 75%, #86efac 25%);
-    --impact-border: color-mix(in srgb, var(--sl-color-text) 12%, transparent);
+    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 85%, var(--sl-color-purple) 15%);
+    --impact-border: color-mix(in srgb, var(--sl-color-purple) 20%, var(--sl-color-text) 8%);
     --impact-muted: color-mix(in srgb, var(--sl-color-text) 62%, transparent);
     --impact-track: color-mix(in srgb, var(--sl-color-text) 10%, transparent);
-    --impact-before: linear-gradient(90deg, #94a3b8, #cbd5e1);
-    --impact-after: linear-gradient(90deg, #16a34a, #22c55e);
-    --impact-latency: linear-gradient(90deg, #f59e0b, #f97316);
+    --impact-before: linear-gradient(90deg, #64748b, #94a3b8);
+    --impact-after: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--sl-color-purple) 84%, #4338ca 16%),
+      color-mix(in srgb, var(--sl-color-purple) 58%, #60a5fa 42%)
+    );
+    --impact-latency: linear-gradient(
+      90deg,
+      color-mix(in srgb, #60a5fa 82%, var(--sl-color-purple) 18%),
+      color-mix(in srgb, var(--sl-color-purple) 80%, #7dd3fc 20%)
+    );
     display: grid;
     gap: 0.85rem;
     padding: 0.9rem;
     border: 1px solid var(--impact-border);
     border-radius: 0.9rem;
     background:
-      radial-gradient(120% 110% at 0% 0%, color-mix(in srgb, #22c55e 14%, transparent), transparent 58%),
-      radial-gradient(90% 100% at 100% 0%, color-mix(in srgb, #f59e0b 10%, transparent), transparent 55%),
+      radial-gradient(120% 110% at 0% 0%, color-mix(in srgb, var(--sl-color-purple) 14%, transparent), transparent 58%),
+      radial-gradient(90% 100% at 100% 0%, color-mix(in srgb, #60a5fa 10%, transparent), transparent 55%),
       var(--impact-surface);
     box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
   }
@@ -176,9 +184,9 @@ function width(value: number) {
     min-width: 3.3rem;
     padding: 0.14rem 0.5rem;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, #22c55e 40%, transparent);
-    background: color-mix(in srgb, #22c55e 16%, transparent);
-    color: color-mix(in srgb, #14532d 82%, #fff 18%);
+    border: 1px solid color-mix(in srgb, var(--sl-color-purple) 40%, transparent);
+    background: color-mix(in srgb, var(--sl-color-purple) 16%, transparent);
+    color: color-mix(in srgb, var(--sl-color-purple) 76%, var(--sl-color-text) 24%);
     font-size: 0.78rem;
     font-weight: 700;
   }
@@ -208,7 +216,7 @@ function width(value: number) {
 
   .impact-bar.after {
     background: var(--impact-after);
-    box-shadow: 0 0 18px color-mix(in srgb, #22c55e 35%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--sl-color-purple) 28%, transparent);
   }
 
   .impact-values {
@@ -221,7 +229,7 @@ function width(value: number) {
 
   .impact-value-after {
     font-weight: 700;
-    color: color-mix(in srgb, #166534 70%, var(--sl-color-text) 30%);
+    color: color-mix(in srgb, var(--sl-color-purple) 72%, var(--sl-color-text) 28%);
   }
 
   .impact-latency {
@@ -239,7 +247,7 @@ function width(value: number) {
   }
 
   .impact-latency-head strong {
-    color: color-mix(in srgb, #b45309 82%, var(--sl-color-text) 18%);
+    color: color-mix(in srgb, #2563eb 68%, var(--sl-color-purple) 32%);
   }
 
   .impact-latency-track {
@@ -247,14 +255,14 @@ function width(value: number) {
     height: 0.5rem;
     border-radius: 999px;
     overflow: clip;
-    background: color-mix(in srgb, #f59e0b 20%, transparent);
+    background: color-mix(in srgb, #60a5fa 18%, transparent);
   }
 
   .impact-latency-fill {
     height: 100%;
     border-radius: inherit;
     background: var(--impact-latency);
-    box-shadow: 0 0 18px color-mix(in srgb, #f59e0b 40%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, #60a5fa 28%, transparent);
   }
 
   @media (max-width: 800px) {
@@ -268,26 +276,26 @@ function width(value: number) {
   }
 
   :global(:root[data-theme="dark"]) .impact-panel {
-    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 88%, #052e16 12%);
+    --impact-surface: color-mix(in srgb, var(--sl-color-bg) 92%, #1e1b4b 8%);
     --impact-border: color-mix(in srgb, var(--sl-color-white) 18%, transparent);
     --impact-muted: color-mix(in srgb, var(--sl-color-white) 68%, transparent);
     --impact-track: color-mix(in srgb, var(--sl-color-white) 14%, transparent);
     --impact-before: linear-gradient(90deg, #475569, #64748b);
-    --impact-after: linear-gradient(90deg, #22c55e, #4ade80);
+    --impact-after: linear-gradient(90deg, #8b5cf6, #60a5fa);
     box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
   }
 
   :global(:root[data-theme="dark"]) .impact-chip {
-    color: #dcfce7;
-    border-color: color-mix(in srgb, #4ade80 45%, transparent);
-    background: color-mix(in srgb, #22c55e 22%, transparent);
+    color: #e9ddff;
+    border-color: color-mix(in srgb, #a78bfa 45%, transparent);
+    background: color-mix(in srgb, #8b5cf6 22%, transparent);
   }
 
   :global(:root[data-theme="dark"]) .impact-value-after {
-    color: #86efac;
+    color: #c4b5fd;
   }
 
   :global(:root[data-theme="dark"]) .impact-latency-head strong {
-    color: #fdba74;
+    color: #93c5fd;
   }
 </style>

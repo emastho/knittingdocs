@@ -22,6 +22,16 @@ See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-a
 entrypoints that create pools.
 :::
 
+## Batching pattern
+
+`call.*()` enqueues work and dispatches automatically.
+For batches, create all calls first and then await them together.
+
+```ts
+const jobs = Array.from({ length: 1_000 }, () => call.hello());
+const results = await Promise.all(jobs);
+```
+
 ## Options
 
 ```ts
@@ -242,13 +252,32 @@ When `permission` is set to `"unsafe"`, inherited Node permission flags
 
 Runtime permission flag policy for workers.
 
+- Omit `permission`: strict defaults plus `allowImport: true` (web imports
+  allowed).
 - `"strict"` (default when passing an object): computes conservative defaults.
 - `"unsafe"`: disables permission flags and strips inherited Node permission
   flags.
-- Omit `permission` to disable the permission protocol.
+- In object mode, `console` defaults to `false` in strict mode and `true` in
+  unsafe mode.
 
 See [Permissions guide](/guides/permissions) for runtime-specific mapping and
 strict defaults.
+
+## Timing note
+
+Worker timing paths capture a high-resolution `performance.now()` reference at
+module load/startup time. This keeps scheduling and timeout precision stable
+without freezing global `performance`.
+
+## Safety hardening defaults
+
+- Startup-only guard layer: safety hooks are installed once before the worker
+  loop starts (no extra checks inside the hot task-processing loop).
+- Process termination APIs from task code are blocked: `process.exit`,
+  `process.kill`, `process.abort`, plus `Deno.exit` when present.
+- Permission enforcement is delegated to runtime-native mechanisms (Node worker
+  permission flags and Deno worker permissions when available). In-process
+  FS/network/env monkey-patching is not performed.
 
 ## host
 

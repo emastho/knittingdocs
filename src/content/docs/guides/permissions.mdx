@@ -25,12 +25,12 @@ createPool({
 
 ## Modes
 
+- omit `permission`
+  strict defaults plus `allowImport: true` (web imports allowed).
 - `permission: {}` or `permission: { mode: "strict" }`
-  conservative defaults.
+  conservative defaults in explicit strict mode.
 - `permission: "unsafe"`
   disables permission flags and strips inherited Node permission flags.
-- omit `permission`
-  disable the permission protocol.
 
 `console` can be set in object mode for compatibility.
 Default is `false` in strict mode and `true` in unsafe mode.
@@ -54,6 +54,9 @@ Strict mode computes a conservative profile:
   `/proc`, `/proc/self`, `/proc/self/environ`, `/proc/self/mem`,
   `/sys`, `/dev`, `/etc`
 - read support for `deno.lock` and `bun.lock*`
+
+`permission: "unsafe"` disables runtime permission flags and strips inherited
+Node permission flags from worker `execArgv`.
 
 ## Runtime mapping
 

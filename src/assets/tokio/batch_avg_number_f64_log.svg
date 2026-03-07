@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="620" viewBox="0 0 840 620">
+<rect x="0" y="0" width="840" height="620" fill="#0f1116" />
+<text x="70.00" y="60.00" fill="#f0f0f0" font-size="27" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">Batch Avg Latency (less is better)</text>
+<text x="70.00" y="92.00" fill="#e6e6e6" font-size="18" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">number f64 (8 bytes)</text>
+<text x="70.00" y="118.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">log-scale y axis</text>
+<rect x="60.00" y="134.00" width="420.00" height="36.00" fill="#111318" stroke="#2a2f3a" />
+<line x1="80.00" y1="148.00" x2="104.00" y2="148.00" stroke="#7dd3fc" stroke-width="3.00" />
+<circle cx="92.00" cy="148.00" r="4.00" fill="#7dd3fc" />
+<text x="114.00" y="153.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">tokio</text>
+<line x1="180.00" y1="148.00" x2="204.00" y2="148.00" stroke="#f59e0b" stroke-width="3.00" />
+<circle cx="192.00" cy="148.00" r="4.00" fill="#f59e0b" />
+<text x="214.00" y="153.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">bun</text>
+<line x1="280.00" y1="148.00" x2="304.00" y2="148.00" stroke="#a3e635" stroke-width="3.00" />
+<circle cx="292.00" cy="148.00" r="4.00" fill="#a3e635" />
+<text x="314.00" y="153.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">node</text>
+<line x1="380.00" y1="148.00" x2="404.00" y2="148.00" stroke="#60a5fa" stroke-width="3.00" />
+<circle cx="392.00" cy="148.00" r="4.00" fill="#60a5fa" />
+<text x="414.00" y="153.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">deno</text>
+<rect x="112.00" y="156.00" width="700.00" height="370.00" fill="#111318" stroke="#c7c7c7" />
+<line x1="138.00" y1="502.00" x2="786.00" y2="502.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="126.00" y="507.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">1.00 us</text>
+<line x1="138.00" y1="341.00" x2="786.00" y2="341.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="126.00" y="346.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">10.00 us</text>
+<line x1="138.00" y1="180.00" x2="786.00" y2="180.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="126.00" y="185.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">100.00 us</text>
+<line x1="138.00" y1="502.00" x2="138.00" y2="510.00" stroke="#c7c7c7" stroke-width="1.50" />
+<text x="138.00" y="530.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">n=1</text>
+<line x1="462.00" y1="502.00" x2="462.00" y2="510.00" stroke="#c7c7c7" stroke-width="1.50" />
+<text x="462.00" y="530.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">n=10</text>
+<line x1="786.00" y1="502.00" x2="786.00" y2="510.00" stroke="#c7c7c7" stroke-width="1.50" />
+<text x="786.00" y="530.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">n=100</text>
+<line x1="138.00" y1="180.00" x2="138.00" y2="502.00" stroke="#c7c7c7" stroke-width="1.50" />
+<line x1="138.00" y1="502.00" x2="786.00" y2="502.00" stroke="#c7c7c7" stroke-width="1.50" />
+<polyline points="138.00,335.08 462.00,321.10 786.00,208.43" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="138.00" cy="335.08" r="4.50" fill="#7dd3fc" />
+<circle cx="462.00" cy="321.10" r="4.50" fill="#7dd3fc" />
+<circle cx="786.00" cy="208.43" r="4.50" fill="#7dd3fc" />
+<polyline points="138.00,382.66 462.00,351.65 786.00,250.31" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="138.00" cy="382.66" r="4.50" fill="#f59e0b" />
+<circle cx="462.00" cy="351.65" r="4.50" fill="#f59e0b" />
+<circle cx="786.00" cy="250.31" r="4.50" fill="#f59e0b" />
+<polyline points="138.00,389.98 462.00,357.20 786.00,252.86" fill="none" stroke="#a3e635" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="138.00" cy="389.98" r="4.50" fill="#a3e635" />
+<circle cx="462.00" cy="357.20" r="4.50" fill="#a3e635" />
+<circle cx="786.00" cy="252.86" r="4.50" fill="#a3e635" />
+<polyline points="138.00,352.10 462.00,367.42 786.00,258.45" fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="138.00" cy="352.10" r="4.50" fill="#60a5fa" />
+<circle cx="462.00" cy="367.42" r="4.50" fill="#60a5fa" />
+<circle cx="786.00" cy="258.45" r="4.50" fill="#60a5fa" />
+<text x="782.00" y="568.00" fill="#e6e6e6" font-size="13" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">batch size</text>
+<text x="44.00" y="172.00" fill="#e6e6e6" font-size="13" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">avg latency</text>
+</svg>

@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820">
+<rect x="0" y="0" width="1600" height="820" fill="#0f1116" />
+<text x="70.00" y="60.00" fill="#f0f0f0" font-size="28" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">Uint8Array Size Sweep (less is better)</text>
+<text x="70.00" y="92.00" fill="#e6e6e6" font-size="16" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">batch=100, log-scale x and y axes</text>
+<rect x="60.00" y="118.00" width="420.00" height="36.00" fill="#111318" stroke="#2a2f3a" />
+<line x1="80.00" y1="132.00" x2="104.00" y2="132.00" stroke="#7dd3fc" stroke-width="3.00" />
+<circle cx="92.00" cy="132.00" r="4.00" fill="#7dd3fc" />
+<text x="114.00" y="137.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">tokio</text>
+<line x1="180.00" y1="132.00" x2="204.00" y2="132.00" stroke="#f59e0b" stroke-width="3.00" />
+<circle cx="192.00" cy="132.00" r="4.00" fill="#f59e0b" />
+<text x="214.00" y="137.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">bun</text>
+<line x1="280.00" y1="132.00" x2="304.00" y2="132.00" stroke="#a3e635" stroke-width="3.00" />
+<circle cx="292.00" cy="132.00" r="4.00" fill="#a3e635" />
+<text x="314.00" y="137.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">node</text>
+<line x1="380.00" y1="132.00" x2="404.00" y2="132.00" stroke="#60a5fa" stroke-width="3.00" />
+<circle cx="392.00" cy="132.00" r="4.00" fill="#60a5fa" />
+<text x="414.00" y="137.00" fill="#e6e6e6" font-size="14" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">deno</text>
+<rect x="108.00" y="156.00" width="1456.00" height="552.00" fill="#111318" stroke="#c7c7c7" />
+<line x1="132.00" y1="680.00" x2="1540.00" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="120.00" y="685.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">10.00 us</text>
+<line x1="132.00" y1="555.00" x2="1540.00" y2="555.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="120.00" y="560.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">100.00 us</text>
+<line x1="132.00" y1="430.00" x2="1540.00" y2="430.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="120.00" y="435.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">1.00 ms</text>
+<line x1="132.00" y1="305.00" x2="1540.00" y2="305.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="120.00" y="310.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">10.00 ms</text>
+<line x1="132.00" y1="180.00" x2="1540.00" y2="180.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="4 6" />
+<text x="120.00" y="185.00" fill="#e6e6e6" font-size="12" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">100.00 ms</text>
+<line x1="132.00" y1="180.00" x2="132.00" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="132.00" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">8 B</text>
+<line x1="214.82" y1="180.00" x2="214.82" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="214.82" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">16 B</text>
+<line x1="297.65" y1="180.00" x2="297.65" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="297.65" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">32 B</text>
+<line x1="380.47" y1="180.00" x2="380.47" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="380.47" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">64 B</text>
+<line x1="463.29" y1="180.00" x2="463.29" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="463.29" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">128 B</text>
+<line x1="546.12" y1="180.00" x2="546.12" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="546.12" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">256 B</text>
+<line x1="628.94" y1="180.00" x2="628.94" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="628.94" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">512 B</text>
+<line x1="711.76" y1="180.00" x2="711.76" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="711.76" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">1 KiB</text>
+<line x1="794.59" y1="180.00" x2="794.59" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="794.59" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">2 KiB</text>
+<line x1="877.41" y1="180.00" x2="877.41" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="877.41" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">4 KiB</text>
+<line x1="960.24" y1="180.00" x2="960.24" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="960.24" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">8 KiB</text>
+<line x1="1043.06" y1="180.00" x2="1043.06" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1043.06" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">16 KiB</text>
+<line x1="1125.88" y1="180.00" x2="1125.88" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1125.88" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">32 KiB</text>
+<line x1="1208.71" y1="180.00" x2="1208.71" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1208.71" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">64 KiB</text>
+<line x1="1291.53" y1="180.00" x2="1291.53" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1291.53" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">128 KiB</text>
+<line x1="1374.35" y1="180.00" x2="1374.35" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1374.35" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">256 KiB</text>
+<line x1="1457.18" y1="180.00" x2="1457.18" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1457.18" y="710.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">512 KiB</text>
+<line x1="1540.00" y1="180.00" x2="1540.00" y2="680.00" stroke="#3a3f4b" stroke-width="1.00" stroke-dasharray="3 7" />
+<text x="1540.00" y="728.00" fill="#e6e6e6" font-size="11" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="middle">1 MiB</text>
+<line x1="132.00" y1="180.00" x2="132.00" y2="680.00" stroke="#c7c7c7" stroke-width="1.50" />
+<line x1="132.00" y1="680.00" x2="1540.00" y2="680.00" stroke="#c7c7c7" stroke-width="1.50" />
+<polyline points="132.00,608.76 214.82,603.58 297.65,606.18 380.47,607.68 463.29,605.41 546.12,602.94 628.94,604.91 711.76,603.93 794.59,605.35 877.41,599.20 960.24,587.84 1043.06,565.78 1125.88,544.55 1208.71,400.33 1291.53,356.20 1374.35,313.79 1457.18,274.36 1540.00,236.00" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="132.00" cy="608.76" r="3.50" fill="#7dd3fc" />
+<circle cx="214.82" cy="603.58" r="3.50" fill="#7dd3fc" />
+<circle cx="297.65" cy="606.18" r="3.50" fill="#7dd3fc" />
+<circle cx="380.47" cy="607.68" r="3.50" fill="#7dd3fc" />
+<circle cx="463.29" cy="605.41" r="3.50" fill="#7dd3fc" />
+<circle cx="546.12" cy="602.94" r="3.50" fill="#7dd3fc" />
+<circle cx="628.94" cy="604.91" r="3.50" fill="#7dd3fc" />
+<circle cx="711.76" cy="603.93" r="3.50" fill="#7dd3fc" />
+<circle cx="794.59" cy="605.35" r="3.50" fill="#7dd3fc" />
+<circle cx="877.41" cy="599.20" r="3.50" fill="#7dd3fc" />
+<circle cx="960.24" cy="587.84" r="3.50" fill="#7dd3fc" />
+<circle cx="1043.06" cy="565.78" r="3.50" fill="#7dd3fc" />
+<circle cx="1125.88" cy="544.55" r="3.50" fill="#7dd3fc" />
+<circle cx="1208.71" cy="400.33" r="3.50" fill="#7dd3fc" />
+<circle cx="1291.53" cy="356.20" r="3.50" fill="#7dd3fc" />
+<circle cx="1374.35" cy="313.79" r="3.50" fill="#7dd3fc" />
+<circle cx="1457.18" cy="274.36" r="3.50" fill="#7dd3fc" />
+<circle cx="1540.00" cy="236.00" r="3.50" fill="#7dd3fc" />
+<polyline points="132.00,585.06 214.82,620.00 297.65,594.45 380.47,597.68 463.29,607.13 546.12,609.71 628.94,583.97 711.76,543.16 794.59,529.62 877.41,517.72 960.24,505.67 1043.06,478.12 1125.88,447.42 1208.71,413.56 1291.53,375.96 1374.35,339.87 1457.18,301.38 1540.00,260.79" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="132.00" cy="585.06" r="3.50" fill="#f59e0b" />
+<circle cx="214.82" cy="620.00" r="3.50" fill="#f59e0b" />
+<circle cx="297.65" cy="594.45" r="3.50" fill="#f59e0b" />
+<circle cx="380.47" cy="597.68" r="3.50" fill="#f59e0b" />
+<circle cx="463.29" cy="607.13" r="3.50" fill="#f59e0b" />
+<circle cx="546.12" cy="609.71" r="3.50" fill="#f59e0b" />
+<circle cx="628.94" cy="583.97" r="3.50" fill="#f59e0b" />
+<circle cx="711.76" cy="543.16" r="3.50" fill="#f59e0b" />
+<circle cx="794.59" cy="529.62" r="3.50" fill="#f59e0b" />
+<circle cx="877.41" cy="517.72" r="3.50" fill="#f59e0b" />
+<circle cx="960.24" cy="505.67" r="3.50" fill="#f59e0b" />
+<circle cx="1043.06" cy="478.12" r="3.50" fill="#f59e0b" />
+<circle cx="1125.88" cy="447.42" r="3.50" fill="#f59e0b" />
+<circle cx="1208.71" cy="413.56" r="3.50" fill="#f59e0b" />
+<circle cx="1291.53" cy="375.96" r="3.50" fill="#f59e0b" />
+<circle cx="1374.35" cy="339.87" r="3.50" fill="#f59e0b" />
+<circle cx="1457.18" cy="301.38" r="3.50" fill="#f59e0b" />
+<circle cx="1540.00" cy="260.79" r="3.50" fill="#f59e0b" />
+<polyline points="132.00,569.44 214.82,589.96 297.65,598.29 380.47,602.84 463.29,597.19 546.12,595.33 628.94,557.89 711.76,539.65 794.59,554.00 877.41,502.98 960.24,503.24 1043.06,474.64 1125.88,444.32 1208.71,411.49 1291.53,373.54 1374.35,335.09 1457.18,292.75 1540.00,250.85" fill="none" stroke="#a3e635" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="132.00" cy="569.44" r="3.50" fill="#a3e635" />
+<circle cx="214.82" cy="589.96" r="3.50" fill="#a3e635" />
+<circle cx="297.65" cy="598.29" r="3.50" fill="#a3e635" />
+<circle cx="380.47" cy="602.84" r="3.50" fill="#a3e635" />
+<circle cx="463.29" cy="597.19" r="3.50" fill="#a3e635" />
+<circle cx="546.12" cy="595.33" r="3.50" fill="#a3e635" />
+<circle cx="628.94" cy="557.89" r="3.50" fill="#a3e635" />
+<circle cx="711.76" cy="539.65" r="3.50" fill="#a3e635" />
+<circle cx="794.59" cy="554.00" r="3.50" fill="#a3e635" />
+<circle cx="877.41" cy="502.98" r="3.50" fill="#a3e635" />
+<circle cx="960.24" cy="503.24" r="3.50" fill="#a3e635" />
+<circle cx="1043.06" cy="474.64" r="3.50" fill="#a3e635" />
+<circle cx="1125.88" cy="444.32" r="3.50" fill="#a3e635" />
+<circle cx="1208.71" cy="411.49" r="3.50" fill="#a3e635" />
+<circle cx="1291.53" cy="373.54" r="3.50" fill="#a3e635" />
+<circle cx="1374.35" cy="335.09" r="3.50" fill="#a3e635" />
+<circle cx="1457.18" cy="292.75" r="3.50" fill="#a3e635" />
+<circle cx="1540.00" cy="250.85" r="3.50" fill="#a3e635" />
+<polyline points="132.00,585.29 214.82,590.72 297.65,596.07 380.47,587.58 463.29,594.10 546.12,580.99 628.94,570.11 711.76,535.57 794.59,515.56 877.41,496.75 960.24,479.26 1043.06,452.59 1125.88,419.03 1208.71,388.85 1291.53,353.38 1374.35,311.45 1457.18,287.34 1540.00,241.85" fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="132.00" cy="585.29" r="3.50" fill="#60a5fa" />
+<circle cx="214.82" cy="590.72" r="3.50" fill="#60a5fa" />
+<circle cx="297.65" cy="596.07" r="3.50" fill="#60a5fa" />
+<circle cx="380.47" cy="587.58" r="3.50" fill="#60a5fa" />
+<circle cx="463.29" cy="594.10" r="3.50" fill="#60a5fa" />
+<circle cx="546.12" cy="580.99" r="3.50" fill="#60a5fa" />
+<circle cx="628.94" cy="570.11" r="3.50" fill="#60a5fa" />
+<circle cx="711.76" cy="535.57" r="3.50" fill="#60a5fa" />
+<circle cx="794.59" cy="515.56" r="3.50" fill="#60a5fa" />
+<circle cx="877.41" cy="496.75" r="3.50" fill="#60a5fa" />
+<circle cx="960.24" cy="479.26" r="3.50" fill="#60a5fa" />
+<circle cx="1043.06" cy="452.59" r="3.50" fill="#60a5fa" />
+<circle cx="1125.88" cy="419.03" r="3.50" fill="#60a5fa" />
+<circle cx="1208.71" cy="388.85" r="3.50" fill="#60a5fa" />
+<circle cx="1291.53" cy="353.38" r="3.50" fill="#60a5fa" />
+<circle cx="1374.35" cy="311.45" r="3.50" fill="#60a5fa" />
+<circle cx="1457.18" cy="287.34" r="3.50" fill="#60a5fa" />
+<circle cx="1540.00" cy="241.85" r="3.50" fill="#60a5fa" />
+<text x="1536.00" y="772.00" fill="#e6e6e6" font-size="13" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="end">payload size</text>
+<text x="32.00" y="170.00" fill="#e6e6e6" font-size="13" font-family="IBM Plex Sans, Segoe UI, sans-serif" text-anchor="start">avg latency</text>
+</svg>

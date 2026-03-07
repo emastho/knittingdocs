@@ -1,12 +1,15 @@
 ---
 title: Defining tasks
-description: Wrap functions with task() and export them.
+description: Wrap functions with task() or importTask() and export them.
 sidebar:
   order: 1
 ---
 
-Task wraps a function so workers can discover and run
-it. Tasks should be defined at module scope and exported.
+`task({ f, timeout?, abortSignal? })` wraps a function so workers can discover
+and run it. Define tasks at module scope and export them.
+
+Use `importTask({ href, name?, timeout?, abortSignal? })` when the function
+should be imported and evaluated inside the worker at runtime.
 
 ```ts
 type Task = {
@@ -183,6 +186,14 @@ declares `abortSignal`. You can tune this with `abortSignalCapacity` in
 immediately with the `AbortSignalPoolExhausted` symbol.
 :::
 
+What this means in practice:
+
+- Host allocates/recycles per-call signal IDs for abort-aware tasks.
+- Workers can read signal state before execution and during execution through
+  `hasAborted()`.
+- `abortSignalCapacity` applies only when at least one registered task declares
+  `abortSignal`.
+
 #### Host-side rejection
 
 The promise returned by `call.*()` for abort-aware tasks exposes a `.reject()`
@@ -216,6 +227,77 @@ if (isMain) {
   await pool.shutdown();
 }
 ```
+
+### `importTask({ href, name?, timeout?, abortSignal? })`
+
+Defines a task whose function is imported dynamically inside the worker.
+
+- `href`: module URL/path to import.
+- `name`: named export to call (defaults to `default`).
+- Import/evaluation happens in worker context, so worker permission policy
+  applies to that import path.
+
+```ts
+import { createPool, importTask, isMain } from "@vixeny/knitting";
+
+const REMOTE_TASKS_URL = "https://knittingdocs.netlify.app/example-task.mjs";
+
+export const addFromWeb = importTask<[number, number], number>({
+  href: REMOTE_TASKS_URL,
+  name: "add",
+});
+
+export const wordStatsFromWeb = importTask<
+  { text: string },
+  { words: number; chars: number }
+>({
+  href: REMOTE_TASKS_URL,
+  name: "wordStats",
+});
+
+const pool = createPool({ threads: 2 })({
+  addFromWeb,
+  wordStatsFromWeb,
+});
+
+if (isMain) {
+  const [sum, stats] = await Promise.all([
+    pool.call.addFromWeb([8, 5]),
+    pool.call.wordStatsFromWeb({ text: "hello from remote tasks" }),
+  ]);
+
+  console.log("sum from web:", sum);
+  console.log("word stats from web:", stats);
+  await pool.shutdown();
+}
+```
+
+#### Deno lockfile workflow (no `--no-lock`)
+
+When `href` points to a remote URL, keep `deno.lock` updated and run with
+frozen lock checks.
+
+`deno.json` example:
+
+```json
+{
+  "imports": {
+    "@vixeny/knitting": "jsr:@vixeny/knitting"
+  },
+  "tasks": {
+    "lock:update": "deno cache --config deno.json --lock=deno.lock --frozen=false --reload uwu.ts",
+    "run:frozen": "deno run -A --config deno.json --lock=deno.lock --frozen=true uwu.ts"
+  }
+}
+```
+
+```bash
+deno task lock:update
+deno task run:frozen
+```
+
+If the remote module content changes, rerun `lock:update` and commit the new
+`deno.lock`.
 
 ### `href` override behavior (unsafe / experimental)
 

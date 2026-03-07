@@ -1,0 +1,506 @@
+---
+type RuntimeDatum = {
+  label: string;
+  shortLabel: string;
+  value: number;
+  color: string;
+  lane: 0 | 1;
+};
+
+type Scenario = {
+  title: string;
+  note: string;
+  tokio: number;
+  runtimes: RuntimeDatum[];
+};
+
+const { compact = false, embedded = false } = Astro.props as {
+  compact?: boolean;
+  embedded?: boolean;
+};
+
+const scaleMax = 1.6;
+
+const scenarios: Scenario[] = [
+  {
+    title: "number <code>f64</code> · batch <code>1</code>",
+    note: "All four land in the same <code>~5–11 µs</code> band.",
+    tokio: 10.88,
+    runtimes: [
+      { label: "Bun + Knitting", shortLabel: "B", value: 5.51, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 4.96, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 8.53, color: "#60a5fa", lane: 0 },
+    ],
+  },
+  {
+    title: "number <code>f64</code> · batch <code>10</code>",
+    note: "Still in the low-teens microsecond range.",
+    tokio: 13.29,
+    runtimes: [
+      { label: "Bun + Knitting", shortLabel: "B", value: 8.59, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 7.93, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 6.85, color: "#60a5fa", lane: 0 },
+    ],
+  },
+  {
+    title: "Uint8Array <code>32 B</code> · batch <code>100</code>",
+    note: "Tiny binary payloads stay below <code>50 µs</code> across the board.",
+    tokio: 38.96,
+    runtimes: [
+      { label: "Bun + Knitting", shortLabel: "B", value: 48.35, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 45.04, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 46.93, color: "#60a5fa", lane: 0 },
+    ],
+  },
+  {
+    title: "Uint8Array <code>128 B</code> · batch <code>100</code>",
+    note: "Tokio and Knitting stay tightly clustered here.",
+    tokio: 39.51,
+    runtimes: [
+      { label: "Bun + Knitting", shortLabel: "B", value: 38.28, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 45.97, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 48.66, color: "#60a5fa", lane: 0 },
+    ],
+  },
+];
+
+const visibleScenarios = compact ? [scenarios[0], scenarios[1], scenarios[3]] : scenarios;
+
+function formatMicroseconds(value: number) {
+  return `${value.toFixed(2)} µs`;
+}
+
+function ratioVsTokio(value: number, tokio: number) {
+  return value / tokio;
+}
+
+function deltaLabel(value: number, tokio: number) {
+  const deltaPercent = Math.round((ratioVsTokio(value, tokio) - 1) * 100);
+
+  if (deltaPercent === 0) return "≈ Tokio";
+  if (deltaPercent < 0) return `${Math.abs(deltaPercent)}% faster`;
+  return `${deltaPercent}% slower`;
+}
+
+function markerPosition(value: number, tokio: number) {
+  const position = (ratioVsTokio(value, tokio) / scaleMax) * 100;
+  return Math.min(100, Math.max(0, position));
+}
+
+const componentMetadata = {
+  reference: "tokio-latency-baseline",
+  metric: "microseconds",
+  scaleMax,
+  compact,
+  scenarios: visibleScenarios.map((scenario) => ({
+    title: scenario.title,
+    tokioMicroseconds: scenario.tokio,
+    runtimes: scenario.runtimes.map((runtime) => ({
+      label: runtime.label,
+      microseconds: runtime.value,
+      ratioVsTokio: Number(ratioVsTokio(runtime.value, scenario.tokio).toFixed(3)),
+    })),
+  })),
+};
+const componentMetadataJson = JSON.stringify(componentMetadata);
+---
+
+<section class:list={["tokio-close-up", compact && "tokio-close-up--compact", embedded && "tokio-close-up--embedded"]} aria-label="Knitting versus Tokio for primitives and low payloads">
+  {!embedded && (
+    <header class="tokio-close-up__header">
+      <p class="tokio-close-up__kicker">Tokio close-up</p>
+      <h2 class="tokio-close-up__title">Primitives and tiny payloads stay in the same microsecond tier</h2>
+      <p class="tokio-close-up__lede">
+        <code>1.0x</code> marks Tokio latency. Markers to the left are faster, markers to the right are slower.
+        In these benchmark shapes, Knitting stays close — and sometimes beats the Tokio baseline.
+      </p>
+    </header>
+  )}
+
+  {embedded && (
+    <p class="tokio-close-up__lede tokio-close-up__lede--embedded">
+      <code>1.0x</code> marks Tokio latency. Markers to the left are faster, markers to the right are slower.
+    </p>
+  )}
+
+  <div class="tokio-close-up__badges" aria-hidden="true">
+    <span class="tokio-close-up__badge">Highlighted cases: f64 and 32–128 B payloads</span>
+    <span class="tokio-close-up__badge">Benchmark shape: batch-oriented echo</span>
+    <span class="tokio-close-up__badge">Metric: average latency, lower is better</span>
+  </div>
+
+  <div class="tokio-close-up__grid">
+    {visibleScenarios.map((scenario) => (
+      <article class="tokio-card">
+        <div class="tokio-card__head">
+          <h3 class="tokio-card__title" set:html={scenario.title}></h3>
+          <p class="tokio-card__note" set:html={scenario.note}></p>
+        </div>
+
+        <div class="tokio-card__scale" aria-hidden="true">
+          <span>0.5x</span>
+          <span>1.0x Tokio</span>
+          <span>1.5x</span>
+        </div>
+
+        <div class="tokio-card__track" aria-hidden="true">
+          <div class="tokio-card__track-fill"></div>
+          <div class="tokio-card__track-band"></div>
+          <div class="tokio-card__reference"></div>
+
+          <div
+            class="tokio-card__marker tokio-card__marker--tokio"
+            style={`--position:${markerPosition(scenario.tokio, scenario.tokio)}%; --marker-lane:1;`}
+          >
+            <span>T</span>
+          </div>
+
+          {scenario.runtimes.map((runtime) => (
+            <div
+              class="tokio-card__marker"
+              style={`--position:${markerPosition(runtime.value, scenario.tokio)}%; --marker-color:${runtime.color}; --marker-lane:${runtime.lane};`}
+            >
+              <span>{runtime.shortLabel}</span>
+            </div>
+          ))}
+        </div>
+
+        <ul class="tokio-card__legend">
+          <li class="tokio-card__legend-item">
+            <span class="tokio-card__swatch tokio-card__swatch--tokio"></span>
+            <span class="tokio-card__runtime">Tokio</span>
+            <strong>{formatMicroseconds(scenario.tokio)}</strong>
+            <span class="tokio-card__delta">baseline</span>
+          </li>
+
+          {scenario.runtimes.map((runtime) => (
+            <li class="tokio-card__legend-item">
+              <span class="tokio-card__swatch" style={`--swatch-color:${runtime.color};`}></span>
+              <span class="tokio-card__runtime">{runtime.label}</span>
+              <strong>{formatMicroseconds(runtime.value)}</strong>
+              <span class="tokio-card__delta">{deltaLabel(runtime.value, scenario.tokio)}</span>
+            </li>
+          ))}
+        </ul>
+      </article>
+    ))}
+  </div>
+
+  {!compact && (
+    <p class="tokio-close-up__footnote">
+      These are the small-payload slices where coordination overhead dominates. They are useful for
+      understanding the fast path, not for predicting whole-app speedup.
+    </p>
+  )}
+
+  <script
+    type="application/json"
+    data-benchmark-metadata="tokio-close-up"
+    set:html={componentMetadataJson}
+  ></script>
+</section>
+
+<style>
+  .tokio-close-up {
+    --tokio-reference: color-mix(in srgb, var(--sl-color-purple) 72%, #60a5fa 28%);
+    --panel-surface: color-mix(in srgb, var(--sl-color-bg) 84%, var(--sl-color-purple) 16%);
+    --panel-border: color-mix(in srgb, var(--sl-color-purple) 22%, var(--sl-color-text) 8%);
+    --panel-muted: color-mix(in srgb, var(--sl-color-text) 64%, transparent);
+    --panel-track: color-mix(in srgb, var(--sl-color-text) 10%, transparent);
+    --panel-band: color-mix(in srgb, var(--tokio-reference) 16%, transparent);
+    --panel-band-border: color-mix(in srgb, var(--tokio-reference) 30%, transparent);
+    --panel-card-surface: color-mix(in srgb, var(--sl-color-bg) 92%, var(--sl-color-purple) 8%);
+    --panel-card-border: color-mix(in srgb, var(--sl-color-purple) 14%, transparent);
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 1rem;
+    background:
+      radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--sl-color-purple) 14%, transparent), transparent 58%),
+      radial-gradient(100% 130% at 100% 0%, color-mix(in srgb, #22c55e 9%, transparent), transparent 55%),
+      var(--panel-surface);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #fff 26%, transparent),
+      0 12px 28px color-mix(in srgb, var(--sl-color-black) 14%, transparent);
+  }
+
+  .tokio-close-up--embedded {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tokio-close-up__header {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .tokio-close-up__kicker {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--panel-muted);
+  }
+
+  .tokio-close-up__title {
+    margin: 0;
+    font-size: clamp(1.1rem, 1rem + 0.7vw, 1.65rem);
+    line-height: 1.15;
+  }
+
+  .tokio-close-up__lede {
+    margin: 0;
+    max-width: 70ch;
+    color: var(--panel-muted);
+  }
+
+  .tokio-close-up__lede--embedded {
+    max-width: none;
+    font-size: 0.88rem;
+  }
+
+  .tokio-close-up__lede :global(code),
+  .tokio-close-up__badge :global(code) {
+    font-size: 0.92em;
+  }
+
+  .tokio-close-up__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .tokio-close-up__badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--sl-color-text) 12%, transparent);
+    background: color-mix(in srgb, var(--sl-color-bg) 72%, transparent);
+    color: var(--panel-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .tokio-close-up__grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  }
+
+  .tokio-card {
+    display: grid;
+    gap: 0.8rem;
+    padding: 0.9rem;
+    border-radius: 0.95rem;
+    border: 1px solid var(--panel-card-border);
+    background:
+      linear-gradient(180deg, var(--panel-card-surface), color-mix(in srgb, var(--panel-card-surface) 78%, var(--sl-color-bg) 22%));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+  }
+
+  .tokio-card__head {
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .tokio-card__title {
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.3;
+  }
+
+  .tokio-card__title :global(code),
+  .tokio-card__note :global(code) {
+    font-size: 0.92em;
+  }
+
+  .tokio-card__note {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--panel-muted);
+  }
+
+  .tokio-card__scale {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--panel-muted);
+  }
+
+  .tokio-card__scale span:nth-child(2) {
+    text-align: center;
+  }
+
+  .tokio-card__scale span:last-child {
+    text-align: right;
+  }
+
+  .tokio-card__track {
+    position: relative;
+    min-height: 3.55rem;
+  }
+
+  .tokio-card__track-fill,
+  .tokio-card__track-band {
+    position: absolute;
+    inset-inline: 0;
+    top: 1.32rem;
+    height: 0.5rem;
+    border-radius: 999px;
+  }
+
+  .tokio-card__track-fill {
+    background: linear-gradient(90deg, color-mix(in srgb, #22c55e 18%, transparent), var(--panel-track), color-mix(in srgb, var(--tokio-reference) 16%, transparent));
+  }
+
+  .tokio-card__track-band {
+    left: calc((0.8 / 1.6) * 100%);
+    width: calc((0.4 / 1.6) * 100%);
+    background: var(--panel-band);
+    border: 1px solid var(--panel-band-border);
+  }
+
+  .tokio-card__reference {
+    position: absolute;
+    top: 0.45rem;
+    bottom: 0.35rem;
+    left: calc((1 / 1.6) * 100%);
+    width: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tokio-reference) 78%, #fff 22%);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--tokio-reference) 45%, transparent);
+  }
+
+  .tokio-card__marker {
+    position: absolute;
+    left: calc(var(--position) - 0.85rem);
+    top: calc(0.15rem + (var(--marker-lane) * 1.05rem));
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--marker-color);
+    color: #04131f;
+    font-size: 0.78rem;
+    font-weight: 800;
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--sl-color-bg) 82%, transparent),
+      0 8px 22px color-mix(in srgb, var(--marker-color) 35%, transparent);
+  }
+
+  .tokio-card__marker--tokio {
+    --marker-color: var(--tokio-reference);
+    color: #031018;
+  }
+
+  .tokio-card__legend {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tokio-card__legend-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.45rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .tokio-card__swatch {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    background: var(--swatch-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
+  }
+
+  .tokio-card__swatch--tokio {
+    --swatch-color: var(--tokio-reference);
+  }
+
+  .tokio-card__runtime {
+    min-width: 0;
+    font-weight: 600;
+  }
+
+  .tokio-card__delta {
+    color: var(--panel-muted);
+    white-space: nowrap;
+  }
+
+  .tokio-close-up__footnote {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--panel-muted);
+  }
+
+  .tokio-close-up--compact {
+    gap: 0.85rem;
+    padding: 0.9rem;
+  }
+
+  .tokio-close-up--embedded,
+  .tokio-close-up--embedded.tokio-close-up--compact {
+    padding: 0;
+  }
+
+  .tokio-close-up--compact .tokio-close-up__title {
+    font-size: clamp(1rem, 0.9rem + 0.4vw, 1.25rem);
+  }
+
+  .tokio-close-up--compact .tokio-close-up__lede {
+    font-size: 0.92rem;
+  }
+
+  :global(:root[data-theme="dark"]) .tokio-close-up {
+    --tokio-reference: color-mix(in srgb, #c4b5fd 70%, #7dd3fc 30%);
+    --panel-surface: color-mix(in srgb, var(--sl-color-bg) 92%, #1e1b4b 8%);
+    --panel-border: color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+    --panel-muted: color-mix(in srgb, var(--sl-color-white) 70%, transparent);
+    --panel-track: color-mix(in srgb, var(--sl-color-white) 13%, transparent);
+    --panel-card-surface: color-mix(in srgb, var(--sl-color-bg) 94%, #111827 6%);
+    --panel-card-border: color-mix(in srgb, var(--sl-color-white) 12%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  }
+
+  :global(:root[data-theme="dark"]) .tokio-close-up__badge {
+    background: color-mix(in srgb, var(--sl-color-bg) 84%, var(--sl-color-purple) 16%);
+    border-color: color-mix(in srgb, var(--sl-color-white) 10%, transparent);
+  }
+
+  @media (max-width: 40rem) {
+    .tokio-close-up {
+      padding: 0.85rem;
+    }
+
+    .tokio-close-up--embedded {
+      padding: 0;
+    }
+
+    .tokio-card {
+      padding: 0.8rem;
+    }
+
+    .tokio-card__legend-item {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .tokio-card__delta {
+      grid-column: 2 / -1;
+      padding-left: 1.32rem;
+    }
+  }
+</style>

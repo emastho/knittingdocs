@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: Overall benchmark overview across Node, Deno, and Bun, including IPC, latency, payload types, call-growth throughput, and heavy-load scaling.
+description: Overall benchmark overview across Node, Deno, and Bun, plus a Tokio comparison for primitive and small-payload benchmark shapes.
 sidebar:
   order: 1
 ---
@@ -12,9 +12,10 @@ import typesCombinedCount100 from "../../../assets/charts/types_combined_count10
 import withloadSpeedup from "../../../assets/charts/withload_speedup.png";
 import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
+import TokioCloseUp from '../../../components/TokioCloseUp.astro';
 
-This page is the high-level benchmark summary across Node, Deno, and Bun.
-For runtime-specific detail, see the dedicated pages for Node, Deno, and Bun.
+This page is the high-level benchmark summary across Node, Deno, and Bun, with a Tokio close-up for the small-payload fast path.
+For runtime-specific detail, see the dedicated pages for Node, Deno, Bun, and Tokio.
 
 These benchmarks quantify communication overhead and scaling behavior in specific benchmark shapes.
 They are not a direct prediction of end-to-end application speedup.
@@ -29,6 +30,11 @@ They are not a direct prediction of end-to-end application speedup.
 - Heavy-task scaling and parallel efficiency under CPU-intensive workloads
 
 Interpretation rule: "`x` faster" here means faster for this benchmark setup (payloads, batching, CPU profile), not universally `x` faster for any app.
+
+<TokioCloseUp />
+
+For primitive calls and low binary payloads, Knitting stays in the same microsecond tier as Tokio in these benchmark shapes.
+That matters because it shows the shared-memory fast path is not just "good for JavaScript" — it can stay competitive with a Rust baseline when coordination dominates.
 
 ## IPC (combined)
 
@@ -133,7 +139,7 @@ Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute w
 ## Where to read details
 
 - Use this page for cross-runtime trends.
-- Use `benchmarks/node`, `benchmarks/deno`, and `benchmarks/bun` for raw tables and per-runtime interpretation.
+- Use `benchmarks/node`, `benchmarks/deno`, `benchmarks/bun`, and `benchmarks/tokio` for raw tables and per-runtime interpretation.
 
 ## Run the suite
 
