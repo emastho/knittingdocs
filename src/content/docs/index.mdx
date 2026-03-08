@@ -18,8 +18,8 @@ head:
 
 hero:
   title: >
-    <span class="home-hero-title-kicker">Shared-memory IPC for Node.js, Deno, and Bun</span>
-    Worker pools on the fast path <span class="home-hero-title-emphasis">with function-call ergonomics</span>
+    <span class="home-hero-title-kicker">A real low level shared-memory IPC for JS</span>
+    Knitting, <span class="home-hero-title-emphasis">Just run it~</span>
   image:
     html: |
       <div class="home-hero-visual" aria-hidden="true">
@@ -36,29 +36,33 @@ hero:
         </div>
         <div class="home-hero-visual__metrics">
           <div class="home-hero-visual__metric">
-            <span>Coordination</span>
-            <strong>Shared memory</strong>
-            <small>mailboxes + wakeups</small>
-          </div>
-          <div class="home-hero-visual__metric">
             <span>Runtime surface</span>
-            <strong>Node . Deno . Bun</strong>
-            <small>one task API</small>
+            <strong>- Node</strong>
+            <strong>- Deno</strong>
+            <strong>- Bun</strong>
+            <small>One task API</small>
           </div>
           <div class="home-hero-visual__metric">
             <span>Node IPC benchmark</span>
             <strong>2.03M req/sec</strong>
             <small>50-message roundtrip</small>
           </div>
+          <div class="home-hero-visual__metric">
+            <span>Flexible Typing</span>
+            <strong>- Buffers</strong>
+            <strong>- JSON</strong>
+            <strong>- Promises</strong>
+            <small>and more</small>
+          </div>
         </div>
         <div class="home-hero-visual__ticker">
-          <span>task({ f })</span>
-          <span>batching</span>
-          <span>shared payload buffers</span>
-          <span>low-latency wakeups</span>
+          <span>Signals</span>
+          <span>Permissions</span>
+          <span>Timeouts</span>
+          <span>Remote Imports</span>
         </div>
       </div>
-  tagline: Wrap functions with <code>task({ f })</code>, run them on real threads, and keep worker coordination cheap across Node.js, Deno, and Bun.
+  tagline: Wrap functions with <code>task({ f })</code> and call them on real threads.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -103,29 +107,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
     Knitting is for workloads where coordination overhead matters. The benchmark above isolates
     that fast path, so you can judge the transport cost before mapping it to full app behavior.
   </p>
-  <div class="home-intro-band__chips" aria-label="Homepage summary">
-    <span>wrap functions, then call promises</span>
-    <span>shared-memory control path</span>
-    <span>coordination benchmark, not a full-app forecast</span>
-  </div>
 </div>
-
-Use it when you want worker pools to feel like a normal API instead of a custom message protocol:
-`task({ f })` on one side, `call.*()` on the other, with batching and payload buffers underneath.
-
-## Why use this instead of the usual worker options?
-
-It's not "workers, but faster" -- it's "task execution, but way cheaper to coordinate."
-
-| | Knitting | `postMessage` / MessagePort | `child_process` / `cluster` |
-| --- | --- | --- | --- |
-| Primary goal | Low-overhead task calls | General messaging | Isolation + scaling out |
-| Typical API | Wrap functions, then `call.*()` promises | Custom protocol | Custom protocol |
-| Coordination path | Shared memory + wakeups | Message queue | OS IPC |
-| Code changes | Usually wrap exported functions with `task()` | Build handlers and routing | Split process boundaries and protocols |
-| Best fit | High-frequency CPU work | Event-style messages | Multi-process services |
-
-The benchmarks show what this difference looks like in practice: [Benchmarks overview](/benchmarks/introduction/).
 
 <Card title="Close to Tokio on the fast path">
   For primitives and low binary payloads, Knitting stays in the same microsecond tier as Tokio in these benchmark shapes.
@@ -182,7 +164,8 @@ The benchmarks show what this difference looks like in practice: [Benchmarks ove
   <div class="home-cards-grid">
     <div class="home-card-slot home-card-slot--code">
       <Card title="Multi-threading in about 10 lines">
-        Start by wrapping an existing function with `task({ f })`, then add the knobs you need.
+        Start by wrapping an existing function with `task({ f })` or loading one with
+        `importTask()`, then add the knobs you need.
 
         <Tabs>
           <TabItem label="Basic">
@@ -204,6 +187,7 @@ The benchmarks show what this difference looks like in practice: [Benchmarks ove
             ```
           </TabItem>
 
+        
           <TabItem label="Abort signal">
             ```ts
             import { createPool, isMain, task } from "@vixeny/knitting";
@@ -270,6 +254,22 @@ The benchmarks show what this difference looks like in practice: [Benchmarks ove
                 pool.call.score(new Uint8Array(1024)),
               );
               await Promise.all(jobs).finally(pool.shutdown);
+            }
+            ```
+          </TabItem>
+          <TabItem label="importTask">
+            ```ts
+            import { createPool, importTask, isMain } from "@vixeny/knitting";
+
+            const addFromWeb = importTask<[number, number], number>({
+              href: "https://knittingdocs.netlify.app/example-task.mjs",
+              name: "add",
+            });
+
+            const pool = createPool({ threads: 2 })({ addFromWeb });
+
+            if (isMain) {
+              console.log(await pool.call.addFromWeb([8, 5]).finally(pool.shutdown));
             }
             ```
           </TabItem>
@@ -423,6 +423,21 @@ The core idea: instead of sending messages through the runtime's queue, Knitting
 </CardGrid>
 
 Want to understand the cost model and when to batch? That's all in the [Performance model](/guides/performance/).
+
+## Why use this instead of the usual worker options?
+
+It's not "workers, but faster" -- it's "task execution, but way cheaper to coordinate."
+
+| | Knitting | `postMessage` / MessagePort | `child_process` / `cluster` |
+| --- | --- | --- | --- |
+| Primary goal | Low-overhead task calls | General messaging | Isolation + scaling out |
+| Typical API | Wrap functions, then `call.*()` promises | Custom protocol | Custom protocol |
+| Coordination path | Shared memory + wakeups | Message queue | OS IPC |
+| Code changes | Usually wrap exported functions with `task()` | Build handlers and routing | Split process boundaries and protocols |
+| Best fit | High-frequency CPU work | Event-style messages | Multi-process services |
+
+The benchmarks show what this difference looks like in practice: [Benchmarks overview](/benchmarks/introduction/).
+
 
 ## When Knitting Helps (and When It Doesn't)
 
