@@ -527,6 +527,7 @@ html:has([data-homepage-hero-marker]) .hero::before {
 html:has([data-homepage-hero-marker]) .hero > .hero-html {
   width: min(100%, 34rem);
   margin: 0 auto;
+  min-width: 0;
 }
 
 html:has([data-homepage-hero-marker]) .hero > .stack {
@@ -626,6 +627,7 @@ html:has([data-homepage-hero-marker]) .home-hero-visual {
   position: relative;
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
   min-height: 100%;
   padding: clamp(1rem, 2vw, 1.25rem);
   border: 1px solid color-mix(in srgb, var(--sl-color-white) 10%, transparent);
@@ -669,6 +671,7 @@ html:has([data-homepage-hero-marker]) .home-hero-visual__ticker span {
 }
 
 html:has([data-homepage-hero-marker]) .home-hero-visual__window {
+  min-width: 0;
   border: 1px solid color-mix(in srgb, var(--sl-color-white) 10%, transparent);
   border-radius: 1rem;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.82));
@@ -682,6 +685,7 @@ html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar {
   padding: 0.78rem 0.9rem;
   border-bottom: 1px solid color-mix(in srgb, var(--sl-color-white) 10%, transparent);
   background: rgba(15, 23, 42, 0.72);
+  min-width: 0;
 }
 
 html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar span {
@@ -709,6 +713,7 @@ html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar small {
   font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 html:has([data-homepage-hero-marker]) .home-hero-visual__code {
@@ -722,7 +727,7 @@ html:has([data-homepage-hero-marker]) .home-hero-visual__code {
 
 html:has([data-homepage-hero-marker]) .home-hero-visual__code code {
   display: block;
-  min-width: max-content;
+  max-width: 100%;
 }
 
 html:has([data-homepage-hero-marker]) .home-hero-code__keyword {
@@ -862,6 +867,32 @@ html:has([data-homepage-hero-marker]) .home-intro-band__chips span {
 }
 
 @media (max-width: 49.99rem) {
+  html:has([data-homepage-hero-marker]) .hero {
+    gap: 1.1rem;
+    padding: 1rem;
+    border-radius: 1.2rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero > .stack {
+    order: 1;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero > .hero-html {
+    order: 2;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero::before {
+    inset: auto -22% -26% auto;
+    width: 12rem;
+    height: 12rem;
+    filter: blur(54px);
+    opacity: 0.35;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero > .stack {
+    gap: 0.95rem;
+  }
+
   html:has([data-homepage-hero-marker]) .hero .copy {
     align-items: center;
   }
@@ -870,12 +901,113 @@ html:has([data-homepage-hero-marker]) .home-intro-band__chips span {
     max-width: 100%;
   }
 
+  html:has([data-homepage-hero-marker]) .hero h1 {
+    font-size: clamp(2.15rem, 11vw, 3.15rem);
+    line-height: 1;
+  }
+
   html:has([data-homepage-hero-marker]) .home-hero-title-kicker {
     justify-content: center;
+    margin-bottom: 0.75rem;
+    padding: 0.34rem 0.6rem;
+    font-size: 0.72rem;
+    text-align: center;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero .tagline {
+    font-size: 0.98rem;
+    line-height: 1.55;
+    text-align: center;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero .actions .sl-link-button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero > .hero-html {
+    width: 100%;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual {
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border-radius: 1rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar {
+    padding: 0.7rem 0.8rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar small {
+    font-size: 0.64rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__code {
+    padding: 0.85rem 0.9rem 0.95rem;
+    font-size: 0.78rem;
+    line-height: 1.55;
   }
 
   html:has([data-homepage-hero-marker]) .home-hero-visual__metrics {
     grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__metric {
+    padding: 0.75rem 0.8rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__metric strong {
+    font-size: 0.95rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__ticker {
+    gap: 0.45rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__ticker span {
+    padding: 0.36rem 0.6rem;
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  html:has([data-homepage-hero-marker]) .hero h1 {
+    font-size: clamp(1.9rem, 10.5vw, 2.55rem);
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-title-emphasis {
+    margin-top: 0.28rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .hero .tagline {
+    font-size: 0.92rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual {
+    padding: 0.72rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__code {
+    font-size: 0.74rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar span {
+    width: 0.56rem;
+    height: 0.56rem;
+  }
+
+  html:has([data-homepage-hero-marker]) .home-hero-visual__window-bar small {
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 `}</style>
