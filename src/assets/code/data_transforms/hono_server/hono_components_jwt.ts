@@ -2,6 +2,8 @@ import { sign } from "hono/jwt";
 import { task } from "@vixeny/knitting";
 import { z } from "zod";
 
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
 const ParsedJsonObjectSchema = z.string().transform((raw, ctx) => {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -41,8 +43,17 @@ const JwtPayloadSchema = z.object({
   ttlSec: TtlSecSchema.optional().default(900),
 });
 
-export async function issueJwtHost(rawPayload: string): Promise<string | null> {
-  const parsedResult = ParsedJsonObjectSchema.safeParse(rawPayload);
+export async function issueJwtHost(
+  rawPayload: ArrayBuffer,
+): Promise<string | null> {
+  let decodedPayload: string;
+  try {
+    decodedPayload = utf8Decoder.decode(rawPayload);
+  } catch {
+    return null;
+  }
+
+  const parsedResult = ParsedJsonObjectSchema.safeParse(decodedPayload);
   if (!parsedResult.success) {
     return null;
   }
@@ -75,6 +86,6 @@ export async function issueJwtHost(rawPayload: string): Promise<string | null> {
   });
 }
 
-export const issueJwt = task({
+export const issueJwt = task<ArrayBuffer, string | null>({
   f: issueJwtHost,
 });

@@ -106,26 +106,29 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
 ---
 
 <section class:list={["tokio-close-up", compact && "tokio-close-up--compact", embedded && "tokio-close-up--embedded"]} aria-label="Knitting versus Tokio for primitives and low payloads">
+  <br> <br>
   {!embedded && (
     <header class="tokio-close-up__header">
       <p class="tokio-close-up__kicker">Tokio close-up</p>
-      <h2 class="tokio-close-up__title">Primitives and tiny payloads stay in the same microsecond tier</h2>
+      <h2 class="tokio-close-up__title">Primitives and tiny payload handoffs stay in the same microsecond tier</h2>
       <p class="tokio-close-up__lede">
-        <code>1.0x</code> marks Tokio latency. Markers to the left are faster, markers to the right are slower.
-        In these benchmark shapes, Knitting stays close — and sometimes beats the Tokio baseline.
+        This close-up is about the handoff path: wakeups plus copying or cloning very small payloads.
+        Markers to the left are faster, markers to the right are slower. In these shapes, Knitting
+        stays close to, and sometimes beats, the Tokio baseline.
       </p>
     </header>
   )}
 
   {embedded && (
     <p class="tokio-close-up__lede tokio-close-up__lede--embedded">
-      <code>1.0x</code> marks Tokio latency. Markers to the left are faster, markers to the right are slower.
+      This is the handoff path: wakeups plus copying or cloning very small payloads.
+      <code>1.0x</code> marks Tokio latency.
     </p>
   )}
 
   <div class="tokio-close-up__badges" aria-hidden="true">
     <span class="tokio-close-up__badge">Highlighted cases: f64 and 32–128 B payloads</span>
-    <span class="tokio-close-up__badge">Benchmark shape: batch-oriented echo</span>
+    <span class="tokio-close-up__badge">Focus: signaling and tiny-payload movement</span>
     <span class="tokio-close-up__badge">Metric: average latency, lower is better</span>
   </div>
 
@@ -261,10 +264,16 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
   .tokio-close-up__lede--embedded {
     max-width: none;
     font-size: 0.88rem;
+    line-height: 1.55;
+    padding-block: 0.12rem;
   }
 
   .tokio-close-up__lede :global(code),
   .tokio-close-up__badge :global(code) {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    line-height: 1.1;
     font-size: 0.92em;
   }
 

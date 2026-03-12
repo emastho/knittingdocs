@@ -162,35 +162,45 @@ function barScale(speed: number) {
 
   <style>
   .bench{
-    --fg: #1f2937;
-    --muted: #4b5563;
-    --line: rgba(15, 23, 42, 0.18);
+    --fg: color-mix(in srgb, var(--sl-color-text) 90%, transparent);
+    --muted: color-mix(in srgb, var(--sl-color-text) 68%, transparent);
+    --line: color-mix(in srgb, var(--sl-color-purple) 18%, var(--sl-color-text) 10%);
     --gutter: clamp(4px, calc(var(--ball) * 0.18), 10px);
     color: var(--fg);
-    padding: 14px;
+    padding: 14px 14px 16px;
     border-radius: 14px;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.82),
-      rgba(249, 250, 251, 0.72)
-    );
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    background:
+      radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--sl-color-purple) 14%, transparent), transparent 58%),
+      radial-gradient(100% 140% at 100% 0%, color-mix(in srgb, #60a5fa 12%, transparent), transparent 56%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--sl-color-bg) 92%, #ffffff 8%),
+        color-mix(in srgb, var(--sl-color-bg) 97%, var(--sl-color-purple) 3%)
+      );
+    border: 1px solid color-mix(in srgb, var(--sl-color-purple) 18%, var(--sl-color-text) 10%);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 28%, transparent),
+      0 12px 28px color-mix(in srgb, var(--sl-color-black) 12%, transparent);
     overflow: hidden;
-    contain: layout paint;
+    contain: layout;
   }
 
   :global(:root[data-theme='dark']) .bench{
-    --fg: rgba(241, 245, 249, 0.92);
-    --muted: rgba(203, 213, 225, 0.72);
-    --line: rgba(148, 163, 184, 0.24);
-    background: linear-gradient(
-      180deg,
-      rgba(15, 23, 42, 0.62),
-      rgba(15, 23, 42, 0.44)
-    );
-    border-color: rgba(148, 163, 184, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --fg: color-mix(in srgb, var(--sl-color-white) 90%, transparent);
+    --muted: color-mix(in srgb, var(--sl-color-white) 72%, transparent);
+    --line: color-mix(in srgb, var(--sl-color-white) 14%, transparent);
+    background:
+      radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--sl-color-purple) 18%, transparent), transparent 58%),
+      radial-gradient(100% 140% at 100% 0%, color-mix(in srgb, #60a5fa 12%, transparent), transparent 56%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--sl-color-bg) 92%, #111827 8%),
+        color-mix(in srgb, var(--sl-color-bg) 96%, #0f172a 4%)
+      );
+    border-color: color-mix(in srgb, var(--sl-color-white) 14%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 10%, transparent),
+      0 12px 28px color-mix(in srgb, var(--sl-color-black) 22%, transparent);
   }
 
   .legend{
@@ -215,6 +225,7 @@ function barScale(speed: number) {
   .rows{
     display: grid;
     gap: var(--row-gap);
+    padding-block: 2px 4px;
   }
 
   .controls{
@@ -238,7 +249,7 @@ function barScale(speed: number) {
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 6px 10px;
-    background: rgba(255,255,255,0.38);
+    background: color-mix(in srgb, var(--sl-color-bg) 80%, transparent);
     color: var(--fg);
     font-size: 12px;
     line-height: 1.2;
@@ -253,27 +264,27 @@ function barScale(speed: number) {
 
   .restart:hover,
   .toggle-loop:hover{
-    background: rgba(255,255,255,0.52);
+    background: color-mix(in srgb, var(--sl-color-bg) 68%, var(--sl-color-white) 32%);
   }
 
   :global(:root[data-theme='dark']) .restart,
   :global(:root[data-theme='dark']) .toggle-loop{
-    background: rgba(15, 23, 42, 0.42);
+    background: color-mix(in srgb, var(--sl-color-bg) 78%, transparent);
   }
 
   :global(:root[data-theme='dark']) .restart:hover,
   :global(:root[data-theme='dark']) .toggle-loop:hover{
-    background: rgba(30, 41, 59, 0.56);
+    background: color-mix(in srgb, var(--sl-color-bg) 62%, var(--sl-color-white) 8%);
   }
 
   .toggle-loop[aria-pressed='true']{
-    background: rgba(16, 185, 129, 0.18);
-    border-color: rgba(16, 185, 129, 0.45);
+    background: color-mix(in srgb, var(--sl-color-purple) 12%, #60a5fa 8%);
+    border-color: color-mix(in srgb, var(--sl-color-purple) 28%, #60a5fa 18%);
   }
 
   :global(:root[data-theme='dark']) .toggle-loop[aria-pressed='true']{
-    background: rgba(16, 185, 129, 0.24);
-    border-color: rgba(52, 211, 153, 0.52);
+    background: color-mix(in srgb, var(--sl-color-purple) 18%, #60a5fa 10%);
+    border-color: color-mix(in srgb, var(--sl-color-purple) 34%, #7dd3fc 18%);
   }
 
   .source-note{
@@ -320,14 +331,15 @@ function barScale(speed: number) {
 
   .track{
     position: relative;
-    height: calc(var(--ball) + 8px);
+    height: calc(var(--ball) + 18px);
     border-radius: 999px;
     /* Give the track its own box so 100% travel is predictable */
     width: 100%;
-    contain: layout paint;
+    contain: layout;
     display: flex;
     align-items: center;
     min-width: 0;
+    overflow: visible;
   }
 
   .bar{
@@ -338,11 +350,18 @@ function barScale(speed: number) {
     height: clamp(8px, calc(var(--ball) * 0.42), 14px);
     transform: translateY(-50%);
     border-radius: 999px;
-    background: color-mix(in oklab, var(--c) 52%, transparent);
-    border: 1px solid color-mix(in oklab, var(--c) 78%, transparent);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--c) 18%, transparent),
+      color-mix(in srgb, var(--c) 52%, transparent)
+    );
+    border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 20%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--c) 10%, transparent);
     opacity: 0;
     pointer-events: none;
+    z-index: 1;
   }
 
   .ball{
@@ -353,11 +372,13 @@ function barScale(speed: number) {
     height: var(--ball);
     transform: translate3d(0,-50%,0);
     border-radius: 999px;
-    background: transparent;
-    border: 2px solid var(--c);
+    background:
+      radial-gradient(circle at 32% 28%, color-mix(in srgb, #ffffff 72%, var(--c) 28%), transparent 38%),
+      color-mix(in srgb, var(--sl-color-bg) 84%, var(--c) 16%);
+    border: 2px solid color-mix(in srgb, var(--c) 84%, var(--sl-color-white) 16%);
     box-shadow:
-      0 0 0 1px rgba(0,0,0,0.08),
-      0 1px 4px rgba(0,0,0,0.14);
+      0 0 0 1px color-mix(in srgb, var(--sl-color-bg) 86%, transparent),
+      0 10px 20px color-mix(in srgb, var(--c) 18%, transparent);
 
     /* Keep animation composited and avoid expensive filter effects. */
     backface-visibility: hidden;
@@ -368,14 +389,17 @@ function barScale(speed: number) {
     animation: race var(--dur) linear var(--delay) var(--iter) both;
     animation-direction: var(--dir, normal);
     animation-play-state: paused;
+    z-index: 2;
   }
 
   .ball.is-finished{
-    background: var(--c);
+    background:
+      radial-gradient(circle at 32% 28%, color-mix(in srgb, #ffffff 34%, transparent), transparent 42%),
+      linear-gradient(180deg, color-mix(in srgb, var(--c) 86%, #ffffff 14%), var(--c));
     box-shadow:
-      0 0 0 1px rgba(0,0,0,0.08),
-      0 1px 4px rgba(0,0,0,0.14),
-      inset 0 0 0 1px rgba(255,255,255,0.35);
+      0 0 0 1px color-mix(in srgb, var(--sl-color-bg) 84%, transparent),
+      0 10px 20px color-mix(in srgb, var(--c) 26%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 34%, transparent);
   }
 
   .bench.is-running .ball{

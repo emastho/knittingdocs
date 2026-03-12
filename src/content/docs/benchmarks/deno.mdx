@@ -13,7 +13,7 @@ import denoTypesBench from '../../../assets/results/deno_types.md?raw';
 import denoTypesOne from '../../../assets/charts/deno_types_types_count1.png';
 import denoTypesHundred from '../../../assets/charts/deno_types_types_count100.png';
 import denoHeavyLoad from '../../../assets/results/deno_withload.md?raw';
-import denoCallGrowth from '../../../assets/results/deno_call-growth.md?raw';
+import denoCallGrowth from '../../../assets/results/deno_call-growth-batch.md?raw';
 import denoAllTypes from '../../../assets/results/deno_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
@@ -91,20 +91,21 @@ At `100` messages per iteration, the gap remains strong:
 </Tabs>
 
 ## Call growth throughput (Deno)
-This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports per-call cost.
+This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports
+batched cost with `batch=64`.
 
-Using the `1048576 B` row (`avg`), one-way transfer throughput is:
+Using the `1048576 B` row (`avg`) from the `batch=64` run, one-way transfer throughput is:
 
-- `string`: `391.93 µs` -> `2.68 GB/s`
-- `Uint8Array`: `895.19 µs` -> `1.17 GB/s`
+- `string`: `19.89 ms/iter` -> `3.37 GB/s`
+- `Uint8Array`: `11.61 ms/iter` -> `5.78 GB/s`
 
 Interpretation:
 
-- Deno reaches `~2.68 GB/s` for 1 MiB string payloads in this run.
-- For 1 MiB `Uint8Array`, throughput is closer to `~1.17 GB/s`, near Node's binary throughput in this benchmark.
+- Deno stays in the middle of the pack under batching, with binary ahead of string in this run.
+- For 1 MiB `Uint8Array`, throughput lands around `~5.8 GB/s`; string is closer to `~3.4 GB/s`.
 
 ### Data
-<Code code={denoCallGrowth} lang="md" title={"deno_call-growth.md"} />
+<Code code={denoCallGrowth} lang="md" title={"deno_call-growth-batch.md"} />
 
 ## Efficiency under heavy tasks (Deno)
 <HeavyTaskPrimeTransferCaution />

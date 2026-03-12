@@ -13,7 +13,7 @@ import bunTypesBench from '../../../assets/results/bun_types.md?raw';
 import bunTypesOne from '../../../assets/charts/bun_types_types_count1.png';
 import bunTypesHundred from '../../../assets/charts/bun_types_types_count100.png';
 import bunHeavyLoad from '../../../assets/results/bun_withload.md?raw';
-import bunCallGrowth from '../../../assets/results/bun_call-growth.md?raw';
+import bunCallGrowth from '../../../assets/results/bun_call-growth-batch.md?raw';
 import bunAllTypes from '../../../assets/results/bun_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
@@ -91,20 +91,21 @@ At `100` messages per iteration, the gap remains strong:
 </Tabs>
 
 ## Call growth throughput (Bun)
-This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports per-call cost.
+This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports
+batched cost with `batch=64`.
 
-Using the `1048576 B` row (`avg`), one-way transfer throughput is:
+Using the `1048576 B` row (`avg`) from the `batch=64` run, one-way transfer throughput is:
 
-- `string`: `107.64 µs` -> `9.74 GB/s`
-- `Uint8Array`: `87.92 µs` -> `11.93 GB/s`
+- `string`: `5.66 ms/iter` -> `11.86 GB/s`
+- `Uint8Array`: `4.14 ms/iter` -> `16.21 GB/s`
 
 Interpretation:
 
-- Bun shows the highest 1 MiB transfer throughput in this run for both string and binary payloads.
-- For 1 MiB payloads, Bun's measured throughput is an order of magnitude higher than Node and Deno in this benchmark shape.
+- Bun remains the fastest runtime in this batched 1 MiB shape for both string and binary payloads.
+- The `Uint8Array` path clears `16 GB/s` one-way equivalent in this run, with string close to `12 GB/s`.
 
 ### Data
-<Code code={bunCallGrowth} lang="md" title={"bun_call-growth.md"} />
+<Code code={bunCallGrowth} lang="md" title={"bun_call-growth-batch.md"} />
 
 ## Efficiency under heavy tasks (Bun)
 <HeavyTaskPrimeTransferCaution />

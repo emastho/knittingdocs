@@ -34,6 +34,23 @@ Three files:
 - `utils.ts` -- hashing, verification, and fast-path packet functions
 - `bench_salt_hashing.ts` -- host-vs-worker benchmark with `mitata`
 
+## Example record shape
+
+The stored credential format is intentionally compact:
+
+```txt
+pbkdf2-sha256$600000$32$<salt-base64url>$<hash-base64url>
+```
+
+At a high level the flow is:
+
+```txt
+password -> derive PBKDF2 hash with random salt -> store compact record
+login attempt -> derive again with stored salt -> constant-time compare
+```
+
+That makes the worker boundary simple: small input, small output, expensive CPU work in the middle.
+
 ## Install
 
 :::info
@@ -66,7 +83,7 @@ Expected output:
   hashed: 100  verified: 100  mismatches: 0
 ```
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs

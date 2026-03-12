@@ -29,6 +29,17 @@ The host generates JSON payload strings. Both paths render the same user card co
 - `render_user_card_compressed.tsx` -- the SSR + compression task
 - `utils.ts` -- shared payload and compression helpers
 
+## Example input and output
+
+Input is the same JSON payload shape as the plain React SSR example. The worker call is:
+
+```ts
+const compressed = await pool.call.renderUserCardCompressed(payloadJson);
+```
+
+Output is a Brotli-compressed `Buffer`, not an HTML string. That is the point of this example:
+do the expensive render and compression work in one place, then return the smaller payload.
+
 ## Install
 
 :::info
@@ -41,12 +52,13 @@ The host generates JSON payload strings. Both paths render the same user card co
 
 Compression uses built-in `node:zlib` -- no extra packages.
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
   bunCommand="bun src/bench_react_ssr_compress.ts"
   denoCommand="deno run -A src/bench_react_ssr_compress.ts"
+  nodeCommand="npx tsx src/bench_react_ssr_compress.ts"
 />
 :::
 
@@ -73,7 +85,7 @@ Brotli is significantly more expensive than `renderToString` alone, so the worke
   <TabItem label="bench_react_ssr_compress.ts">
     <Code code={bench} lang="ts" title={"bench_react_ssr_compress.ts"} />
   </TabItem>
-    <TabItem label="utils.ts">
+  <TabItem label="utils.ts">
     <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>

@@ -16,8 +16,8 @@ async function main() {
   });
 
   app.post("/ssr", async (c) => {
-    const rawPayload = await c.req.text();
-    if (rawPayload.trim().length === 0) {
+    const rawPayload = await c.req.arrayBuffer().catch(() => null);
+    if (!rawPayload) {
       return c.json({ ok: false, reason: "body: expected JSON object" }, 400);
     }
 
@@ -26,7 +26,7 @@ async function main() {
   });
 
   app.post("/jwt", async (c) => {
-    const payload = await c.req.text().catch(() => null);
+    const payload = await c.req.arrayBuffer().catch(() => null);
 
     if (!payload) {
       return c.json({ ok: false, reason: "body: expected JSON object" }, 400);

@@ -189,3 +189,75 @@ It keeps your app code clean and helps workers load only what they need.
   * pages/
 
 </FileTree>
+
+### Prefer request -> transform -> response tasks
+
+Knitting is tuned for local server workloads: parse a request body, validate it,
+render something, compress it, sign it, return a compact result. That is why so
+many examples focus on SSR, JWTs, markdown, and validation.
+
+If you are building an HTTP service, start with those shapes before reaching
+for more exotic worker patterns. See [Hono server routes](/examples/data_transforms/rendering_output/hono_server).
+
+### Promise inputs are awaited on the host
+
+`call.*()` accepts `Promise<supported>` inputs. Knitting resolves them on the
+host before dispatch, so unresolved promise state never crosses the thread
+boundary.
+
+That is useful in request handlers because you can pass body reads directly:
+
+```ts
+app.post("/validate", async (c) => {
+  const result = await pool.call.validate(c.req.text());
+  return c.json(result);
+});
+```
+
+This keeps handler code short and avoids extra staging variables. If the input
+promise rejects, the host call rejects and the worker task does not run.
+
+### Pick the cheapest payload type that fits
+
+For hot paths, simpler types are better:
+
+- Best: `number`, `boolean`, `null`, `undefined`, `Date`, small `string`
+- Fast: `Buffer`, `ArrayBuffer`, typed arrays like `Uint8Array`
+- Good: compact JSON-like `Object` / `Array`
+- Heavier: large objects, large strings, `Error` payloads
+
+If you are moving bytes plus a little metadata, use `Envelope`:
+
+```ts
+import { Envelope } from "@vixeny/knitting";
+
+const payload = new Envelope(
+  { route: "/upload", contentType: "image/png" },
+  fileBuffer,
+);
+
+await pool.call.processUpload(payload);
+```
+
+That shape is a good fit for server-style binary work because it keeps headers
+small and the binary payload explicit. See [Supported payloads](/guides/payloads/).
+
+### Avoid the inliner for HTTP/server workloads
+
+For web servers, start with workers only. The point is usually to keep the main
+thread free for routing and I/O. The `inliner` adds the host as another compute
+lane, which can be great for tiny math-heavy loops but can also put work back
+onto the event loop you are trying to protect.
+
+So the default advice is simple: do **not** turn on `inliner` first. Add it
+later only if you have measured a workload where it clearly helps. See the
+[Performance guide](/guides/performance/) and [Inliner guide](/guides/inliner/).
+
+### Worker permissions start conservative
+
+Worker access is restricted by default. Sensitive paths such as `.env`, `.git`,
+`.npmrc`, `~/.ssh`, `~/.aws`, and system paths like `/proc`, `/sys`, `/dev`,
+and `/etc` are blocked, and `node_modules` is deny-write.
+
+That is the right default for server code: start strict, then open only what
+your tasks actually need. See [Permissions](/guides/permissions/).

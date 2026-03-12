@@ -29,6 +29,36 @@ Three files:
 - `utils.ts` -- token verification, renewal logic, task exports
 - `bench_jwt_revalidation.ts` -- host-vs-worker benchmark with `mitata`
 
+## Example request and response
+
+Input to the task is a JSON string like this:
+
+```json
+{
+  "token": "<jwt>",
+  "nowSec": 1767225600,
+  "ttlSec": 180,
+  "renewWindowSec": 30
+}
+```
+
+The task returns a JSON string. A successful non-renewed response looks like:
+
+```json
+{
+  "ok": true,
+  "renewed": false,
+  "token": "<same-jwt>",
+  "sub": "user_42",
+  "sid": "session_42",
+  "exp": 1767225750,
+  "canRenew": true
+}
+```
+
+If the token is near expiry but still renewable, the same shape comes back with `renewed: true`
+and a replacement `token`.
+
 ## Install
 
 :::info
@@ -61,7 +91,7 @@ Expected output:
   verified: 900  renewed: 80  rejected: 20
 ```
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
@@ -70,7 +100,8 @@ Expected output:
 />
 :::
 
-Compares verify + optional renewal + `JSON.stringify` via direct imports (`host`) against the same workload through worker task calls (`knitting`). Batched dispatch keeps the comparison stable.
+Compares verify + optional renewal + `JSON.stringify` via direct imports (`host`) against the same
+workload through worker task calls (`knitting`). Batched dispatch keeps the comparison stable.
 
 :::note
 Both paths use the same logic. The only variable is whether execution happens on the main thread or in a worker.

@@ -3,6 +3,8 @@ import { renderToString } from "react-dom/server";
 import { task } from "@vixeny/knitting";
 import { z } from "zod";
 
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
 type SsrInput = {
   name: string;
   plan: "free" | "pro";
@@ -99,8 +101,15 @@ const SsrInputSchema = RawSsrInputSchema.transform(
   }),
 );
 
-export function renderSsrPageHost(rawPayload: string): string {
-  const parsed = ParsedJsonObjectSchema.safeParse(rawPayload);
+export function renderSsrPageHost(rawPayload: ArrayBuffer): string {
+  let decodedPayload = "";
+  try {
+    decodedPayload = utf8Decoder.decode(rawPayload);
+  } catch {
+    decodedPayload = "";
+  }
+
+  const parsed = ParsedJsonObjectSchema.safeParse(decodedPayload);
   const user: SsrInput = SsrInputSchema.parse(
     parsed.success ? parsed.data : {},
   );
@@ -111,6 +120,6 @@ export function renderSsrPageHost(rawPayload: string): string {
   return `<!doctype html>${html}`;
 }
 
-export const renderSsrPage = task({
+export const renderSsrPage = task<ArrayBuffer, string>({
   f: renderSsrPageHost,
 });

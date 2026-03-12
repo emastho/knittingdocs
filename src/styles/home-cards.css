@@ -71,15 +71,18 @@
     }
 
     .home-card-slot--permissions {
-      grid-column: span 4;
+      grid-column: span 6;
+      order: 1;
     }
 
     .home-card-slot--ops {
-      grid-column: span 4;
+      grid-column: span 12;
+      order: 3;
     }
 
     .home-card-slot--examples {
-      grid-column: span 4;
+      grid-column: span 6;
+      order: 2;
     }
   }
 

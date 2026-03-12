@@ -1,6 +1,6 @@
 ---
 title: "Knitting"
-description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun: worker pools where tasks feel like function calls, with low-overhead coordination and batching."
+description: "Knitting is shared-memory IPC for Node.js, Deno, and Bun. It makes worker pools feel like normal function calls, with low-overhead coordination and batching."
 template: splash
 head:
   - tag: meta
@@ -18,8 +18,8 @@ head:
 
 hero:
   title: >
-    <span class="home-hero-title-kicker">A real low level shared-memory IPC for JS</span>
-    Knitting, <span class="home-hero-title-emphasis">Just run it~</span>
+    <span class="home-hero-title-kicker">Real threads. Normal functions. </span>
+    Knitting, <span class="home-hero-title-emphasis">run it like a function.</span>
   image:
     html: |
       <div class="home-hero-visual" aria-hidden="true">
@@ -36,10 +36,10 @@ hero:
         </div>
         <div class="home-hero-visual__metrics">
           <div class="home-hero-visual__metric">
-            <span>Runtime surface</span>
-            <strong>- Node</strong>
-            <strong>- Deno</strong>
-            <strong>- Bun</strong>
+            <span>Runtime support</span>
+            <strong>Node</strong>
+            <strong>Deno</strong>
+            <strong>Bun</strong>
             <small>One task API</small>
           </div>
           <div class="home-hero-visual__metric">
@@ -48,11 +48,11 @@ hero:
             <small>50-message roundtrip</small>
           </div>
           <div class="home-hero-visual__metric">
-            <span>Flexible Typing</span>
-            <strong>- Buffers</strong>
-            <strong>- JSON</strong>
-            <strong>- Promises</strong>
-            <small>and more</small>
+            <span>Payload support</span>
+            <strong>Buffers</strong>
+            <strong>JSON</strong>
+            <strong>Promises</strong>
+            <small>plus more</small>
           </div>
         </div>
         <div class="home-hero-visual__ticker">
@@ -62,7 +62,7 @@ hero:
           <span>Remote Imports</span>
         </div>
       </div>
-  tagline: Wrap functions with <code>task({ f })</code> and call them on real threads.
+  tagline: Wrap a function with <code>task({ f })</code> and call it on a real thread.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -95,23 +95,26 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
 <BenchmarkBalls
   sourceLabel="IPC microbenchmark (Node.js, 50-message roundtrip, ~12 B JSON). Measures communication overhead, not end-to-end app throughput."
   items={[
-    { label: "Knitting", speed: 2030869, color: "#336244ff" },
-    { label: "PostMessage", speed: 573394, color: "#58523bff" },
-    { label: "WebSockets", speed: 178603, color: "#A78BFA" },
-    { label: "HTTP", speed: 17483, color: "#60A5FA" },
+    { label: "Knitting", speed: 2030869, color: "#8b5cf6" },
+    { label: "PostMessage", speed: 573394, color: "#60a5fa" },
+    { label: "WebSockets", speed: 178603, color: "#7dd3fc" },
+    { label: "HTTP", speed: 17483, color: "#94a3b8" },
   ]}
 />
 
 <div class="home-intro-band">
   <p class="home-intro-band__lead">
-    Knitting is for workloads where coordination overhead matters. The benchmark above isolates
-    that fast path, so you can judge the transport cost before mapping it to full app behavior.
+    Knitting is built for workloads where coordination overhead matters. The benchmark above
+    isolates that path, so you can judge transport cost before mapping it onto full app behavior.
   </p>
 </div>
 
 <Card title="Close to Tokio on the fast path">
-  For primitives and low binary payloads, Knitting stays in the same microsecond tier as Tokio in these benchmark shapes.
-  That is the interesting part: the shared-memory path is not just fast for JavaScript — it stays competitive with a serious Rust baseline when coordination dominates, while the full benchmark write-up also shows the cases where Tokio is still ahead.
+  For primitives and small binary payloads, Knitting stays in the same microsecond tier as Tokio in
+  these benchmark shapes. That comparison is mostly about the handoff path: signaling the worker and
+  copying or cloning small payloads. When that coordination cost dominates, the shared-memory path
+  stays competitive with a serious Rust baseline, while the full benchmark write-up also shows the
+  cases where Tokio still pulls ahead.
 
   <TokioCloseUp compact embedded />
 
@@ -154,7 +157,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
   <LinkCard
     title="Examples"
     href="/examples/intro_examples/"
-    description="Real patterns you can copy -- SSR, validation, servers, and more."
+    description="Real patterns you can copy: SSR, validation, servers, and more."
   />
 </CardGrid>
 
@@ -163,7 +166,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
 <div class="home-cards">
   <div class="home-cards-grid">
     <div class="home-card-slot home-card-slot--code">
-      <Card title="Multi-threading in about 10 lines">
+      <Card title="Parallelism in about 10 lines">
         Start by wrapping an existing function with `task({ f })` or loading one with
         `importTask()`, then add the knobs you need.
 
@@ -227,7 +230,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             }).createPool({ threads: 1 });
 
             if (isMain) {
-              console.log(await timed.call("hello").finally(pool.shutdown)); // "timeout"
+              console.log(await timed.call("hello").finally(timed.shutdown)); // "timeout"
             }
             ```
           </TabItem>
@@ -280,8 +283,8 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
     </div>
 
     <div class="home-card-slot home-card-slot--impact">
-      <Card title="One more thread, big impact">
-        Move heavy paths into workers and your main thread stops stalling under mixed traffic.
+      <Card title="Move hot paths off the main thread">
+        Move heavy work into workers and the main thread stays responsive under mixed traffic.
 
         <ImpactBars />
 
@@ -295,15 +298,16 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
 
     <div class="home-card-slot home-card-slot--throughput">
       <Card title="Throughput">
-        This is transport capacity, not full app throughput. We measured a `1 MB` echo roundtrip (host -> worker -> host), which is `2 MB` transferred per call.
+        This is batched transport capacity, not full app throughput. We measured a `1 MB` echo
+        roundtrip (`batch=64`, host -> worker -> host), which is `2 MB` transferred per call.
 
         **Here's what we saw (GB/s, one-way equivalent):**
 
         | Runtime | `Uint8Array` | `string` |
         | --- | ---: | ---: |
-        | **Bun** | **11.93** | **9.74** |
-        | **Deno** | **1.17** | **2.68** |
-        | **Node** | **1.15** | **1.32** |
+        | **Bun** | **16.21** | **11.86** |
+        | **Deno** | **5.78** | **3.37** |
+        | **Node** | **7.50** | **1.44** |
 
         We report one-way equivalent (half the roundtrip) to keep units comparable.
         Treat these as communication-layer upper bounds: they do **not** mean your app will be `3.5x` faster.
@@ -327,29 +331,10 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
       </Card>
     </div>
 
-    <div class="home-card-slot home-card-slot--ops">
-      <Card title="Flexible by default">
-        Works the way you'd expect -- promises in, async out, no surprises.
-
-        - Payload rules are explicit, so you always know what's being serialized.
-        - Batching and simple payloads get you the best throughput.
-
-        **And the production knobs are there when you need them:**
-
-        - `balancer` strategies for lane selection.
-        - `inliner` to run tasks on the host when it makes sense.
-        - `permission` to restrict what workers can access (strict/unsafe).
-        - Abort signals to cancel in-flight work.
-        - `spin`/`park`/`backoff`/`timeout` for fine-tuning.
-        - See: [Creating pools](/guides/creating-pools/), [Permissions](/guides/permissions/), [Performance model](/guides/performance/)
-
-      </Card>
-    </div>
-
     <div class="home-card-slot home-card-slot--examples">
-      <Card title="10+ examples (and growing)">
-        Not toy snippets -- real patterns you can actually copy into your project.
-        We add more as new workflows come up.
+      <Card title="Examples you can actually use">
+        These are not toy snippets. They are working patterns you can lift into a real project,
+        and the list keeps growing as new workflows come up.
 
         <FileTree>
         - examples/
@@ -371,9 +356,8 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             - ...
         </FileTree>
 
-        - [Browse examples](/examples/intro_examples)
-
-        Guides and benchmarks live in the sidebar. Examples are ready to copy and paste.
+        Start with [Browse examples](/examples/intro_examples/).
+        Guides and benchmarks live in the sidebar, and the examples are ready to copy.
       </Card>
     </div>
 
@@ -385,11 +369,13 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
 
 <KnittingArchitectureDiagram caption="Shared-memory request/response mailboxes keep the control path cheap; payload buffers and batching keep the data path fast." />
 
-The core idea: instead of sending messages through the runtime's queue, Knitting coordinates through shared memory. That cuts out the middleman and makes task calls cheap.
+The core idea is simple: instead of routing every task through the runtime's message queue,
+Knitting coordinates through shared memory. That keeps task calls cheap and predictable.
 
 <CardGrid>
   <Card title="Control path: shared mailboxes">
-    There are two mailboxes -- one for requests, one for responses. Think of it as a full-duplex pipe in shared memory.
+    There are two mailboxes: one for requests and one for responses. Think of it as a
+    full-duplex pipe in shared memory.
 
     - A call claims a slot, writes a small header, and wakes up a worker.
     - The worker does the work, writes the result back, and wakes up the host.
@@ -397,9 +383,9 @@ The core idea: instead of sending messages through the runtime's queue, Knitting
   </Card>
 
   <Card title="Data path: payload buffers">
-    When values are too big for the header, they go into reusable payload buffers.
+    When values are too large for the header, they go into reusable payload buffers.
 
-    - Each worker gets two `SharedArrayBuffer`s -- one for requests, one for returns.
+    - Each worker gets two `SharedArrayBuffer`s: one for requests and one for returns.
     - You control the sizes (`payload.payloadInitialBytes`, `payload.payloadMaxByteLength`), so you can trade memory for speed.
     - Full details: [Supported payloads](/guides/payloads/).
   </Card>
@@ -407,7 +393,7 @@ The core idea: instead of sending messages through the runtime's queue, Knitting
   <Card title="Worker runtime: the spin-park-wake loop">
     Each worker is a real OS thread (`worker_threads` on Node, `Worker` on Deno/Bun).
 
-    On startup it:
+    On startup, each worker:
 
     1. **Loads tasks** -- imports task modules from spawn-time URLs and builds a task ID -> function table.
     2. **Signals ready** -- writes its ready flag in shared memory.
@@ -426,7 +412,8 @@ Want to understand the cost model and when to batch? That's all in the [Performa
 
 ## Why use this instead of the usual worker options?
 
-It's not "workers, but faster" -- it's "task execution, but way cheaper to coordinate."
+The goal is not just "workers, but faster." It is making task execution cheap enough that
+small, frequent calls are worth offloading.
 
 | | Knitting | `postMessage` / MessagePort | `child_process` / `cluster` |
 | --- | --- | --- | --- |
@@ -480,7 +467,8 @@ Knitting is not a security boundary. Tasks run in your process with your permiss
 
 ## Why Knitting
 
-Worker APIs are great for message passing. Knitting takes a different bet: **what if parallel code was cheap enough that you'd actually use it?**
+Worker APIs are great for message passing. Knitting is for the cases where you want a
+function-call API and lower coordination overhead.
 
 Instead of building message protocols, you write function calls. Instead of paying for runtime IPC on every hop, you coordinate through shared memory. Same API on Node, Deno, and Bun.
 

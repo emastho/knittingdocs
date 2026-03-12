@@ -36,6 +36,39 @@ Three files:
 - `bench_prompt_token_budget.ts` -- dedicated `mitata` benchmark measuring budgeting throughput
 - `token_budget.ts` -- the budgeting logic itself
 
+## Example budget decision
+
+Input:
+
+```ts
+const input = {
+  model: "gpt-4o-mini",
+  systemPrefix: "You are a docs assistant.",
+  history: [
+    "Need guidance on schema validation.",
+    "Compare workers and batching.",
+    "Keep the answer short.",
+  ],
+  query: "Give a migration plan and one code example.",
+  maxInputTokens: 900,
+};
+```
+
+Output shape:
+
+```ts
+{
+  prompt: "...final prompt string...",
+  rawInputTokens: 1120,
+  inputTokens: 884,
+  trimmedTurns: 1,
+  queryWasTrimmed: false,
+}
+```
+
+The useful part is not just the final `prompt`; you also get the bookkeeping needed to explain
+why a prompt was trimmed and by how much.
+
 ## Install
 
 :::info
@@ -72,7 +105,7 @@ total tokens saved: 389,064
 elapsed: 1.82s
 ```
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
@@ -81,7 +114,8 @@ elapsed: 1.82s
 />
 :::
 
-Compares budgeting throughput on the host vs through workers. Worker tasks return compact totals (token/trim counters), not full prompt strings.
+Compares budgeting throughput on the host vs through workers. Worker tasks return compact totals
+(token/trim counters), not full prompt strings.
 
 :::note
 Batch size matters here. Tiny batches mostly measure dispatch overhead; very large batches can increase memory pressure. Start with `32` or `64`, then tune for your hardware.

@@ -29,6 +29,33 @@ Three files:
 - `utils.ts` -- schema logic, payload builders, task exports
 - `bench_schema_validate.ts` -- host-vs-worker benchmark with `mitata`
 
+## Example payloads
+
+```json
+// valid
+{
+  "id": "u_42",
+  "email": "ari@knitting.dev",
+  "displayName": "Ari Lane",
+  "age": 29,
+  "roles": ["admin"],
+  "marketingOptIn": true
+}
+
+// invalid
+{
+  "id": "u_42",
+  "email": "ari@knitting.dev",
+  "displayName": "x",
+  "age": "unknown",
+  "roles": ["owner"]
+}
+```
+
+The first returns `{ ok: true, value }`. The second returns `{ ok: false, issues }`, with
+messages like `displayName: String must contain at least 2 character(s)` or
+`age: Expected number, received string`.
+
 ## Install
 
 :::info
@@ -59,7 +86,7 @@ You should see output like:
   valid: 800  invalid: 200  sample issue: ["Expected string, received number"]
 ```
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
@@ -68,7 +95,9 @@ You should see output like:
 />
 :::
 
-The benchmark compares `JSON.parse + safeParse` via direct function imports (`host`) against the same logic dispatched through a worker pool (`knitting`). Batch calls keep per-dispatch overhead predictable.
+The benchmark compares `JSON.parse + safeParse` via direct function imports (`host`) against the
+same logic dispatched through a worker pool (`knitting`). Batch calls keep per-dispatch overhead
+predictable.
 
 Expected output:
 

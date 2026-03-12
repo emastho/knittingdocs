@@ -180,15 +180,14 @@ Knitting is built for workloads where CPU pressure comes in bursts and you need 
 
 ## Design Boundaries
 
-Knitting is `opinionated` by design. It solves one problem well and doesn't try to be everything. Being upfront about that saves everyone time.
+It solves one problem well and doesn't try to be everything. Being upfront about that saves everyone time.
 
-**Not a replacement for `postMessage`**
+**Not a replacement for `postMessage`: **
 `postMessage` is great for general-purpose messaging. Knitting occupies a different niche: structured task execution with minimal overhead. Use whichever fits your workload, or both.
 
-Recent additions include abort signals, a permission protocol, and the inliner for host-thread compute. Coming next: barriers and cross-thread shared values.
 
 **No browser support (by choice)**
-A web version would be architecturally straightforward, but shared memory in the browser carries real security constraints. Speculative execution attacks (Spectre and friends) showed those risks aren't theoretical. Until the story is clearer, Knitting stays server-side.
+A web version would be architecturally straightforward, but shared memory in the browser carries real security constraints. Speculative execution attacks (Spectre and friends) showed those risks aren't theoretical.
 
 **No edge runtimes yet**
 Node.js, Deno, and Bun are the current targets. Edge runtimes have different isolation models, limited shared memory, and different module lifecycles. Supporting them properly would require careful design, not a quick port.

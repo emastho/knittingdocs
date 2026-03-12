@@ -31,6 +31,38 @@ Three files:
 - `render_user_card.tsx` -- the SSR component and worker task
 - `utils.ts` -- input payloads and normalization helpers
 
+## Example payload and result
+
+Input:
+
+```json
+{
+  "id": "u42",
+  "name": "Ari Lane",
+  "handle": "@ari",
+  "bio": "Building fast UIs.",
+  "plan": "pro",
+  "location": "Austin, TX",
+  "joinedAt": "2026-01-18",
+  "tags": ["react", "ssr", "workers"],
+  "stats": { "posts": 42, "followers": 1200, "following": 180, "likes": 9800 },
+  "alerts": { "unread": 3, "lastLogin": "2026-01-18" }
+}
+```
+
+Minimal usage:
+
+```ts
+const pool = createPool({ threads: 2 })({ renderUserCard });
+const html = await pool.call.renderUserCard(payloadJson);
+```
+
+Result:
+
+```html
+<article class="user-card" data-user-id="u42">...</article>
+```
+
 ## Install
 
 :::info
@@ -55,12 +87,13 @@ If you run this with Deno and see `Uncaught SyntaxError: Unexpected token '<'`, 
 }
 ```
 
-## Benchmark
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
   bunCommand="bun src/bench_react_ssr.ts"
   denoCommand="deno run -A src/bench_react_ssr.ts"
+  nodeCommand="npx tsx src/bench_react_ssr.ts"
 />
 :::
 

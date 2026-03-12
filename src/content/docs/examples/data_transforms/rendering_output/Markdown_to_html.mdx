@@ -13,6 +13,7 @@ import { getCode } from '../../../../../lib/code-snippets';
 import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
+export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_html.ts");
 export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
 export const utils = getCode("data_transforms/markdown_to_html/utils.ts");
 
@@ -22,9 +23,10 @@ Converts markdown documents to HTML using `marked`, then compresses the output w
 
 The host generates markdown documents. Both the host and worker paths parse the markdown, render HTML, then Brotli-compress the result. Compressed byte totals are compared for parity before the benchmark runs.
 
-Two files:
+Three files:
 
-- `bench_markdown_to_html.ts` -- the host-vs-worker benchmark
+- `run_markdown_to_html.ts` -- a small runnable example that compares host and worker output
+- `bench_markdown_to_html.ts` -- the optional host-vs-worker benchmark
 - `utils.ts` -- markdown rendering, compression tasks, and shared helpers
 
 ## Install
@@ -37,12 +39,46 @@ Two files:
 />
 :::
 
-## Benchmark
+## Run
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/run_markdown_to_html.ts --threads 2"
+  denoCommand="deno run -A src/run_markdown_to_html.ts --threads 2"
+  nodeCommand="npx tsx src/run_markdown_to_html.ts --threads 2"
+/>
+:::
+
+Example markdown in:
+
+```md
+# Knitting markdown example
+
+This example renders markdown on the host and in a worker.
+
+## Checklist
+
+- Parse markdown
+- Render HTML
+- Compare outputs
+```
+
+HTML out:
+
+```html
+<h1>Knitting markdown example</h1>
+<p>This example renders markdown on the host and in a worker.</p>
+<h2>Checklist</h2>
+...
+```
+
+## Optional benchmark
 
 :::info
 <RuntimeRunTabs
   bunCommand="bun src/bench_markdown_to_html.ts"
   denoCommand="deno run -A src/bench_markdown_to_html.ts"
+  nodeCommand="npx tsx src/bench_markdown_to_html.ts"
 />
 :::
 
@@ -59,6 +95,9 @@ knitting          17,800     15,600 ... 24,300
 ## Code
 
 <Tabs>
+  <TabItem label="run_markdown_to_html.ts">
+    <Code code={run} lang="ts" title={"run_markdown_to_html.ts"} />
+  </TabItem>
   <TabItem label="bench_markdown_to_html.ts">
     <Code code={bench} lang="ts" title={"bench_markdown_to_html.ts"} />
   </TabItem>

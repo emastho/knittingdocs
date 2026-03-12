@@ -244,3 +244,62 @@ Batching many calls amortizes header and dispatch overhead. Even types rated
 acceptable when batched. If you're calling the same task in a loop, fire all
 calls concurrently with `Promise.all` rather than awaiting each one
 sequentially.
+
+### Promise inputs
+
+`call.*()` can also accept `Promise<supported>` inputs, not just already
+resolved values. In HTTP handlers this lets you pass the body read directly:
+
+```ts
+app.post("/jwt", async (c) => {
+  const responseJson = await handlers.call.issueJwt(c.req.arrayBuffer());
+
+  return c.body(responseJson ?? "Bad request", responseJson ? 200 : 400, {
+    "content-type": "application/json; charset=utf-8",
+  });
+});
+```
+
+This does **not** help because a `Promise` is somehow faster on its own. The
+win is that the main thread no longer needs to stop and materialize the payload
+before handing it to Knitting.
+
+Why it helps in the Hono `arrayBuffer()` case:
+
+- `c.req.arrayBuffer()` already returns a promise, so forwarding it directly
+  avoids one extra `await` step in the route handler.
+- If the worker task accepts `ArrayBuffer` and does UTF-8 decode / JSON parsing
+  inside the task, that decode/parse work moves off the request thread.
+- `ArrayBuffer` stays on the binary fast path, which is usually cheaper than
+  first converting to `string` or building a JSON object on the host.
+
+The same pattern also works when the task expects an `Envelope`. You can shape
+the value with `.then(...)` and still avoid awaiting the body first:
+
+```ts
+import { Envelope } from "@vixeny/knitting";
+
+app.post("/upload", async (c) => {
+  const result = await handlers.call.storeUpload(
+    c.req.arrayBuffer().then(
+      (body) =>
+        new Envelope(
+          { contentType: c.req.header("content-type") ?? "application/octet-stream" },
+          // or:  c.req.header("content-type") ?? "application/octet-stream" 
+          body,
+        ),
+    ),
+  );
+
+  return c.json(result);
+});
+```
+
+Here the host does not await the request body up front. The envelope is created
+only when the promise resolves, and Knitting receives the resolved
+`Envelope<header, payload>` value.
+
+This is most useful when the route is basically a transport layer and the
+worker is supposed to own parsing anyway, like SSR or JWT issuance. If you need
+to inspect the body on the main thread before dispatch, await it locally and
+validate there.

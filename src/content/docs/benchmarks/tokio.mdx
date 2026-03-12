@@ -24,6 +24,10 @@ Whole-batch latency for three payload shapes:
 - `String` / large UTF-8 text
 - `Uint8Array` / raw bytes
 
+The "close to Tokio" claim on the homepage refers to the small end of this comparison:
+wakeups/signaling plus copying or cloning tiny payloads. The larger-payload sections below are a
+different cost regime.
+
 All runtimes use the same reporting setup:
 
 - batch sizes: `1`, `10`, `100`

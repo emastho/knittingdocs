@@ -1,9 +1,11 @@
-clk: ~3.74 GHz cpu: Apple M3 Ultra runtime: bun 1.3.6 (arm64-darwin)
+clk: ~3.69 GHz
+cpu: Apple M3 Ultra
+runtime: bun 1.3.6 (arm64-darwin)
 
-| • knitting: primes up to 10,000,000 (chunk=250,000) | avg              | min         | p75         | p99         | max         |
-| --------------------------------------------------- | ---------------- | ----------- | ----------- | ----------- | ----------- |
-| main                                                | `564.51 ms/iter` | `551.66 ms` | `570.70 ms` | `571.76 ms` | `572.48 ms` |
-| main + 1 extra threads → full range                 | `311.94 ms/iter` | `308.28 ms` | `314.37 ms` | `315.97 ms` | `316.11 ms` |
-| main + 2 extra threads → full range                 | `226.64 ms/iter` | `224.54 ms` | `228.11 ms` | `228.74 ms` | `230.69 ms` |
-| main + 3 extra threads → full range                 | `173.87 ms/iter` | `170.92 ms` | `175.81 ms` | `175.94 ms` | `176.80 ms` |
-| main + 4 extra threads → full range                 | `145.99 ms/iter` | `143.87 ms` | `146.60 ms` | `147.75 ms` | `148.29 ms` |
+| • knitting: primes up to 10,000,000 (chunk=250,000) |              avg |         min |         p75 |         p99 |         max |
+| ----------------------------------- | ---------------- | ----------- | ----------- | ----------- | ----------- |
+| main                                | `572.57 ms/iter` | `569.05 ms` | `573.73 ms` | `576.83 ms` | `577.70 ms` |
+| main + 1 extra threads → full range | `304.05 ms/iter` | `299.51 ms` | `305.94 ms` | `310.39 ms` | `310.63 ms` |
+| main + 2 extra threads → full range | `224.68 ms/iter` | `220.21 ms` | `228.08 ms` | `230.10 ms` | `230.84 ms` |
+| main + 3 extra threads → full range | `179.33 ms/iter` | `174.37 ms` | `181.15 ms` | `181.78 ms` | `182.35 ms` |
+| main + 4 extra threads → full range | `157.48 ms/iter` | `153.46 ms` | `159.02 ms` | `159.85 ms` | `160.47 ms` |

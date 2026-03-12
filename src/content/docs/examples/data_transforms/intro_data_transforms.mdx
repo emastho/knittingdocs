@@ -9,6 +9,11 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 These examples use real payload-carrying workloads on purpose. Primitive-only tasks are often near-instant, which hides coordination and transfer costs. Payload transforms are closer to production traffic, so the host-vs-worker comparisons are more honest.
 
+Treat the benchmark blocks in this section as supporting material, not the main event. Most pages
+are now organized around the runnable example first, with a benchmark command attached if you want
+to measure the same pattern on your machine. If you want one page that keeps the full performance
+discussion, start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server).
+
 ## Which example should you start with?
 
 **If you're validating incoming data** -- API payloads, form submissions, webhook bodies -- start with [Schema validation](/examples/data_transforms/validation/schema_validate). It's the simplest validation pattern and uses Zod, which you're probably already familiar with.

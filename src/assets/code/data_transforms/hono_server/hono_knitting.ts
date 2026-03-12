@@ -23,23 +23,13 @@ async function main() {
   });
 
   app.post("/ssr", async (c) => {
-    const rawPayload = await c.req.text();
-    if (rawPayload.trim().length === 0) {
-      return c.json({ ok: false, reason: "body: expected JSON object" }, 400);
-    }
-
-    const html = await handlers.call.renderSsrPage(rawPayload);
+    const html = await handlers.call.renderSsrPage(c.req.arrayBuffer());
     return c.html(html);
   });
 
   app.post("/jwt", async (c) => {
-    const payload = await c.req.text().catch(() => null);
 
-    if (!payload) {
-      return c.json({ ok: false, reason: "body: expected JSON object" }, 400);
-    }
-
-    const responseJson = await handlers.call.issueJwt(payload);
+    const responseJson = await handlers.call.issueJwt(c.req.arrayBuffer());
 
     return c.body(responseJson ?? "Bad request", responseJson ? 200 : 400, {
       "content-type": "application/json; charset=utf-8",
