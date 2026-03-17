@@ -62,7 +62,7 @@ hero:
           <span>Remote Imports</span>
         </div>
       </div>
-  tagline: Wrap a function with <code>task({ f })</code> and call it on a real thread.
+  tagline: A multi-thread framework for worker pools with a function-call API.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -102,12 +102,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
   ]}
 />
 
-<div class="home-intro-band">
-  <p class="home-intro-band__lead">
-    Knitting is built for workloads where coordination overhead matters. The benchmark above
-    isolates that path, so you can judge transport cost before mapping it onto full app behavior.
-  </p>
-</div>
+
 
 <Card title="Close to Tokio on the fast path">
   For primitives and small binary payloads, Knitting stays in the same microsecond tier as Tokio in
@@ -278,7 +273,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
           </TabItem>
         </Tabs>
 
-        See [Defining tasks](/guides/defining-tasks/) and [Creating pools](/guides/creating-pools/) for full options.
+        See [Installation](/start/installation/), [Defining tasks](/guides/defining-tasks/), and [Creating pools](/guides/creating-pools/) for full options.
       </Card>
     </div>
 

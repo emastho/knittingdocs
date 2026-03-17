@@ -39,8 +39,11 @@ Knitting is published on JSR:
 </Tabs>
 
 :::note
-Knitting needs host-side package metadata, so use `--npm` when installing
-through `deno` or `jsr`.
+Knitting needs a physical npm module entry for Deno to resolve it correctly, so use
+`--npm` when installing through `deno` or `jsr`.
+
+If Deno keeps resolving the package incorrectly, remove the generated entry from
+`deno.json` and install again with `--npm`.
 
 <Code code="jsr add --npm @vixeny/knitting" lang="bash" title={"jsr.sh"} mark={['--npm']}/>
 :::
