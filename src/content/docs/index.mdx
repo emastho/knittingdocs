@@ -43,9 +43,9 @@ hero:
             <small>One task API</small>
           </div>
           <div class="home-hero-visual__metric">
-            <span>Node IPC benchmark</span>
+            <span>Comparable with Tokio</span>
             <strong>2.03M req/sec</strong>
-            <small>50-message roundtrip</small>
+            <small>Arc velocity on small payloads</small>
           </div>
           <div class="home-hero-visual__metric">
             <span>Payload support</span>
@@ -62,7 +62,7 @@ hero:
           <span>Remote Imports</span>
         </div>
       </div>
-  tagline: A multi-thread framework for worker pools with a function-call API.
+  tagline: A multi-thread framework for JavaScript with a function-call API.
   actions:
     - text: Quick Start
       link: /start/quick-start/
@@ -105,11 +105,9 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
 
 
 <Card title="Close to Tokio on the fast path">
-  For primitives and small binary payloads, Knitting stays in the same microsecond tier as Tokio in
-  these benchmark shapes. That comparison is mostly about the handoff path: signaling the worker and
-  copying or cloning small payloads. When that coordination cost dominates, the shared-memory path
-  stays competitive with a serious Rust baseline, while the full benchmark write-up also shows the
-  cases where Tokio still pulls ahead.
+  - The main comparison here is primitives and copied <code>Uint8Array</code>. That is the default benchmark, not the separate <code>Arc&lt;Vec&lt;u8&gt;&gt;</code> reference.
+  - In this run, those fast-path slices stay in the same microsecond tier as Tokio through <code>512 B</code>. This is the part of the benchmark where handoff cost matters most.
+  - The Arc row is a separate reference point for Tokio shared ownership on small bytes. It helps show how close Knitting gets on the fast path, but it is not a claim about large payloads or whole-app speedup.
 
   <TokioCloseUp compact embedded />
 
@@ -170,7 +168,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             ```ts
             import { createPool, isMain, task } from "@vixeny/knitting";
 
-            const hello = task({
+            export const hello = task({
               f: (name: string) => `hello ${name}`,
             });
 
@@ -190,7 +188,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             ```ts
             import { createPool, isMain, task } from "@vixeny/knitting";
 
-            const slowUpper = task({
+            export const slowUpper = task({
               abortSignal: { hasAborted: true },
               f: async (value: string, signal) => {
                 if (signal.hasAborted()) return "aborted";
@@ -199,7 +197,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
               },
             });
 
-            const pool = createPool({})({ slowUpper });
+            export const pool = createPool({})({ slowUpper });
 
             if (isMain) {
               const pending = pool.call.slowUpper("hello");
@@ -216,7 +214,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             ```ts
             import { isMain, task } from "@vixeny/knitting";
 
-            const timed = task<string, string>({
+            export const timed = task<string, string>({
               timeout: { time: 50, default: "timeout" },
               f: async (value) => {
                 await new Promise((r) => setTimeout(r, 100));
@@ -234,7 +232,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             ```ts
             import { createPool, isMain, task } from "@vixeny/knitting";
 
-            const score = task({
+            export const score = task({
               f: (chunk: Uint8Array) => chunk.length,
             });
 
@@ -259,7 +257,7 @@ import TokioCloseUp from "../../components/TokioCloseUp.astro";
             ```ts
             import { createPool, importTask, isMain } from "@vixeny/knitting";
 
-            const addFromWeb = importTask<[number, number], number>({
+            export const addFromWeb = importTask<[number, number], number>({
               href: "https://knittingdocs.netlify.app/example-task.mjs",
               name: "add",
             });

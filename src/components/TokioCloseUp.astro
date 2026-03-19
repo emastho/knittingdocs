@@ -19,54 +19,59 @@ const { compact = false, embedded = false } = Astro.props as {
   embedded?: boolean;
 };
 
-const scaleMax = 1.6;
+const scaleMax = 1.8;
+const scaleMaxLabel = `${scaleMax.toFixed(1)}x`;
 
 const scenarios: Scenario[] = [
   {
     title: "number <code>f64</code> · batch <code>1</code>",
-    note: "All four land in the same <code>~5–11 µs</code> band.",
-    tokio: 10.88,
+    note: "Primitive handoff only: Node and Bun are faster, Tokio stays ahead of Deno, and all four remain in the <code>6-22 µs</code> range.",
+    tokio: 13.01,
     runtimes: [
-      { label: "Bun + Knitting", shortLabel: "B", value: 5.51, color: "#f59e0b", lane: 0 },
-      { label: "Node + Knitting", shortLabel: "N", value: 4.96, color: "#a3e635", lane: 1 },
-      { label: "Deno + Knitting", shortLabel: "D", value: 8.53, color: "#60a5fa", lane: 0 },
+      { label: "Bun + Knitting", shortLabel: "B", value: 7.35, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 6.63, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 21.54, color: "#60a5fa", lane: 0 },
     ],
   },
   {
     title: "number <code>f64</code> · batch <code>10</code>",
-    note: "Still in the low-teens microsecond range.",
-    tokio: 13.29,
+    note: "Still a handoff-cost slice: Bun, Node, and Deno stay below <code>20 µs</code>, while Tokio averages <code>27.50 µs</code>.",
+    tokio: 27.5,
     runtimes: [
-      { label: "Bun + Knitting", shortLabel: "B", value: 8.59, color: "#f59e0b", lane: 0 },
-      { label: "Node + Knitting", shortLabel: "N", value: 7.93, color: "#a3e635", lane: 1 },
-      { label: "Deno + Knitting", shortLabel: "D", value: 6.85, color: "#60a5fa", lane: 0 },
+      { label: "Bun + Knitting", shortLabel: "B", value: 13.41, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 17.28, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 11.97, color: "#60a5fa", lane: 0 },
     ],
   },
   {
-    title: "Uint8Array <code>32 B</code> · batch <code>100</code>",
-    note: "Tiny binary payloads stay below <code>50 µs</code> across the board.",
-    tokio: 38.96,
+    title: "Uint8Array <code>512 KiB</code> · batch <code>100</code>",
+    note: "This is the copy/clone-heavy byte path: Bun and Node edge Tokio on average, while Deno is a bit slower and all four land in the same <code>22-25 ms</code> band.",
+    tokio: 23060,
     runtimes: [
-      { label: "Bun + Knitting", shortLabel: "B", value: 48.35, color: "#f59e0b", lane: 0 },
-      { label: "Node + Knitting", shortLabel: "N", value: 45.04, color: "#a3e635", lane: 1 },
-      { label: "Deno + Knitting", shortLabel: "D", value: 46.93, color: "#60a5fa", lane: 0 },
+      { label: "Bun + Knitting", shortLabel: "B", value: 22330, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 22660, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 25260, color: "#60a5fa", lane: 0 },
     ],
   },
   {
-    title: "Uint8Array <code>128 B</code> · batch <code>100</code>",
-    note: "Tokio and Knitting stay tightly clustered here.",
-    tokio: 39.51,
+    title: "<code>Arc&lt;Vec&lt;u8&gt;&gt;</code> ref · <code>512 B</code> · batch <code>100</code>",
+    note: "Separate Tokio shared-ownership reference, not the default byte benchmark: Bun stays within <code>6%</code> of Tokio, while Node and Deno are slower.",
+    tokio: 79.51,
     runtimes: [
-      { label: "Bun + Knitting", shortLabel: "B", value: 38.28, color: "#f59e0b", lane: 0 },
-      { label: "Node + Knitting", shortLabel: "N", value: 45.97, color: "#a3e635", lane: 1 },
-      { label: "Deno + Knitting", shortLabel: "D", value: 48.66, color: "#60a5fa", lane: 0 },
+      { label: "Bun + Knitting", shortLabel: "B", value: 74.78, color: "#f59e0b", lane: 0 },
+      { label: "Node + Knitting", shortLabel: "N", value: 97.23, color: "#a3e635", lane: 1 },
+      { label: "Deno + Knitting", shortLabel: "D", value: 123.11, color: "#60a5fa", lane: 0 },
     ],
   },
 ];
 
-const visibleScenarios = compact ? [scenarios[0], scenarios[1], scenarios[3]] : scenarios;
+const visibleScenarios = compact ? [scenarios[0], scenarios[2], scenarios[3]] : scenarios;
 
-function formatMicroseconds(value: number) {
+function formatLatency(value: number) {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(2)} ms`;
+  }
+
   return `${value.toFixed(2)} µs`;
 }
 
@@ -89,7 +94,8 @@ function markerPosition(value: number, tokio: number) {
 
 const componentMetadata = {
   reference: "tokio-latency-baseline",
-  metric: "microseconds",
+  metric: "latency",
+  internalUnit: "microseconds",
   scaleMax,
   compact,
   scenarios: visibleScenarios.map((scenario) => ({
@@ -105,30 +111,33 @@ const componentMetadata = {
 const componentMetadataJson = JSON.stringify(componentMetadata);
 ---
 
-<section class:list={["tokio-close-up", compact && "tokio-close-up--compact", embedded && "tokio-close-up--embedded"]} aria-label="Knitting versus Tokio for primitives and low payloads">
+<section class:list={["tokio-close-up", compact && "tokio-close-up--compact", embedded && "tokio-close-up--embedded"]} aria-label="Knitting versus Tokio for primitive handoffs, copied-byte slices, and an Arc reference slice">
   <br> <br>
   {!embedded && (
     <header class="tokio-close-up__header">
       <p class="tokio-close-up__kicker">Tokio close-up</p>
-      <h2 class="tokio-close-up__title">Primitives and tiny payload handoffs stay in the same microsecond tier</h2>
+      <h2 class="tokio-close-up__title">Primitive handoffs, copy-heavy bytes, and a separate Arc reference</h2>
       <p class="tokio-close-up__lede">
-        This close-up is about the handoff path: wakeups plus copying or cloning very small payloads.
-        Markers to the left are faster, markers to the right are slower. In these shapes, Knitting
-        stays close to, and sometimes beats, the Tokio baseline.
+        This close-up mixes two kinds of communication cost: primitive handoff slices and one
+        copy-heavy <code>Uint8Array</code> slice from the fairer default tables. The
+        <code>Arc&lt;Vec&lt;u8&gt;&gt;</code> card is separate and should be read as a Tokio shared-ownership
+        reference, not as the default apples-to-apples byte comparison. Markers to the left are
+        faster, markers to the right are slower.
       </p>
     </header>
   )}
 
   {embedded && (
     <p class="tokio-close-up__lede tokio-close-up__lede--embedded">
-      This is the handoff path: wakeups plus copying or cloning very small payloads.
-      <code>1.0x</code> marks Tokio latency.
+      This is communication cost, not whole-app speedup. <code>1.0x</code> marks Tokio for that
+      exact slice, and the <code>Arc&lt;Vec&lt;u8&gt;&gt;</code> row is a separate reference rather than the
+      default byte benchmark.
     </p>
   )}
 
   <div class="tokio-close-up__badges" aria-hidden="true">
-    <span class="tokio-close-up__badge">Highlighted cases: f64 and 32–128 B payloads</span>
-    <span class="tokio-close-up__badge">Focus: signaling and tiny-payload movement</span>
+    <span class="tokio-close-up__badge">Highlighted cases: f64, copied Uint8Array, Arc reference</span>
+    <span class="tokio-close-up__badge">Scope: communication cost, not end-to-end throughput</span>
     <span class="tokio-close-up__badge">Metric: average latency, lower is better</span>
   </div>
 
@@ -143,7 +152,7 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
         <div class="tokio-card__scale" aria-hidden="true">
           <span>0.5x</span>
           <span>1.0x Tokio</span>
-          <span>1.5x</span>
+          <span>{scaleMaxLabel}</span>
         </div>
 
         <div class="tokio-card__track" aria-hidden="true">
@@ -172,7 +181,7 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
           <li class="tokio-card__legend-item">
             <span class="tokio-card__swatch tokio-card__swatch--tokio"></span>
             <span class="tokio-card__runtime">Tokio</span>
-            <strong>{formatMicroseconds(scenario.tokio)}</strong>
+            <strong>{formatLatency(scenario.tokio)}</strong>
             <span class="tokio-card__delta">baseline</span>
           </li>
 
@@ -180,7 +189,7 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
             <li class="tokio-card__legend-item">
               <span class="tokio-card__swatch" style={`--swatch-color:${runtime.color};`}></span>
               <span class="tokio-card__runtime">{runtime.label}</span>
-              <strong>{formatMicroseconds(runtime.value)}</strong>
+              <strong>{formatLatency(runtime.value)}</strong>
               <span class="tokio-card__delta">{deltaLabel(runtime.value, scenario.tokio)}</span>
             </li>
           ))}
@@ -191,8 +200,8 @@ const componentMetadataJson = JSON.stringify(componentMetadata);
 
   {!compact && (
     <p class="tokio-close-up__footnote">
-      These are the small-payload slices where coordination overhead dominates. They are useful for
-      understanding the fast path, not for predicting whole-app speedup.
+      Primitive and copied-byte rows come from the fairer default comparison. The Arc row is
+      included as a separate small-payload shared-ownership reference.
     </p>
   )}
 

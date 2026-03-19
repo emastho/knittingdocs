@@ -1,6 +1,6 @@
 ---
 title: Tokio
-description: Tokio benchmark comparison for Knitting, covering scalar latency, 1 MiB payload behavior, size-sweep crossover points, and the benchmark fairness model.
+description: Tokio benchmark comparison for Knitting, covering scalar latency, 1 MiB payload behavior, byte-size sweeps, an Arc<Vec<u8>> reference sweep, and the benchmark fairness model.
 sidebar:
   order: 5
 ---
@@ -9,8 +9,10 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import tokioSummary from '../../../assets/tokio/summary.md?raw';
 import batchAvgNumberF64 from '../../../assets/tokio/batch_avg_number_f64_log.svg?url';
+import batchAvgLargeString1MiB from '../../../assets/tokio/batch_avg_large_string_1mb_log.svg?url';
 import batchAvgUint8Array1MiB from '../../../assets/tokio/batch_avg_uint8array_1mb_log.svg?url';
 import uint8ArraySizeSweep from '../../../assets/tokio/uint8array_size_sweep_avg_log.svg?url';
+import uint8ArrayArcCompareSizeSweep from '../../../assets/tokio/uint8array_arc_compare_size_sweep_avg_log.svg?url';
 
 This page compares Tokio against Knitting on Bun, Node.js, and Deno using the same batch-oriented echo benchmark.
 
@@ -23,10 +25,13 @@ Whole-batch latency for three payload shapes:
 - `f64`
 - `String` / large UTF-8 text
 - `Uint8Array` / raw bytes
+- separate `Arc<Vec<u8>>` reference sweeps for tiny byte payloads
 
 The "close to Tokio" claim on the homepage refers to the small end of this comparison:
 wakeups/signaling plus copying or cloning tiny payloads. The larger-payload sections below are a
 different cost regime.
+
+The current summary was recorded on `Ubuntu 23.10`, `x86_64`, on an `AMD Ryzen 7 4700U`.
 
 All runtimes use the same reporting setup:
 
@@ -38,11 +43,12 @@ All runtimes use the same reporting setup:
 
 ## Batch avg latency (`f64`)
 
-For small scalar payloads, the JavaScript runtimes keep the lowest average latency in this run:
+For small scalar payloads, the JavaScript runtimes stay ahead on average in this run:
 
-- At `n=1`, Node.js is lowest at `4.96 µs`, followed by Bun at `5.51 µs`, Deno at `8.53 µs`, and Tokio at `10.88 µs`.
-- At `n=10` and `n=100`, Deno and Bun stay ahead on average, while Tokio remains above the JavaScript runtimes on pure scalar batches.
-- Tokio still has the best `p99` at `n=1` (`11.99 µs`) and `n=10` (`15.30 µs`), so its tail is tighter even when its average is not the lowest.
+- At `n=1`, Node.js is lowest at `6.63 µs`, followed by Bun at `7.35 µs`, Tokio at `13.01 µs`, and Deno at `21.54 µs`.
+- At `n=10`, Deno is lowest at `11.97 µs`, then Bun at `13.41 µs`, Node.js at `17.28 µs`, and Tokio at `27.50 µs`.
+- At `n=100`, Node.js (`62.33 µs`) and Deno (`63.28 µs`) stay ahead of Tokio (`89.55 µs`), with Bun in between at `80.61 µs`.
+- Tokio keeps the best `p99` at `n=1` (`16.85 µs`), but Bun has the best `p99` at `n=10` (`36.58 µs`) and `n=100` (`92.37 µs`).
 
 <Tabs>
   <TabItem label="Chart">
@@ -61,15 +67,23 @@ For small scalar payloads, the JavaScript runtimes keep the lowest average laten
 
 ## 1 MiB payloads
 
-Large payloads show a very different profile from scalar messages:
+Large payloads show a very different profile from scalar messages.
 
-- At `n=1`, Tokio is fastest for both `large string 1 MiB` (`26.11 µs`) and `Uint8Array 1 MiB` (`25.97 µs`).
-- At `n=10`, Tokio keeps the lead on 1 MiB strings (`3.16 ms`) and stays close to Bun on 1 MiB binary payloads (`3.18 ms` vs `2.94 ms`).
-- At `n=100`, Bun overtakes Tokio on sustained `Uint8Array` throughput (`26.15 ms` vs `35.67 ms`), while Tokio still leads the 1 MiB string case (`34.98 ms` vs `39.12 ms`).
-- Tokio has the best `p99` for both 1 MiB payload families at every batch size in the summary table.
+- For `large string 1 MiB`, Tokio is clearly fastest at `n=1` (`221.35 µs`) and `n=100` (`37.93 ms`). At `n=10`, Bun edges it slightly on average (`6.01 ms` vs `6.20 ms`) and also has a near-identical `p99` (`8.41 ms` vs `8.44 ms`).
+- For `Uint8Array 1 MiB`, Tokio leads at every batch size on average: `272.81 µs`, `4.64 ms`, and `37.83 ms`.
+- Node.js and Deno fall further behind once payload materialization dominates the round trip, especially on the `1 MiB` cases.
 
 <Tabs>
-  <TabItem label="Chart">
+  <TabItem label="String Chart">
+    <img
+      src={batchAvgLargeString1MiB}
+      width={840}
+      height={620}
+      alt="Batch average latency for 1 MiB string payloads comparing Tokio, Bun, Node.js, and Deno"
+      loading="lazy"
+    />
+  </TabItem>
+  <TabItem label="Uint8Array Chart">
     <img
       src={batchAvgUint8Array1MiB}
       width={840}
@@ -87,9 +101,10 @@ Large payloads show a very different profile from scalar messages:
 
 This sweep fixes `batch=100` and scales binary payload size from `8 B` to `1 MiB`:
 
-- Tokio is fastest across much of the small-to-medium range, especially from `1 KiB` through `32 KiB`.
-- Bun starts to pull ahead around `64 KiB` and stays fastest for the largest binary payloads in this run.
-- Node.js tracks Bun more closely at larger sizes than Deno, while Deno trails for most of the sweep.
+- Bun is fastest from `8 B` through `512 B`, so the default copy-based byte path is already competitive at the tiny end.
+- Tokio retakes the lead from `1 KiB` through `16 KiB` in this run.
+- Bun and Node.js pull slightly ahead again from `32 KiB` through `512 KiB`.
+- At `1 MiB`, Tokio is fastest again at `29.48 ms`, ahead of Bun (`46.97 ms`), Node.js (`52.53 ms`), and Deno (`55.77 ms`).
 
 <Tabs>
   <TabItem label="Chart">
@@ -106,12 +121,41 @@ This sweep fixes `batch=100` and scales binary payload size from `8 B` to `1 MiB
   </TabItem>
 </Tabs>
 
+## `Arc<Vec<u8>>` reference sweep
+
+This separate sweep also fixes `batch=100`, but only covers `8 B` through `512 B`.
+On the Tokio side it uses `Arc<Vec<u8>>`, which is the closest thing to "magic teleportation"
+in this setup: `Arc::clone` mostly just bumps a refcount instead of copying the bytes.
+
+- Bun still beats the Tokio `Arc` path from `8 B` through `256 B`, and is still close at `512 B` (`74.78 µs` vs `79.51 µs`).
+- Node.js is faster than the `Arc` baseline from `16 B` through `64 B`, and stays near parity at `128 B` (`82.51 µs` vs `79.89 µs`).
+- Deno is close in the `16-64 B` band, but falls back more clearly by `256-512 B`.
+
+Treat this as an upper-bound shared-ownership reference, not the default apples-to-apples byte benchmark.
+The fair default comparison is still the normal `Uint8Array` copy path above.
+
+<Tabs>
+  <TabItem label="Chart">
+    <img
+      src={uint8ArrayArcCompareSizeSweep}
+      width={1600}
+      height={820}
+      alt="Uint8Array size sweep comparing Tokio Arc Vec against Bun, Node.js, and Deno"
+      loading="lazy"
+    />
+  </TabItem>
+  <TabItem label="Raw data">
+    <Code code={tokioSummary} lang="md" title={"summary.md"} />
+  </TabItem>
+</Tabs>
+
 ## Fairness and the one intentional asymmetry
 
 Two major sources of skew are already handled:
 
 - **Dispatch shape is aligned.** Rust fans out via spawned tasks and waits with `join_all(...)`, matching knitting creating all `pool.call.*(...)` promises and awaiting `Promise.all(...)`.
 - **Runtime width is aligned.** Knitting uses `threads: 1`, and Rust uses `#[tokio::main(worker_threads = 1)]`, so sender fan-out can't spread across a bigger worker pool.
+- **Round-trip work is aligned.** The default `String` and `Uint8Array` paths pay payload work in both directions on both sides; Tokio explicitly clones on send and clones again on the worker reply so the return path is not a cheaper move-only shortcut.
 
 One asymmetry is kept on purpose: **memory management**.
 
@@ -126,14 +170,15 @@ For large string and byte payloads:
 
 Avoiding general-purpose allocation in the hot path is part of what makes knitting interesting, so the benchmark keeps that cost in-bounds rather than hiding it.
 
-If you want to isolate pure channel / IPC overhead instead, rework the Rust side to pre-clone payloads (or share behind `Arc`) so allocation isn't in the critical section.
+The `Arc<Vec<u8>>` sweep is included separately for exactly that reason: it shows the shared-ownership upper bound for tiny payloads without pretending that it is the default fair byte path.
 
 ## A rough cost model
 
 For the payload-heavy echo cases, treat the benchmark as measuring two different "systems":
 
 - **knitting:** shared-buffer copies + allocator-style region management (JS values still get materialized when a worker reads/returns them)
-- **tokio:** clone-driven allocation + payload copies on the channel path
+- **tokio default:** clone-driven allocation + payload copies on the channel path
+- **tokio Arc reference:** `Arc::clone` shared ownership for the byte buffer handle
 
 The exact low-level behavior depends on payload type and runtime, but the high-level point is stable: knitting is buying speed by replacing repeated general-purpose allocation with preallocated shared-memory management.
 
@@ -143,9 +188,9 @@ A few concrete things knitting does that matter for this benchmark:
 
 - **Fixed pool topology → simpler queues.** The pool knows its workers up front, and each host↔worker lane is effectively single‑producer/single‑consumer. That's cheaper than a fully general multi‑producer channel.
 - **Low-garbage hot path.** Most transport work happens inside typed-array-backed buffers and reused task objects, reducing allocation churn and GC pressure (and references get cleared quickly after each call settles).
-- **Two-tier payload path.** Small payloads encode inline in the per-call header slot (roughly ~0.5 KiB per in-flight call, with ~480 bytes usable for inline data); larger payloads spill into the shared payload buffer (SAB/GSAB).
+- **Two-tier payload path.** Small payloads encode inline in the per-call header slot (roughly ~0.5 KiB per in-flight call, with ~544 bytes usable for inline data); larger payloads spill into the shared payload buffer (SAB/GSAB).
 - **Shared payload buffer + mini allocator.** Large payloads are copied into a preallocated `SharedArrayBuffer` and carved into 64‑byte‑aligned regions tracked by a small slot table/bitset (more complexity, less `malloc` in the hot path).
 - **Primitives are "header-only".** Numbers/booleans/null/etc encode directly in header words (no payload buffer at all), keeping contention and copying low.
-- **Optional "gc at idle boundaries".** When workers have `gc()` available (for example via Node's `--expose-gc`), knitting may trigger a GC before going into longer spin/park waits, nudging collections away from the hot loop.
+- **Optional "gc at idle boundaries".** When workers have `gc()` available , knitting may trigger a GC before going into longer spin/park waits, nudging collections away from the hot loop.
 
 None of this is free: it trades simplicity for careful memory layout, extra bookkeeping, and more "allocator-like" engineering. That trade is exactly what this repo is trying to make visible.
