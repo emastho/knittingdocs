@@ -12,4 +12,8 @@ If the check fails and `crossOriginIsolated` is `false`, the usual cause is miss
 `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers, which browsers commonly
 need before shared-memory features can work.
 
+This docs site now emits those headers during local Astro dev/preview and in Netlify deploys via
+`public/_headers`. If you move the browser build to another host, configure the equivalent response
+headers there too.
+
 <BrowserKnittingDebug />

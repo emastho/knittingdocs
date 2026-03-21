@@ -67,11 +67,23 @@ const socialImagePath = base ? `${base}/logo.png` : "/logo.png";
 const socialImage = site
   ? new URL(socialImagePath, site).toString()
   : socialImagePath;
+const crossOriginIsolationHeaders = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
 
 // https://astro.build/config
 export default defineConfig({
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
+  vite: {
+    server: {
+      headers: crossOriginIsolationHeaders,
+    },
+    preview: {
+      headers: crossOriginIsolationHeaders,
+    },
+  },
   markdown: {
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
