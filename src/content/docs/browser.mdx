@@ -31,9 +31,11 @@ In the browser you do not need the package import here. This page loads the bund
 
 ```ts
 const knittingUrl = new URL("/knitting.js", window.location.origin).href;
+const taskModuleUrl = new URL("/example-task.mjs", window.location.origin).href;
 const { importTask } = await import(knittingUrl);
 
 const add = importTask<[number, number], number>({
+  href: taskModuleUrl,
   name: "add",
 });
 
