@@ -936,9 +936,50 @@ var textEncode = new TextEncoder;
 var textDecode = new TextDecoder;
 var DYNAMIC_HEADER_BYTES = 64;
 var DYNAMIC_SAFE_PADDING_BYTES = page;
+var sharedBufferEncodeIntoUnsupported = false;
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
 var isExactUint8Array = (src) => src.constructor === Uint8Array;
 var canonicalDynamicUint8Array = (src) => isExactUint8Array(src) ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
+var isSharedArrayBufferBacked = (view) => typeof SharedArrayBuffer === "function" && view.buffer instanceof SharedArrayBuffer;
+var isSharedBufferEncodeIntoError = (error) => error instanceof TypeError;
+var manualEncodeInto = (str, target) => {
+  let read = 0;
+  let written = 0;
+  for (const char of str) {
+    const encoded = textEncode.encode(char);
+    if (written + encoded.byteLength > target.byteLength)
+      break;
+    target.set(encoded, written);
+    written += encoded.byteLength;
+    read += char.length;
+  }
+  return { read, written };
+};
+var fallbackEncodeInto = (str, target) => {
+  const scratch = new Uint8Array(target.byteLength);
+  const result = typeof textEncode.encodeInto === "function" ? textEncode.encodeInto(str, scratch) : manualEncodeInto(str, scratch);
+  if (result.written > 0) {
+    target.set(scratch.subarray(0, result.written), 0);
+  }
+  return result;
+};
+var encodeIntoCompat = (str, target) => {
+  if (typeof textEncode.encodeInto !== "function") {
+    return fallbackEncodeInto(str, target);
+  }
+  const sharedBacked = isSharedArrayBufferBacked(target);
+  if (!sharedBacked || !sharedBufferEncodeIntoUnsupported) {
+    try {
+      return textEncode.encodeInto(str, target);
+    } catch (error) {
+      if (!sharedBacked || !isSharedBufferEncodeIntoError(error)) {
+        throw error;
+      }
+      sharedBufferEncodeIntoUnsupported = true;
+    }
+  }
+  return fallbackEncodeInto(str, target);
+};
 var createSharedDynamicBufferIO = ({
   sab,
   payloadConfig
@@ -996,7 +1037,7 @@ var createSharedDynamicBufferIO = ({
     if (!ensureCapacity(start + reservedBytes)) {
       return -1;
     }
-    const { read, written } = textEncode.encodeInto(str, u8.subarray(start, start + reservedBytes));
+    const { read, written } = encodeIntoCompat(str, u8.subarray(start, start + reservedBytes));
     if (read !== str.length)
       return -1;
     return written;
@@ -1038,7 +1079,7 @@ var createSharedStaticBufferIO = ({
   const canWrite = (start, length) => (start | 0) >= 0 && start + length <= writableBytes;
   const writeUtf8 = (str, at) => {
     const start = slotByteOffsets[at];
-    const { read, written } = textEncode.encodeInto(str, baseU8.subarray(start, start + writableBytes));
+    const { read, written } = encodeIntoCompat(str, baseU8.subarray(start, start + writableBytes));
     if (read !== str.length)
       return -1;
     return written;
