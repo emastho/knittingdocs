@@ -1,0 +1,66 @@
+---
+title: Browser
+description: Download the browser build of Knitting, start quickly, and smoke test it inside the docs site.
+---
+
+import BrowserKnittingDebug from "../../components/BrowserKnittingDebug.astro";
+
+This page is the browser entry point for Knitting. You can download the current stable browser bundle, jump to the regular Quick Start, or run the in-page smoke test against the hosted `public/knitting.js` build.
+
+<div class="browser-page-actions">
+  <a class="sl-link-button primary" href="/knitting.js" download="knitting.js">Download Latest Stable Browser Build</a>
+  <br></br>
+  <a class="sl-link-button secondary" href="/start/quick-start/">Open Quick Start</a>
+</div>
+
+This page also runs a browser-side check for the `public/knitting.js` bundle. It loads the browser
+module, imports a debug task module that uses both `task()` and `importTask()`, starts one-thread
+pools, and runs real worker calls through both paths.
+
+If the check fails and `crossOriginIsolated` is `false`, the usual cause is missing
+`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers, which browsers commonly
+need before shared-memory features can work.
+
+This docs site now emits those headers during local Astro dev/preview and in Netlify deploys via
+`public/_headers`. If you move the browser build to another host, configure the equivalent response
+headers there too.
+
+## Basic URL import example
+
+In the browser you do not need the package import here. This page loads the bundle by URL, then points `importTask()` at another URL-backed module.
+
+```ts
+const knittingUrl = new URL("/knitting.js", window.location.origin).href;
+const { importTask } = await import(knittingUrl);
+
+const add = importTask<[number, number], number>({
+  name: "add",
+});
+
+const pool = add.createPool({ threads: 1 });
+
+try {
+  console.log(await pool.call([2, 3])); // 5
+} finally {
+  await pool.shutdown();
+}
+```
+
+And the task module can use `import.meta.url` as its stable base URL:
+
+```js
+import { task } from "./knitting.js";
+
+const TASK_MODULE_HREF = import.meta.url;
+
+export const add = task({
+  href: TASK_MODULE_HREF,
+  f: ([a, b]) => a + b,
+});
+```
+
+That is the same idea used by this page: load `knitting.js` from a browser URL, keep task identity stable with `import.meta.url`, and let workers import the task module from its URL.
+
+<BrowserKnittingDebug />
+
+

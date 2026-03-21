@@ -43,9 +43,11 @@ hero:
             <small>One task API</small>
           </div>
           <div class="home-hero-visual__metric">
-            <span>Comparable with Tokio</span>
-            <strong>2.03M req/sec</strong>
-            <small>Arc velocity on small payloads</small>
+            <span>Control path</span>
+            <strong>Shared mailboxes</strong>
+            <strong>Payload buffers</strong>
+            <strong>Spin-park-wake</strong>
+            <small><a href="/benchmarks/introduction/">See benchmark comparison</a></small>
           </div>
           <div class="home-hero-visual__metric">
             <span>Payload support</span>
@@ -87,7 +89,6 @@ import {
 } from "@astrojs/starlight/components";
 import BenchmarkBalls from "../../components/BenchmarkBalls.astro";
 import ImpactBars from "../../components/ImpactBars.astro";
-import TokioCloseUp from "../../components/TokioCloseUp.astro";
 
 <AshesBackground />
 <div data-homepage-hero-marker hidden></div>
@@ -454,7 +455,6 @@ Knitting is not a security boundary. Tasks run in your process with your permiss
 ## Runtime support
 
 - Works on **Node.js**, **Deno**, and **Bun**.
-- No browser or Web Worker support -- that's intentional, not a missing feature.
 - Edge runtimes aren't targeted right now.
 - Watch out for remote imports and `href` overrides -- they widen your trust boundary. Avoid in production unless you know what you're doing.
 

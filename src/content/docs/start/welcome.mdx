@@ -186,9 +186,6 @@ It solves one problem well and doesn't try to be everything. Being upfront about
 `postMessage` is great for general-purpose messaging. Knitting occupies a different niche: structured task execution with minimal overhead. Use whichever fits your workload, or both.
 
 
-**No browser support (by choice)**
-A web version would be architecturally straightforward, but shared memory in the browser carries real security constraints. Speculative execution attacks (Spectre and friends) showed those risks aren't theoretical.
-
 **No edge runtimes yet**
 Node.js, Deno, and Bun are the current targets. Edge runtimes have different isolation models, limited shared memory, and different module lifecycles. Supporting them properly would require careful design, not a quick port.
 
