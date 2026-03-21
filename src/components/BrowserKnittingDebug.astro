@@ -1,0 +1,372 @@
+---
+const baseUrl = import.meta.env.BASE_URL ?? "/";
+---
+
+<section class="browser-knitting-debug" data-browser-knitting-debug data-base-url={baseUrl}>
+  <div class="browser-knitting-debug__header">
+    <div>
+      <p class="browser-knitting-debug__eyebrow">Browser smoke test</p>
+      <h2>Run a real worker round-trip</h2>
+      <p class="browser-knitting-debug__copy">
+        This loads the browser bundle, creates a one-thread pool, calls a task, and prints the
+        result or the startup error.
+      </p>
+    </div>
+
+    <div class="browser-knitting-debug__controls">
+      <button type="button" data-run>Run check</button>
+      <span class="browser-knitting-debug__status" data-status data-tone="idle">Idle</span>
+    </div>
+  </div>
+
+  <dl class="browser-knitting-debug__facts">
+    <div>
+      <dt>Origin</dt>
+      <dd data-origin>Waiting...</dd>
+    </div>
+    <div>
+      <dt>crossOriginIsolated</dt>
+      <dd data-cross-origin-isolated>Waiting...</dd>
+    </div>
+    <div>
+      <dt>SharedArrayBuffer</dt>
+      <dd data-shared-array-buffer>Waiting...</dd>
+    </div>
+    <div>
+      <dt>Worker</dt>
+      <dd data-worker>Waiting...</dd>
+    </div>
+  </dl>
+
+  <pre class="browser-knitting-debug__output" data-output>Waiting to run browser check...</pre>
+</section>
+
+<script is:inline>
+  const sections = document.querySelectorAll("[data-browser-knitting-debug]");
+
+  const serializeError = (error) => {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack ?? null,
+        cause: error.cause ?? null,
+      };
+    }
+
+    return {
+      name: typeof error,
+      message: String(error),
+      stack: null,
+      cause: null,
+    };
+  };
+
+  const environmentSnapshot = () => ({
+    href: window.location.href,
+    origin: window.location.origin,
+    crossOriginIsolated: window.crossOriginIsolated === true,
+    hasSharedArrayBuffer: typeof window.SharedArrayBuffer === "function",
+    hasWorker: typeof window.Worker === "function",
+    hasAtomics: typeof window.Atomics === "object",
+  });
+
+  const writeJson = (element, value) => {
+    element.textContent = JSON.stringify(value, null, 2);
+  };
+
+  const updateFacts = (root) => {
+    const snapshot = environmentSnapshot();
+    root.querySelector("[data-origin]").textContent = snapshot.origin;
+    root.querySelector("[data-cross-origin-isolated]").textContent = String(
+      snapshot.crossOriginIsolated,
+    );
+    root.querySelector("[data-shared-array-buffer]").textContent = String(
+      snapshot.hasSharedArrayBuffer,
+    );
+    root.querySelector("[data-worker]").textContent = String(snapshot.hasWorker);
+  };
+
+  const setStatus = (root, label, tone) => {
+    const node = root.querySelector("[data-status]");
+    node.textContent = label;
+    node.dataset.tone = tone;
+  };
+
+  const resolveFromBase = (baseUrl, fileName) => {
+    const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+    return new URL(fileName, new URL(normalizedBase, window.location.origin)).href;
+  };
+
+  for (const root of sections) {
+    const runButton = root.querySelector("[data-run]");
+    const output = root.querySelector("[data-output]");
+    const baseUrl = root.getAttribute("data-base-url") || "/";
+
+    let running = false;
+
+    const runCheck = async () => {
+      if (running) return;
+
+      running = true;
+      runButton.disabled = true;
+      updateFacts(root);
+      setStatus(root, "Running", "running");
+
+      const startedAt = window.performance.now();
+      let pool;
+
+      try {
+        const knittingUrl = resolveFromBase(baseUrl, "knitting.js");
+        const taskUrl = resolveFromBase(baseUrl, "knitting-browser-debug-task.js");
+
+        writeJson(output, {
+          phase: "loading",
+          knittingUrl,
+          taskUrl,
+          environment: environmentSnapshot(),
+        });
+
+        const knitting = await import(knittingUrl);
+        const tasks = await import(taskUrl);
+
+        pool = knitting.createPool({ threads: 1 })({
+          browserRoundTrip: tasks.browserRoundTrip,
+        });
+
+        const payload = {
+          text: "stockinette",
+          numbers: [2, 3, 5, 8, 13],
+          requestedFrom: window.location.href,
+        };
+
+        const result = await pool.call.browserRoundTrip(payload);
+        const durationMs = Number((window.performance.now() - startedAt).toFixed(2));
+
+        setStatus(root, "Passed", "success");
+        writeJson(output, {
+          ok: true,
+          durationMs,
+          exports: {
+            knitting: Object.keys(knitting).sort(),
+            tasks: Object.keys(tasks).sort(),
+          },
+          environment: environmentSnapshot(),
+          result,
+        });
+      } catch (error) {
+        const durationMs = Number((window.performance.now() - startedAt).toFixed(2));
+        const environment = environmentSnapshot();
+        const hints = [];
+
+        if (!environment.crossOriginIsolated) {
+          hints.push(
+            "crossOriginIsolated is false. Browsers usually require COOP/COEP headers for shared-memory features.",
+          );
+        }
+
+        if (!environment.hasSharedArrayBuffer) {
+          hints.push("SharedArrayBuffer is unavailable in this browser context.");
+        }
+
+        setStatus(root, "Failed", "error");
+        writeJson(output, {
+          ok: false,
+          durationMs,
+          environment,
+          error: serializeError(error),
+          hints,
+        });
+      } finally {
+        try {
+          await pool?.shutdown?.();
+        } catch {}
+
+        runButton.disabled = false;
+        running = false;
+      }
+    };
+
+    runButton.addEventListener("click", () => {
+      void runCheck();
+    });
+
+    updateFacts(root);
+    void runCheck();
+  }
+</script>
+
+<style>
+  .browser-knitting-debug {
+    --debug-surface: color-mix(in srgb, var(--sl-color-bg) 90%, #dbeafe 10%);
+    --debug-border: color-mix(in srgb, #2563eb 18%, transparent);
+    --debug-muted: color-mix(in srgb, var(--sl-color-text) 64%, transparent);
+    --debug-code-bg: color-mix(in srgb, var(--sl-color-black) 8%, var(--sl-color-bg));
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--debug-border);
+    border-radius: 1rem;
+    background:
+      radial-gradient(circle at top right, color-mix(in srgb, #60a5fa 16%, transparent), transparent 38%),
+      linear-gradient(180deg, var(--debug-surface), color-mix(in srgb, var(--debug-surface) 90%, white 10%));
+  }
+
+  .browser-knitting-debug__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .browser-knitting-debug__eyebrow {
+    margin: 0 0 0.35rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #2563eb;
+    font-weight: 700;
+  }
+
+  .browser-knitting-debug__header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .browser-knitting-debug__copy {
+    margin: 0.45rem 0 0;
+    max-width: 60ch;
+    color: var(--debug-muted);
+  }
+
+  .browser-knitting-debug__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: end;
+  }
+
+  .browser-knitting-debug__controls button {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    background: linear-gradient(135deg, #2563eb, #0f766e);
+    color: white;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .browser-knitting-debug__controls button:disabled {
+    cursor: wait;
+    opacity: 0.7;
+  }
+
+  .browser-knitting-debug__status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.3rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+
+  .browser-knitting-debug__status[data-tone="idle"] {
+    background: color-mix(in srgb, var(--sl-color-gray-5) 18%, transparent);
+    color: var(--sl-color-text);
+  }
+
+  .browser-knitting-debug__status[data-tone="running"] {
+    background: color-mix(in srgb, #f59e0b 18%, transparent);
+    color: #92400e;
+    border-color: color-mix(in srgb, #f59e0b 36%, transparent);
+  }
+
+  .browser-knitting-debug__status[data-tone="success"] {
+    background: color-mix(in srgb, #16a34a 18%, transparent);
+    color: #166534;
+    border-color: color-mix(in srgb, #16a34a 36%, transparent);
+  }
+
+  .browser-knitting-debug__status[data-tone="error"] {
+    background: color-mix(in srgb, #dc2626 16%, transparent);
+    color: #991b1b;
+    border-color: color-mix(in srgb, #dc2626 36%, transparent);
+  }
+
+  .browser-knitting-debug__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .browser-knitting-debug__facts div {
+    padding: 0.8rem 0.9rem;
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, white 35%, transparent);
+    border: 1px solid color-mix(in srgb, var(--debug-border) 70%, transparent);
+  }
+
+  .browser-knitting-debug__facts dt {
+    margin: 0 0 0.25rem;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--debug-muted);
+  }
+
+  .browser-knitting-debug__facts dd {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92rem;
+    word-break: break-word;
+  }
+
+  .browser-knitting-debug__output {
+    margin: 0;
+    padding: 1rem;
+    border-radius: 0.9rem;
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--debug-border) 70%, transparent);
+    background: var(--debug-code-bg);
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  :global(:root[data-theme="dark"]) .browser-knitting-debug {
+    --debug-surface: color-mix(in srgb, var(--sl-color-bg) 92%, #082f49 8%);
+    --debug-border: color-mix(in srgb, #7dd3fc 26%, transparent);
+    --debug-muted: color-mix(in srgb, white 68%, transparent);
+    --debug-code-bg: color-mix(in srgb, #020617 88%, #0f172a 12%);
+  }
+
+  :global(:root[data-theme="dark"]) .browser-knitting-debug__facts div {
+    background: color-mix(in srgb, white 6%, transparent);
+  }
+
+  :global(:root[data-theme="dark"]) .browser-knitting-debug__status[data-tone="running"] {
+    color: #fcd34d;
+  }
+
+  :global(:root[data-theme="dark"]) .browser-knitting-debug__status[data-tone="success"] {
+    color: #86efac;
+  }
+
+  :global(:root[data-theme="dark"]) .browser-knitting-debug__status[data-tone="error"] {
+    color: #fca5a5;
+  }
+
+  @media (max-width: 720px) {
+    .browser-knitting-debug__header {
+      flex-direction: column;
+    }
+
+    .browser-knitting-debug__controls {
+      justify-content: start;
+    }
+  }
+</style>

@@ -1,10 +1,304 @@
-// src/worker/loop.ts
-import {
-  isMainThread as isMainThread2,
-  workerData,
-  MessageChannel,
-  parentPort
-} from "node:worker_threads";
+// src/common/runtime.ts
+var globals = globalThis;
+var IS_DENO = typeof globals.Deno?.version?.deno === "string";
+var IS_BUN = typeof globals.Bun?.version === "string";
+var IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
+var RUNTIME = IS_DENO ? "deno" : IS_BUN ? "bun" : IS_NODE ? "node" : "unknown";
+var SET_IMMEDIATE = typeof globals.setImmediate === "function" ? globals.setImmediate : undefined;
+var WASM_MEMORY_PAGE_BYTES = 64 * 1024;
+var wasmSharedBufferMemory = new WeakMap;
+var wasmSharedBufferMaxByteLength = new WeakMap;
+var hasSharedWasmMemory = (() => {
+  if (typeof WebAssembly?.Memory !== "function")
+    return false;
+  try {
+    new WebAssembly.Memory({ initial: 0, maximum: 1, shared: true });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+var roundupWasmPages = (byteLength) => Math.ceil(Math.max(0, byteLength) / WASM_MEMORY_PAGE_BYTES);
+var createSharedWasmBuffer = (byteLength, maxByteLength) => {
+  const memory = new WebAssembly.Memory({
+    initial: roundupWasmPages(byteLength),
+    maximum: Math.max(roundupWasmPages(byteLength), roundupWasmPages(maxByteLength)),
+    shared: true
+  });
+  const buffer = memory.buffer;
+  wasmSharedBufferMemory.set(buffer, memory);
+  wasmSharedBufferMaxByteLength.set(buffer, maxByteLength);
+  return buffer;
+};
+var createWasmSharedArrayBuffer = (byteLength, maxByteLength = byteLength) => {
+  if (hasSharedWasmMemory) {
+    return createSharedWasmBuffer(byteLength, maxByteLength);
+  }
+  return new SharedArrayBuffer(byteLength);
+};
+var HAS_NATIVE_SAB_GROW = typeof SharedArrayBuffer === "function" && typeof SharedArrayBuffer.prototype.grow === "function";
+var HAS_SAB_GROW = HAS_NATIVE_SAB_GROW || hasSharedWasmMemory;
+var createSharedArrayBuffer = (byteLength, maxByteLength) => {
+  if (HAS_NATIVE_SAB_GROW && typeof maxByteLength === "number") {
+    return new SharedArrayBuffer(byteLength, { maxByteLength });
+  }
+  if (hasSharedWasmMemory && typeof maxByteLength === "number") {
+    return createSharedWasmBuffer(byteLength, maxByteLength);
+  }
+  return new SharedArrayBuffer(byteLength);
+};
+var isGrowableSharedArrayBuffer = (sab) => {
+  const value = sab;
+  return HAS_NATIVE_SAB_GROW && typeof value.grow === "function" && value.growable === true || wasmSharedBufferMemory.has(sab);
+};
+var sharedArrayBufferMaxByteLength = (sab) => {
+  const value = sab;
+  if (typeof value.maxByteLength === "number") {
+    return value.maxByteLength;
+  }
+  return wasmSharedBufferMaxByteLength.get(sab) ?? sab.byteLength;
+};
+var growSharedArrayBuffer = (sab, byteLength) => {
+  const native = sab;
+  if (typeof native.grow === "function") {
+    native.grow(byteLength);
+    return sab;
+  }
+  const memory = wasmSharedBufferMemory.get(sab);
+  if (memory == null) {
+    throw new TypeError("SharedArrayBuffer is not growable");
+  }
+  const currentBuffer = memory.buffer;
+  if (currentBuffer.byteLength >= byteLength) {
+    return currentBuffer;
+  }
+  const targetPages = roundupWasmPages(byteLength);
+  const currentPages = roundupWasmPages(currentBuffer.byteLength);
+  memory.grow(targetPages - currentPages);
+  const nextBuffer = memory.buffer;
+  const maxByteLength = wasmSharedBufferMaxByteLength.get(sab) ?? currentBuffer.byteLength;
+  wasmSharedBufferMemory.set(nextBuffer, memory);
+  wasmSharedBufferMaxByteLength.set(nextBuffer, maxByteLength);
+  return nextBuffer;
+};
+
+// src/common/node-compat.ts
+var hiddenImport = Function("specifier", "return import(specifier);");
+var importNodeModule = async (specifier) => {
+  if (!IS_NODE)
+    return;
+  try {
+    return await hiddenImport(specifier);
+  } catch {
+    return;
+  }
+};
+var rawPathModule = await importNodeModule("node:path");
+var rawFsModule = await importNodeModule("node:fs");
+var rawUrlModule = await importNodeModule("node:url");
+var pathModule = rawPathModule?.default ?? rawPathModule;
+var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[/\\]/;
+var WINDOWS_UNC_PATH = /^[/\\]{2}[^/\\]+[/\\][^/\\]+/;
+var hostIsWindows = (() => {
+  try {
+    if (typeof process !== "undefined")
+      return process.platform === "win32";
+  } catch {}
+  const g = globalThis;
+  return g.Deno?.build?.os === "windows";
+})();
+var looksWindowsPath = (value) => hostIsWindows || WINDOWS_DRIVE_PATH.test(value) || WINDOWS_UNC_PATH.test(value);
+var normalizePathSeparators = (value) => value.replace(/\\/g, "/");
+var splitRoot = (value) => {
+  const normalized = normalizePathSeparators(value);
+  if (WINDOWS_UNC_PATH.test(value)) {
+    const [, host = "", share = "", rest = ""] = normalized.match(/^\/\/([^/]+)\/([^/]+)(\/.*)?$/) ?? [];
+    return {
+      root: `//${host}/${share}`,
+      rest: rest.replace(/^\/+/, "")
+    };
+  }
+  if (WINDOWS_DRIVE_PATH.test(value)) {
+    return {
+      root: normalized.slice(0, 2).toUpperCase() + "/",
+      rest: normalized.slice(3)
+    };
+  }
+  if (normalized.startsWith("/")) {
+    return {
+      root: "/",
+      rest: normalized.replace(/^\/+/, "")
+    };
+  }
+  return {
+    root: "",
+    rest: normalized
+  };
+};
+var normalizeJoinedPath = (value) => {
+  const { root, rest } = splitRoot(value);
+  const parts = rest.split("/");
+  const stack = [];
+  for (const part of parts) {
+    if (!part || part === ".")
+      continue;
+    if (part === "..") {
+      if (stack.length > 0 && stack[stack.length - 1] !== "..") {
+        stack.pop();
+      } else if (!root) {
+        stack.push("..");
+      }
+      continue;
+    }
+    stack.push(part);
+  }
+  if (root) {
+    const joined = stack.join("/");
+    return joined.length > 0 ? `${root}${joined}` : root;
+  }
+  return stack.length > 0 ? stack.join("/") : ".";
+};
+var fallbackIsAbsolute = (value) => {
+  if (value.length === 0)
+    return false;
+  const normalized = normalizePathSeparators(value);
+  return normalized.startsWith("/") || WINDOWS_DRIVE_PATH.test(value) || WINDOWS_UNC_PATH.test(value);
+};
+var fallbackResolve = (...segments) => {
+  let resolved = "";
+  for (let i = segments.length - 1;i >= 0; i--) {
+    const segment = segments[i];
+    if (!segment)
+      continue;
+    resolved = resolved ? `${segment}/${resolved}` : segment;
+    if (fallbackIsAbsolute(segment))
+      break;
+  }
+  if (!fallbackIsAbsolute(resolved)) {
+    resolved = `/${resolved}`;
+  }
+  return normalizeJoinedPath(resolved);
+};
+var fallbackJoin = (...segments) => normalizeJoinedPath(segments.filter(Boolean).join("/"));
+var fallbackDirname = (value) => {
+  const normalized = normalizeJoinedPath(value);
+  const { root, rest } = splitRoot(normalized);
+  if (!rest)
+    return root || ".";
+  const parts = rest.split("/");
+  parts.pop();
+  if (root) {
+    return parts.length > 0 ? `${root}${parts.join("/")}` : root;
+  }
+  return parts.length > 0 ? parts.join("/") : ".";
+};
+var fallbackBasename = (value) => {
+  const normalized = normalizeJoinedPath(value);
+  const { rest } = splitRoot(normalized);
+  const parts = rest.split("/");
+  return parts[parts.length - 1] ?? "";
+};
+var splitRelativeParts = (value) => {
+  const normalized = normalizeJoinedPath(value);
+  const { rest } = splitRoot(normalized);
+  if (!rest)
+    return [];
+  return rest.split("/").filter(Boolean);
+};
+var fallbackRelative = (from, to) => {
+  const fromResolved = fallbackResolve(from);
+  const toResolved = fallbackResolve(to);
+  const fromRoot = splitRoot(fromResolved).root;
+  const toRoot = splitRoot(toResolved).root;
+  if (fromRoot !== toRoot)
+    return toResolved;
+  const fromParts = splitRelativeParts(fromResolved);
+  const toParts = splitRelativeParts(toResolved);
+  let common = 0;
+  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+    common++;
+  }
+  const up = new Array(fromParts.length - common).fill("..");
+  const down = toParts.slice(common);
+  const out = [...up, ...down].join("/");
+  return out.length > 0 ? out : "";
+};
+var encodeFilePath = (value) => encodeURI(value).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var fallbackFileURLToPath = (value) => {
+  const url = value instanceof URL ? value : new URL(value);
+  if (url.protocol !== "file:") {
+    throw new TypeError("Expected a file URL");
+  }
+  let pathname = decodeURIComponent(url.pathname);
+  if (/^\/[A-Za-z]:/.test(pathname))
+    pathname = pathname.slice(1);
+  if (url.host.length > 0) {
+    return `//${url.host}${pathname}`;
+  }
+  return looksWindowsPath(pathname) ? pathname.replace(/\//g, "\\") : pathname;
+};
+var fallbackPathToFileURL = (value) => {
+  if (WINDOWS_UNC_PATH.test(value)) {
+    const normalized2 = normalizePathSeparators(value).replace(/^\/+/, "");
+    return new URL(`file://${encodeFilePath(normalized2)}`);
+  }
+  if (WINDOWS_DRIVE_PATH.test(value)) {
+    const normalized2 = normalizePathSeparators(value);
+    return new URL(`file:///${encodeFilePath(normalized2)}`);
+  }
+  const absolute = fallbackIsAbsolute(value) ? value : fallbackResolve(value);
+  const normalized = normalizePathSeparators(absolute);
+  return new URL(`file://${encodeFilePath(normalized.startsWith("/") ? normalized : `/${normalized}`)}`);
+};
+var pathResolve = pathModule?.resolve?.bind(pathModule) ?? fallbackResolve;
+var pathJoin = pathModule?.join?.bind(pathModule) ?? fallbackJoin;
+var pathDirname = pathModule?.dirname?.bind(pathModule) ?? fallbackDirname;
+var pathBasename = pathModule?.basename?.bind(pathModule) ?? fallbackBasename;
+var pathRelative = pathModule?.relative?.bind(pathModule) ?? fallbackRelative;
+var pathIsAbsolute = pathModule?.isAbsolute?.bind(pathModule) ?? fallbackIsAbsolute;
+var fileURLToPathCompat = rawUrlModule?.fileURLToPath ?? fallbackFileURLToPath;
+var pathToFileURLCompat = rawUrlModule?.pathToFileURL ?? fallbackPathToFileURL;
+var existsSyncCompat = rawFsModule?.existsSync;
+var realpathSyncCompat = rawFsModule?.realpathSync?.native ?? rawFsModule?.realpathSync;
+
+// src/common/worker-runtime.ts
+var workerThreads = await importNodeModule("node:worker_threads");
+var isWebWorkerScope = () => {
+  const scopeCtor = globalThis.WorkerGlobalScope;
+  if (typeof scopeCtor !== "function")
+    return false;
+  try {
+    return globalThis instanceof scopeCtor;
+  } catch {
+    return false;
+  }
+};
+var RUNTIME_WORKER = workerThreads?.Worker ?? globalThis.Worker;
+var RUNTIME_MESSAGE_CHANNEL = workerThreads?.MessageChannel ?? globalThis.MessageChannel;
+var HAS_NODE_WORKER_THREADS = workerThreads != null;
+var RUNTIME_IS_MAIN_THREAD = workerThreads?.isMainThread ?? !isWebWorkerScope();
+var RUNTIME_WORKER_DATA = workerThreads?.workerData;
+var RUNTIME_PARENT_PORT = workerThreads?.parentPort ?? undefined;
+var createRuntimeMessageChannel = () => {
+  if (typeof RUNTIME_MESSAGE_CHANNEL !== "function") {
+    throw new Error("MessageChannel is not available in this runtime");
+  }
+  return new RUNTIME_MESSAGE_CHANNEL;
+};
+
+// src/common/shared-buffer-region.ts
+var isSharedBufferRegion = (value) => {
+  if (!value || typeof value !== "object")
+    return false;
+  const candidate = value;
+  return candidate.sab instanceof SharedArrayBuffer && typeof candidate.byteOffset === "number" && Number.isInteger(candidate.byteOffset) && candidate.byteOffset >= 0 && typeof candidate.byteLength === "number" && Number.isInteger(candidate.byteLength) && candidate.byteLength >= 0;
+};
+var isSharedBufferSource = (value) => value instanceof SharedArrayBuffer || isSharedBufferRegion(value);
+var toSharedBufferRegion = (value) => value instanceof SharedArrayBuffer ? {
+  sab: value,
+  byteOffset: 0,
+  byteLength: value.byteLength
+} : value;
 
 // src/ipc/tools/RingQueue.ts
 class RingQueue {
@@ -143,9 +437,10 @@ class RingQueue {
 // src/memory/regionRegistry.ts
 var SLOT_META_PACKED_MASK = 4294967264;
 var register = ({ lockSector }) => {
-  const lockSAB = lockSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
-  const hostBits = new Int32Array(lockSAB, PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES, 1);
-  const workerBits = new Int32Array(lockSAB, PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES, 1);
+  const lockRegion = toSharedBufferRegion(lockSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
+  const lockSAB = lockRegion.sab;
+  const hostBits = new Int32Array(lockSAB, lockRegion.byteOffset + PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES, 1);
+  const workerBits = new Int32Array(lockSAB, lockRegion.byteOffset + PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES, 1);
   const startAndIndex = new Uint32Array(32 /* slots */);
   const size64bit = new Uint32Array(32 /* slots */);
   const clz32 = Math.clz32;
@@ -157,8 +452,27 @@ var register = ({ lockSector }) => {
   let usedBits = 0 | 0;
   let hostLast = 0 | 0;
   let workerLast = 0 | 0;
-  let updateTableCounter = 0;
-  const startAndIndexToArray = (length) => Array.from(startAndIndex.subarray(0, length));
+  const startAndIndexToArray = (length) => startAndIndex.slice(0, length);
+  const compactFreeBitsStable = (b, freeBits) => {
+    const sai = startAndIndex;
+    let w = 0 | 0;
+    b = b | 0;
+    freeBits = freeBits >>> 0;
+    for (let r = 0;r < b; r++) {
+      const v = sai[r];
+      if (v === EMPTY)
+        continue;
+      if ((freeBits & 1 << (v & SLOT_MASK)) !== 0)
+        continue;
+      if (w !== r)
+        sai[w] = v;
+      w++;
+    }
+    const live = w;
+    for (;w < b; w++)
+      sai[w] = EMPTY;
+    return live;
+  };
   const updateTable = () => {
     const w = Atomics.load(workerBits, 0) | 0;
     const state = (hostLast ^ w) >>> 0;
@@ -173,30 +487,136 @@ var register = ({ lockSector }) => {
     freeBits &= usedBits;
     if (freeBits === 0)
       return;
-    const sai = startAndIndex;
-    let nextLength = 0 | 0;
-    for (let i = 0;i < tableLength; i++) {
-      const v = sai[i];
-      if (v === EMPTY)
-        continue;
-      if ((freeBits & 1 << (v & SLOT_MASK)) !== 0)
-        continue;
-      sai[nextLength++] = v;
-    }
     usedBits &= ~freeBits;
-    tableLength = nextLength;
+    tableLength = compactFreeBitsStable(tableLength, freeBits);
   };
   const findAndInsert = (task, size) => {
-    const freeBits = ~usedBits >>> 0;
-    const freeBit = (freeBits & -freeBits) >>> 0;
-    if (freeBit === 0)
-      return -1;
-    const tl = tableLength;
-    if (tl >= 32 /* slots */)
-      return -1;
-    const slotIndex = 31 - clz32(freeBit);
     const sai = startAndIndex;
     const sz = size64bit;
+    let tl = tableLength;
+    let insertAt = -1;
+    let insertStart = 0;
+    let prevEnd = 0;
+    let didCompactScan = false;
+    if (tl === 0 && usedBits === 0) {
+      sai[0] = 0;
+      sz[0] = size;
+      task[3 /* Start */] = 0;
+      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | 0) >>> 0;
+      tableLength = 1;
+      usedBits = 1;
+      hostLast ^= 1;
+      return 0;
+    }
+    if (tl !== 0) {
+      const w = Atomics.load(workerBits, 0) | 0;
+      let freeBits = ~(hostLast ^ w) >>> 0;
+      if (freeBits !== 0)
+        freeBits &= usedBits;
+      if (freeBits === EMPTY) {
+        tableLength = 0;
+        usedBits = 0 | 0;
+        tl = 0;
+      } else if (freeBits !== 0) {
+        for (let i = 0;i < tl; i++) {
+          const v = sai[i];
+          const reclaimedSlot = v & SLOT_MASK;
+          const reclaimedBit = 1 << reclaimedSlot;
+          if ((freeBits & reclaimedBit) === 0)
+            continue;
+          if (sz[reclaimedSlot] >>> 0 !== size >>> 0)
+            continue;
+          const availableBits2 = ~usedBits >>> 0;
+          const freeBit2 = (availableBits2 & -availableBits2) >>> 0;
+          if (freeBit2 === 0)
+            return -1;
+          const slotIndex2 = 31 - clz32(freeBit2);
+          const start = v & START_MASK;
+          sai[i] = (start | slotIndex2) >>> 0;
+          sz[slotIndex2] = size;
+          task[3 /* Start */] = start;
+          task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex2) >>> 0;
+          usedBits = usedBits & ~reclaimedBit | freeBit2;
+          hostLast ^= freeBit2;
+          return slotIndex2;
+        }
+      }
+      if (tl !== 0 && freeBits !== 0 && freeBits !== EMPTY) {
+        didCompactScan = true;
+        let write = 0;
+        for (let read = 0;read < tl; read++) {
+          const v = sai[read];
+          const slot = v & SLOT_MASK;
+          if ((freeBits & 1 << slot) !== 0)
+            continue;
+          const curStart = v & START_MASK;
+          if (insertAt === -1 && curStart - prevEnd >>> 0 >= size >>> 0) {
+            insertAt = write;
+            insertStart = prevEnd;
+          }
+          if (write !== read)
+            sai[write] = v;
+          write++;
+          prevEnd = curStart + (sz[slot] >>> 0) >>> 0;
+        }
+        for (let i = write;i < tl; i++)
+          sai[i] = EMPTY;
+        if (freeBits !== 0)
+          usedBits &= ~freeBits;
+        tableLength = tl = write;
+      }
+    }
+    if (tl >= 32 /* slots */)
+      return -1;
+    const availableBits = ~usedBits >>> 0;
+    const freeBit = (availableBits & -availableBits) >>> 0;
+    if (freeBit === 0)
+      return -1;
+    const slotIndex = 31 - clz32(freeBit);
+    if (!didCompactScan && tl !== 0) {
+      const firstStart = sai[0] & START_MASK;
+      if (firstStart >= size >>> 0) {
+        for (let i = tl;i > 0; i--)
+          sai[i] = sai[i - 1];
+        sai[0] = slotIndex;
+        sz[slotIndex] = size;
+        task[3 /* Start */] = 0;
+        task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+        tableLength = tl + 1;
+        usedBits |= freeBit;
+        hostLast ^= freeBit;
+        return slotIndex;
+      }
+      for (let at = 0;at + 1 < tl; at++) {
+        const cur = sai[at];
+        const curStart = cur & START_MASK;
+        const curEnd = curStart + (sz[cur & SLOT_MASK] >>> 0) >>> 0;
+        const nextStart = sai[at + 1] & START_MASK;
+        if (nextStart - curEnd >>> 0 < size >>> 0)
+          continue;
+        for (let i = tl;i > at + 1; i--)
+          sai[i] = sai[i - 1];
+        sai[at + 1] = (curEnd | slotIndex) >>> 0;
+        sz[slotIndex] = size;
+        task[3 /* Start */] = curEnd;
+        task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+        tableLength = tl + 1;
+        usedBits |= freeBit;
+        hostLast ^= freeBit;
+        return slotIndex;
+      }
+      const last = sai[tl - 1];
+      const lastStart = last & START_MASK;
+      const newStart = lastStart + (sz[last & SLOT_MASK] >>> 0) >>> 0;
+      sai[tl] = (newStart | slotIndex) >>> 0;
+      sz[slotIndex] = size;
+      task[3 /* Start */] = newStart;
+      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+      tableLength = tl + 1;
+      usedBits |= freeBit;
+      hostLast ^= freeBit;
+      return slotIndex;
+    }
     if (tl === 0) {
       sai[0] = slotIndex;
       sz[slotIndex] = size;
@@ -207,42 +627,21 @@ var register = ({ lockSector }) => {
       hostLast ^= freeBit;
       return slotIndex;
     }
-    const firstStart = sai[0] & START_MASK;
-    if (firstStart >= size >>> 0) {
-      sai.copyWithin(1, 0, tl);
-      sai[0] = slotIndex;
+    if (insertAt !== -1) {
+      for (let i = tl;i > insertAt; i--)
+        sai[i] = sai[i - 1];
+      sai[insertAt] = (insertStart | slotIndex) >>> 0;
       sz[slotIndex] = size;
-      task[3 /* Start */] = 0;
+      task[3 /* Start */] = insertStart;
       task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
       tableLength = tl + 1;
       usedBits |= freeBit;
       hostLast ^= freeBit;
       return slotIndex;
     }
-    let prevEnd = firstStart + (sz[sai[0] & SLOT_MASK] >>> 0) >>> 0;
-    for (let at = 0;at + 1 < tl; at++) {
-      const next = sai[at + 1];
-      const nextStart = next & START_MASK;
-      if (nextStart - prevEnd >>> 0 < size >>> 0) {
-        prevEnd = nextStart + (sz[next & SLOT_MASK] >>> 0) >>> 0;
-        continue;
-      }
-      sai.copyWithin(at + 2, at + 1, tl);
-      sai[at + 1] = (prevEnd | slotIndex) >>> 0;
-      sz[slotIndex] = size;
-      task[3 /* Start */] = prevEnd;
-      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
-      tableLength = tl + 1;
-      usedBits |= freeBit;
-      hostLast ^= freeBit;
-      return slotIndex;
-    }
-    const last = sai[tl - 1];
-    const lastStart = last & START_MASK;
-    const newStart = lastStart + (sz[last & SLOT_MASK] >>> 0) >>> 0;
-    sai[tl] = (newStart | slotIndex) >>> 0;
+    sai[tl] = (prevEnd | slotIndex) >>> 0;
     sz[slotIndex] = size;
-    task[3 /* Start */] = newStart;
+    task[3 /* Start */] = prevEnd;
     task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
     tableLength = tl + 1;
     usedBits |= freeBit;
@@ -250,26 +649,15 @@ var register = ({ lockSector }) => {
     return slotIndex;
   };
   const allocTask = (task) => {
-    updateTable();
     const payloadLen = task[5 /* PayloadLen */] | 0;
     const size = payloadLen + 63 & ~63;
     const slotIndex = findAndInsert(task, size);
-    if (slotIndex === -1)
-      return -1;
-    Atomics.store(hostBits, 0, hostLast);
+    hostBits[0] = hostLast;
     return slotIndex;
   };
   const setSlotLength = (slotIndex, payloadLen) => {
     slotIndex = slotIndex & TASK_SLOT_INDEX_MASK;
-    const bit = 1 << slotIndex;
-    if ((usedBits & bit) === 0)
-      return false;
-    const current = size64bit[slotIndex] >>> 0;
     const aligned = (payloadLen | 0) + 63 & ~63;
-    if (aligned < 0)
-      return false;
-    if (aligned >>> 0 > current)
-      return false;
     size64bit[slotIndex] = aligned >>> 0;
     return true;
   };
@@ -290,85 +678,198 @@ var register = ({ lockSector }) => {
   };
 };
 
-// src/memory/createSharedBufferIO.ts
-import { Buffer as NodeBuffer } from "node:buffer";
-
-// src/common/runtime.ts
-var globals = globalThis;
-var IS_DENO = typeof globals.Deno?.version?.deno === "string";
-var IS_BUN = typeof globals.Bun?.version === "string";
-var IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
-var RUNTIME = IS_DENO ? "deno" : IS_BUN ? "bun" : IS_NODE ? "node" : "unknown";
-var SET_IMMEDIATE = typeof globals.setImmediate === "function" ? globals.setImmediate : undefined;
-var WASM_MEMORY_PAGE_BYTES = 64 * 1024;
-var wasmSharedBufferMemory = new WeakMap;
-var wasmSharedBufferMaxByteLength = new WeakMap;
-var hasSharedWasmMemory = (() => {
-  if (typeof WebAssembly?.Memory !== "function")
-    return false;
-  try {
-    new WebAssembly.Memory({ initial: 0, maximum: 1, shared: true });
-    return true;
-  } catch {
-    return false;
+// src/memory/byte-carpet.ts
+var BYTE_CARPET_ALIGN_BYTES = 64;
+var U32_BYTES = Uint32Array.BYTES_PER_ELEMENT;
+var toNonNegativeInteger = (value, label) => {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative integer`);
   }
-})();
-var roundupWasmPages = (byteLength) => Math.ceil(Math.max(0, byteLength) / WASM_MEMORY_PAGE_BYTES);
-var createSharedWasmBuffer = (byteLength, maxByteLength) => {
-  const memory = new WebAssembly.Memory({
-    initial: roundupWasmPages(byteLength),
-    maximum: Math.max(roundupWasmPages(byteLength), roundupWasmPages(maxByteLength)),
-    shared: true
+  return value;
+};
+var alignBytes = (value, alignment = BYTE_CARPET_ALIGN_BYTES) => {
+  const safeValue = toNonNegativeInteger(value, "value");
+  const safeAlignment = toNonNegativeInteger(alignment, "alignment");
+  if (safeAlignment === 0) {
+    throw new RangeError("alignment must be greater than zero");
+  }
+  return Math.ceil(safeValue / safeAlignment) * safeAlignment;
+};
+var makeSharedBufferRegion = (sab, byteOffset, byteLength) => ({
+  sab,
+  byteOffset: toNonNegativeInteger(byteOffset, "byteOffset"),
+  byteLength: toNonNegativeInteger(byteLength, "byteLength")
+});
+var createByteCarpet = ({
+  alignTo = BYTE_CARPET_ALIGN_BYTES,
+  startByteOffset = 0
+} = {}) => {
+  const defaultAlignment = toNonNegativeInteger(alignTo, "alignTo");
+  if (defaultAlignment === 0) {
+    throw new RangeError("alignTo must be greater than zero");
+  }
+  let cursor = toNonNegativeInteger(startByteOffset, "startByteOffset");
+  const slices = [];
+  const take = (name, byteLength, {
+    alignTo: sliceAlignment = defaultAlignment,
+    reserveByteLength
+  } = {}) => {
+    const logicalByteLength = toNonNegativeInteger(byteLength, `${name} byteLength`);
+    const safeSliceAlignment = toNonNegativeInteger(sliceAlignment, `${name} alignTo`);
+    if (safeSliceAlignment === 0) {
+      throw new RangeError(`${name} alignTo must be greater than zero`);
+    }
+    const reserved = reserveByteLength == null ? alignBytes(logicalByteLength, safeSliceAlignment) : toNonNegativeInteger(reserveByteLength, `${name} reserveByteLength`);
+    if (reserved < logicalByteLength) {
+      throw new RangeError(`${name} reserveByteLength must cover byteLength`);
+    }
+    const byteOffset = alignBytes(cursor, safeSliceAlignment);
+    const slice = {
+      name,
+      byteOffset,
+      byteLength: logicalByteLength,
+      reservedByteLength: reserved
+    };
+    slices.push(slice);
+    cursor = byteOffset + reserved;
+    return slice;
+  };
+  return {
+    slices,
+    take,
+    byteLength: () => cursor,
+    bind: (sab, slice) => makeSharedBufferRegion(sab, slice.byteOffset, slice.byteLength)
+  };
+};
+var getStridedSlotOffsetU32 = ({
+  slotIndex,
+  slotStrideU32,
+  baseU32 = 0,
+  extraU32 = 0
+}) => slotIndex * slotStrideU32 + baseU32 + extraU32;
+var getStridedSlotByteOffset = ({
+  slotIndex,
+  slotStrideU32,
+  baseByteOffset = 0,
+  baseU32 = 0,
+  extraU32 = 0
+}) => baseByteOffset + getStridedSlotOffsetU32({
+  slotIndex,
+  slotStrideU32,
+  baseU32,
+  extraU32
+}) * U32_BYTES;
+var getStridedRegionSpanBytes = ({
+  slotCount,
+  slotStrideU32,
+  slotLengthU32,
+  baseU32 = 0
+}) => {
+  const safeSlotCount = toNonNegativeInteger(slotCount, "slotCount");
+  if (safeSlotCount === 0)
+    return 0;
+  return (getStridedSlotOffsetU32({
+    slotIndex: safeSlotCount - 1,
+    slotStrideU32,
+    baseU32
+  }) + slotLengthU32) * U32_BYTES;
+};
+var getInterleavedSlotStrideU32 = (slotStrideU32) => slotStrideU32 * 2;
+var getHeaderBlockByteLength = ({
+  slotCount,
+  slotStrideU32,
+  queues = 1,
+  alignTo = BYTE_CARPET_ALIGN_BYTES
+}) => alignBytes(slotCount * slotStrideU32 * U32_BYTES * queues, alignTo);
+var createInterleavedHeaderPair = ({
+  sab,
+  byteOffset,
+  slotCount,
+  slotStrideU32
+}) => {
+  const headerSlotStrideU32 = getInterleavedSlotStrideU32(slotStrideU32);
+  const slotBytes = slotStrideU32 * U32_BYTES;
+  const spanBytes = getStridedRegionSpanBytes({
+    slotCount,
+    slotStrideU32: headerSlotStrideU32,
+    slotLengthU32: slotStrideU32
   });
-  const buffer = memory.buffer;
-  wasmSharedBufferMemory.set(buffer, memory);
-  wasmSharedBufferMaxByteLength.set(buffer, maxByteLength);
-  return buffer;
+  return {
+    headerSlotStrideU32,
+    requestHeaders: makeSharedBufferRegion(sab, byteOffset, spanBytes),
+    returnHeaders: makeSharedBufferRegion(sab, byteOffset + slotBytes, spanBytes)
+  };
 };
-var HAS_NATIVE_SAB_GROW = typeof SharedArrayBuffer === "function" && typeof SharedArrayBuffer.prototype.grow === "function";
-var HAS_SAB_GROW = HAS_NATIVE_SAB_GROW || hasSharedWasmMemory;
-var createSharedArrayBuffer = (byteLength, maxByteLength) => {
-  if (HAS_NATIVE_SAB_GROW && typeof maxByteLength === "number") {
-    return new SharedArrayBuffer(byteLength, { maxByteLength });
+var createLockControlCarpet = ({
+  signalBytes,
+  abortBytes,
+  lockSectorBytes,
+  headerSlotStrideU32,
+  slotCount,
+  headerLayout = "interleaved",
+  alignTo = BYTE_CARPET_ALIGN_BYTES,
+  createBuffer = (byteLength) => new SharedArrayBuffer(byteLength)
+}) => {
+  const carpet = createByteCarpet({ alignTo });
+  const signalsSlice = carpet.take("signals", signalBytes);
+  const requestLockSlice = carpet.take("requestLockSector", lockSectorBytes);
+  const returnLockSlice = carpet.take("returnLockSector", lockSectorBytes);
+  let requestHeadersSlice;
+  let returnHeadersSlice;
+  let interleavedHeadersSlice;
+  if (headerLayout === "interleaved") {
+    interleavedHeadersSlice = carpet.take("interleavedHeaders", getHeaderBlockByteLength({
+      slotCount,
+      slotStrideU32: headerSlotStrideU32,
+      queues: 2,
+      alignTo
+    }));
+  } else {
+    requestHeadersSlice = carpet.take("requestHeaders", getHeaderBlockByteLength({
+      slotCount,
+      slotStrideU32: headerSlotStrideU32,
+      alignTo
+    }));
+    returnHeadersSlice = carpet.take("returnHeaders", getHeaderBlockByteLength({
+      slotCount,
+      slotStrideU32: headerSlotStrideU32,
+      alignTo
+    }));
   }
-  if (hasSharedWasmMemory && typeof maxByteLength === "number") {
-    return createSharedWasmBuffer(byteLength, maxByteLength);
-  }
-  return new SharedArrayBuffer(byteLength);
-};
-var isGrowableSharedArrayBuffer = (sab) => {
-  const value = sab;
-  return HAS_NATIVE_SAB_GROW && typeof value.grow === "function" && value.growable === true || wasmSharedBufferMemory.has(sab);
-};
-var sharedArrayBufferMaxByteLength = (sab) => {
-  const value = sab;
-  if (typeof value.maxByteLength === "number") {
-    return value.maxByteLength;
-  }
-  return wasmSharedBufferMaxByteLength.get(sab) ?? sab.byteLength;
-};
-var growSharedArrayBuffer = (sab, byteLength) => {
-  const native = sab;
-  if (typeof native.grow === "function") {
-    native.grow(byteLength);
-    return sab;
-  }
-  const memory = wasmSharedBufferMemory.get(sab);
-  if (memory == null) {
-    throw new TypeError("SharedArrayBuffer is not growable");
-  }
-  const currentBuffer = memory.buffer;
-  if (currentBuffer.byteLength >= byteLength) {
-    return currentBuffer;
-  }
-  const targetPages = roundupWasmPages(byteLength);
-  const currentPages = roundupWasmPages(currentBuffer.byteLength);
-  memory.grow(targetPages - currentPages);
-  const nextBuffer = memory.buffer;
-  const maxByteLength = wasmSharedBufferMaxByteLength.get(sab) ?? currentBuffer.byteLength;
-  wasmSharedBufferMemory.set(nextBuffer, memory);
-  wasmSharedBufferMaxByteLength.set(nextBuffer, maxByteLength);
-  return nextBuffer;
+  const abortSignalsSlice = carpet.take("abortSignals", abortBytes);
+  const controlSAB = createBuffer(carpet.byteLength());
+  const signals = carpet.bind(controlSAB, signalsSlice);
+  const abortSignals = carpet.bind(controlSAB, abortSignalsSlice);
+  const requestLockSector = carpet.bind(controlSAB, requestLockSlice);
+  const returnLockSector = carpet.bind(controlSAB, returnLockSlice);
+  const headerPair = headerLayout === "interleaved" ? createInterleavedHeaderPair({
+    sab: controlSAB,
+    byteOffset: interleavedHeadersSlice.byteOffset,
+    slotCount,
+    slotStrideU32: headerSlotStrideU32
+  }) : {
+    headerSlotStrideU32,
+    requestHeaders: carpet.bind(controlSAB, requestHeadersSlice),
+    returnHeaders: carpet.bind(controlSAB, returnHeadersSlice)
+  };
+  return {
+    controlSAB,
+    signals,
+    abortSignals,
+    lock: {
+      headers: headerPair.requestHeaders,
+      headerSlotStrideU32: headerPair.headerSlotStrideU32,
+      lockSector: requestLockSector,
+      payloadSector: requestLockSector
+    },
+    returnLock: {
+      headers: headerPair.returnHeaders,
+      headerSlotStrideU32: headerPair.headerSlotStrideU32,
+      lockSector: returnLockSector,
+      payloadSector: returnLockSector
+    },
+    slices: carpet.slices
+  };
 };
 
 // src/memory/payload-config.ts
@@ -432,10 +933,12 @@ var resolvePayloadBufferOptions = ({
 // src/memory/createSharedBufferIO.ts
 var page = 1024 * 4;
 var textEncode = new TextEncoder;
+var textDecode = new TextDecoder;
 var DYNAMIC_HEADER_BYTES = 64;
 var DYNAMIC_SAFE_PADDING_BYTES = page;
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
-var canonicalDynamicUint8Array = (src) => src.constructor === Uint8Array ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
+var isExactUint8Array = (src) => src.constructor === Uint8Array;
+var canonicalDynamicUint8Array = (src) => isExactUint8Array(src) ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
 var createSharedDynamicBufferIO = ({
   sab,
   payloadConfig
@@ -447,14 +950,6 @@ var createSharedDynamicBufferIO = ({
   const canGrow = resolvedPayload.mode === "growable";
   let lockSAB = sab ?? (canGrow ? createSharedArrayBuffer(resolvedPayload.payloadInitialBytes, resolvedPayload.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayload.payloadInitialBytes));
   let u8 = new Uint8Array(lockSAB, DYNAMIC_HEADER_BYTES);
-  const requireBufferView = (buffer) => {
-    const view = NodeBuffer.from(buffer, DYNAMIC_HEADER_BYTES);
-    if (view.buffer !== buffer) {
-      throw new Error("Buffer view does not alias SharedArrayBuffer");
-    }
-    return view;
-  };
-  let buf = requireBufferView(lockSAB);
   let f64 = new Float64Array(lockSAB, DYNAMIC_HEADER_BYTES);
   const capacityBytes = () => lockSAB.byteLength - DYNAMIC_HEADER_BYTES;
   const ensureCapacity = (neededBytes) => {
@@ -468,13 +963,10 @@ var createSharedDynamicBufferIO = ({
       return false;
     }
     u8 = new Uint8Array(lockSAB, DYNAMIC_HEADER_BYTES, lockSAB.byteLength - DYNAMIC_HEADER_BYTES);
-    buf = requireBufferView(lockSAB);
     f64 = new Float64Array(lockSAB, DYNAMIC_HEADER_BYTES, lockSAB.byteLength - DYNAMIC_HEADER_BYTES >>> 3);
     return true;
   };
-  const readUtf8 = (start, end) => {
-    return buf.toString("utf8", start, end);
-  };
+  const readUtf8 = (start, end) => textDecode.decode(u8.subarray(start, end));
   const writeBinary = (src, start = 0) => {
     const bytes = canonicalDynamicUint8Array(src);
     if (!ensureCapacity(start + bytes.byteLength)) {
@@ -493,21 +985,10 @@ var createSharedDynamicBufferIO = ({
   };
   const readBytesCopy = (start, end) => u8.slice(start, end);
   const readBytesView = (start, end) => u8.subarray(start, end);
-  const readBytesBufferCopy = (start, end) => {
-    const length = Math.max(0, end - start | 0);
-    const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
-      return out;
-    buf.copy(out, 0, start, end);
-    return out;
-  };
+  const readBytesBufferCopy = (start, end) => readBytesCopy(start, end);
   const readBytesArrayBufferCopy = (start, end) => {
-    const length = Math.max(0, end - start | 0);
-    if (length === 0)
-      return new ArrayBuffer(0);
-    const out = NodeBuffer.allocUnsafeSlow(length);
-    buf.copy(out, 0, start, end);
-    return out.buffer;
+    const out = readBytesCopy(start, end);
+    return out.byteOffset === 0 && out.byteLength === out.buffer.byteLength ? out.buffer : out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
   };
   const read8BytesFloatCopy = (start, end) => f64.slice(start >>> 3, end >>> 3);
   const read8BytesFloatView = (start, end) => f64.subarray(start >>> 3, end >>> 3);
@@ -534,71 +1015,82 @@ var createSharedDynamicBufferIO = ({
   };
 };
 var createSharedStaticBufferIO = ({
-  headersBuffer
+  headersBuffer,
+  slotStrideU32
 }) => {
+  const buffer = headersBuffer instanceof Uint32Array ? headersBuffer.buffer : headersBuffer;
+  const baseByteOffset = headersBuffer instanceof Uint32Array ? headersBuffer.byteOffset : 0;
   const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
-  const slotStride = 0 /* header */ + 144 /* TotalBuff */;
-  const writableBytes = (144 /* TotalBuff */ - 8 /* Size */) * u32Bytes;
-  const slotOffset = (at) => at * slotStride + 0 /* header */;
-  const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
-  const arrU8Sec = Array.from({
-    length: 32 /* slots */
-  }, (_, i) => new Uint8Array(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrBuffSec = Array.from({ length: 32 /* slots */ }, (_, i) => NodeBuffer.from(headersBuffer, slotStartBytes(i), writableBytes));
-  const arrF64Sec = Array.from({
-    length: 32 /* slots */
-  }, (_, i) => new Float64Array(headersBuffer, slotStartBytes(i), writableBytes >>> 3));
+  const slotStride = slotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
+  const writableBytes = HEADER_STATIC_PAYLOAD_U32 * u32Bytes;
+  const baseU8 = new Uint8Array(buffer, baseByteOffset);
+  const baseF64 = new Float64Array(buffer, baseByteOffset, buffer.byteLength - baseByteOffset >>> 3);
+  const slotStartBytes = (at) => getStridedSlotByteOffset({
+    slotIndex: at,
+    slotStrideU32: slotStride,
+    baseByteOffset,
+    baseU32: 0 /* header */
+  });
+  const slotByteOffsets = new Uint32Array(32 /* slots */);
+  for (let i = 0;i < 32 /* slots */; i++) {
+    slotByteOffsets[i] = slotStartBytes(i) - baseByteOffset;
+  }
   const canWrite = (start, length) => (start | 0) >= 0 && start + length <= writableBytes;
   const writeUtf8 = (str, at) => {
-    const { read, written } = textEncode.encodeInto(str, arrU8Sec[at]);
+    const start = slotByteOffsets[at];
+    const { read, written } = textEncode.encodeInto(str, baseU8.subarray(start, start + writableBytes));
     if (read !== str.length)
       return -1;
     return written;
   };
   const readUtf8 = (start, end, at) => {
-    return arrBuffSec[at].toString("utf8", start, end);
+    const slotStart = slotByteOffsets[at];
+    return textDecode.decode(baseU8.subarray(slotStart + start, slotStart + end));
   };
   const writeBinary = (src, at, start = 0) => {
-    if (!canWrite(start, src.byteLength))
-      return -1;
-    arrU8Sec[at].set(src, start);
+    baseU8.set(src, slotByteOffsets[at] + start);
     return src.byteLength;
+  };
+  const writeExactUint8Array = (src, at, start = 0) => {
+    baseU8.set(src, slotByteOffsets[at] + start);
+    return src.byteLength;
+  };
+  const writeUint8Array = (src, at, start = 0) => {
+    if (!isExactUint8Array(src))
+      return -1;
+    return writeExactUint8Array(src, at, start);
   };
   const write8Binary = (src, at, start = 0) => {
     const bytes = src.byteLength;
     if (!canWrite(start, bytes))
       return -1;
-    arrF64Sec[at].set(src, start >>> 3);
+    baseF64.set(src, slotByteOffsets[at] + start >>> 3);
     return bytes;
   };
-  const readBytesCopy = (start, end, at) => arrU8Sec[at].slice(start, end);
-  const readBytesView = (start, end, at) => arrU8Sec[at].subarray(start, end);
-  const readBytesBufferCopy = (start, end, at) => {
-    const length = Math.max(0, end - start | 0);
-    const out = NodeBuffer.allocUnsafe(length);
-    if (length === 0)
-      return out;
-    arrBuffSec[at].copy(out, 0, start, end);
-    return out;
-  };
+  const readBytesCopy = (start, end, at) => baseU8.slice(slotByteOffsets[at] + start, slotByteOffsets[at] + end);
+  const readBytesView = (start, end, at) => baseU8.subarray(slotByteOffsets[at] + start, slotByteOffsets[at] + end);
+  const readBytesBufferCopy = (start, end, at) => readBytesCopy(start, end, at);
+  const readUint8ArrayBufferCopy = (start, end, at) => readBytesCopy(start, end, at);
+  const readUint8ArraySliceCopy = (start, end, at) => readBytesCopy(start, end, at);
+  const readUint8ArrayCopy = readUint8ArraySliceCopy;
   const readBytesArrayBufferCopy = (start, end, at) => {
-    const length = Math.max(0, end - start | 0);
-    if (length === 0)
-      return new ArrayBuffer(0);
-    const out = NodeBuffer.allocUnsafeSlow(length);
-    arrBuffSec[at].copy(out, 0, start, end);
-    return out.buffer;
+    const out = readBytesCopy(start, end, at);
+    return out.byteOffset === 0 && out.byteLength === out.buffer.byteLength ? out.buffer : out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
   };
-  const read8BytesFloatCopy = (start, end, at) => arrF64Sec[at].slice(start >>> 3, end >>> 3);
-  const read8BytesFloatView = (start, end, at) => arrF64Sec[at].subarray(start >>> 3, end >>> 3);
+  const read8BytesFloatCopy = (start, end, at) => baseF64.slice(slotByteOffsets[at] + start >>> 3, slotByteOffsets[at] + end >>> 3);
+  const read8BytesFloatView = (start, end, at) => baseF64.subarray(slotByteOffsets[at] + start >>> 3, slotByteOffsets[at] + end >>> 3);
   return {
     writeUtf8,
     readUtf8,
     writeBinary,
+    writeExactUint8Array,
+    writeUint8Array,
     write8Binary,
     readBytesCopy,
     readBytesView,
     readBytesBufferCopy,
+    readUint8ArrayCopy,
+    readUint8ArrayBufferCopy,
     readBytesArrayBufferCopy,
     read8BytesFloatCopy,
     read8BytesFloatView,
@@ -606,12 +1098,7 @@ var createSharedStaticBufferIO = ({
   };
 };
 
-// src/memory/payloadCodec.ts
-import { Buffer as NodeBuffer2 } from "node:buffer";
-
 // src/error.ts
-import { isMainThread } from "node:worker_threads";
-var promisePayloadMarker = Symbol.for("knitting.promise.payload");
 var reasonFrom = (task, type, detail) => {
   switch (type) {
     case 0 /* Function */: {
@@ -633,7 +1120,7 @@ var encoderError = ({
   detail
 }) => {
   const reason = reasonFrom(task, type, detail);
-  if (!isMainThread) {
+  if (!RUNTIME_IS_MAIN_THREAD) {
     task.value = reason;
     task[0 /* FlagsToHost */] = 1 /* Reject */;
     return false;
@@ -641,19 +1128,12 @@ var encoderError = ({
   if (onPromise == null) {
     throw new TypeError(reason);
   }
-  const markedTask = task;
-  if (markedTask[promisePayloadMarker] === true)
+  if (!beginPromisePayload(task))
     return false;
-  markedTask[promisePayloadMarker] = true;
   queueMicrotask(() => {
-    markedTask[promisePayloadMarker] = false;
-    task[PromisePayloadStatusSymbol] = 2 /* Rejected */;
+    finishPromisePayload(task);
     task.value = reason;
-    const result = getPromisePayloadResult(task);
-    result.status = "rejected";
-    result.value = undefined;
-    result.reason = reason;
-    onPromise(task, result);
+    onPromise(task, true, reason);
   });
   return false;
 };
@@ -673,6 +1153,7 @@ var memory = new ArrayBuffer(8);
 var Float64View = new Float64Array(memory);
 var BigInt64View = new BigInt64Array(memory);
 var Uint32View = new Uint32Array(memory);
+var textEncode2 = new TextEncoder;
 var BIGINT64_MIN = -(1n << 63n);
 var BIGINT64_MAX = (1n << 63n) - 1n;
 var { parse: parseJSON, stringify: stringifyJSON } = JSON;
@@ -797,21 +1278,24 @@ var decodeBigIntBinary = (bytes) => {
   }
   return sign === 1 ? -value : value;
 };
-var initStaticIO = (headersBuffer) => {
-  const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
-  const slotStride = 0 /* header */ + 144 /* TotalBuff */;
-  const slotOffset = (at) => at * slotStride + 0 /* header */;
-  const slotStartBytes = (at) => (slotOffset(at) + 8 /* Size */) * u32Bytes;
-  const writableBytes = (144 /* TotalBuff */ - 8 /* Size */) * u32Bytes;
-  const requiredBytes = slotStartBytes(32 /* slots */ - 1) + writableBytes;
-  if (headersBuffer.byteLength < requiredBytes)
+var initStaticIO = (headersBuffer, headerSlotStrideU32) => {
+  const slotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
+  const requiredBytes = getStridedRegionSpanBytes({
+    slotCount: 32 /* slots */,
+    slotStrideU32: slotStride,
+    slotLengthU32: HEADER_STATIC_PAYLOAD_U32,
+    baseU32: 0 /* header */
+  });
+  if (headersBuffer.byteLength < Math.max(requiredBytes, HEADER_BYTE_LENGTH)) {
     return null;
+  }
   return createSharedStaticBufferIO({
-    headersBuffer: headersBuffer.buffer
+    headersBuffer,
+    slotStrideU32: slotStride
   });
 };
-var requireStaticIO = (headersBuffer) => {
-  const staticIO = initStaticIO(headersBuffer);
+var requireStaticIO = (headersBuffer, headerSlotStrideU32) => {
+  const staticIO = initStaticIO(headersBuffer, headerSlotStrideU32);
   if (staticIO === null) {
     throw new RangeError("headersBuffer is too small for static payload IO");
   }
@@ -823,8 +1307,8 @@ var encodePayload = ({
   sab,
   payloadConfig,
   headersBuffer,
-  onPromise,
-  sharedRegister
+  headerSlotStrideU32,
+  onPromise
 }) => {
   const payloadSab = payload?.sab ?? sab;
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
@@ -832,7 +1316,7 @@ var encodePayload = ({
     options: payload?.config ?? payloadConfig
   });
   const maxPayloadBytes = resolvedPayloadConfig.maxPayloadBytes;
-  const { allocTask, setSlotLength, free } = sharedRegister ?? register({
+  const { allocTask, setSlotLength, free } = register({
     lockSector
   });
   const {
@@ -846,9 +1330,10 @@ var encodePayload = ({
   const {
     maxBytes: staticMaxBytes,
     writeBinary: writeStaticBinary,
+    writeExactUint8Array: writeStaticExactUint8Array,
     write8Binary: writeStatic8Binary,
     writeUtf8: writeStaticUtf8
-  } = requireStaticIO(headersBuffer);
+  } = requireStaticIO(headersBuffer, headerSlotStrideU32);
   const dynamicLimitError = (task, actualBytes, label) => encoderError({
     task,
     type: 3 /* Serializable */,
@@ -871,7 +1356,7 @@ var encodePayload = ({
     const estimatedTotal = estimatedBytes + extraBytes;
     if (estimatedTotal <= maxPayloadBytes)
       return estimatedBytes;
-    const exactBytes = NodeBuffer2.byteLength(text, "utf8");
+    const exactBytes = textEncode2.encode(text).byteLength;
     const exactTotal = exactBytes + extraBytes;
     if (exactTotal > maxPayloadBytes) {
       dynamicLimitError(task, exactTotal, label);
@@ -945,8 +1430,6 @@ var encodePayload = ({
       return false;
     task[2 /* Type */] = 24 /* Error */;
     const reservedSlot = reserveDynamicObject(task, reserveBytes);
-    if (reservedSlot === -1)
-      return false;
     const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
@@ -971,8 +1454,27 @@ var encodePayload = ({
       return false;
     }
     const reservedSlot = reserveDynamicObject(task, bytes);
-    if (reservedSlot === -1)
+    const written = writeDynamicBinary(bytesView, task[3 /* Start */]);
+    if (written < 0)
+      return failDynamicWriteAfterReserve(task, reservedSlot);
+    task[5 /* PayloadLen */] = written;
+    setSlotLength(reservedSlot, written);
+    task.value = null;
+    return true;
+  };
+  const encodeObjectUint8Array = (task, slotIndex, bytesView) => {
+    const bytes = bytesView.byteLength;
+    if (bytes <= staticMaxBytes) {
+      writeStaticExactUint8Array(bytesView, slotIndex);
+      task[2 /* Type */] = 18 /* StaticBinary */;
+      task[5 /* PayloadLen */] = bytes;
+      task.value = null;
+      return true;
+    }
+    task[2 /* Type */] = 17 /* Binary */;
+    if (!ensureWithinDynamicLimit(task, bytes, "Binary"))
       return false;
+    const reservedSlot = reserveDynamicObject(task, bytes);
     const written = writeDynamicBinary(bytesView, task[3 /* Start */]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
@@ -996,8 +1498,6 @@ var encodePayload = ({
     if (!ensureWithinDynamicLimit(task, bytes, "Float64Array"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    if (reservedSlot === -1)
-      return false;
     const written = writeDynamic8Binary(float64, task[3 /* Start */]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
@@ -1023,8 +1523,6 @@ var encodePayload = ({
     if (!ensureWithinDynamicLimit(task, bytes, "ArrayBuffer"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    if (reservedSlot === -1)
-      return false;
     const written = writeDynamicBinary(bytesView ?? new Uint8Array(arrayBuffer), task[3 /* Start */]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
@@ -1044,6 +1542,7 @@ var encodePayload = ({
   const encodeObjectEnvelope = (task, slotIndex, envelope) => {
     const header = envelope.header;
     const payload2 = envelope.payload;
+    const headerIsString = typeof header === "string";
     if (!(payload2 instanceof ArrayBuffer)) {
       return encoderError({
         task,
@@ -1061,16 +1560,20 @@ var encodePayload = ({
       });
     }
     let headerText;
-    try {
-      headerText = stringifyJSON(header);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      return encoderError({
-        task,
-        type: 2 /* Json */,
-        onPromise,
-        detail
-      });
+    if (headerIsString) {
+      headerText = header;
+    } else {
+      try {
+        headerText = stringifyJSON(header);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return encoderError({
+          task,
+          type: 2 /* Json */,
+          onPromise,
+          detail
+        });
+      }
     }
     if (typeof headerText !== "string") {
       return encoderError({
@@ -1088,9 +1591,7 @@ var encodePayload = ({
       if (!ensureWithinDynamicLimit(task, payloadReserveBytes, "EnvelopeStaticHeaderPayload"))
         return false;
       const reservedSlot2 = reserveDynamicObject(task, payloadReserveBytes);
-      if (reservedSlot2 === -1)
-        return false;
-      task[2 /* Type */] = 40 /* EnvelopeStaticHeader */;
+      task[2 /* Type */] = headerIsString ? 42 /* EnvelopeStaticHeaderString */ : 40 /* EnvelopeStaticHeader */;
       task[5 /* PayloadLen */] = staticHeaderWritten;
       task[4 /* End */] = payloadLength;
       if (payloadLength > 0) {
@@ -1103,13 +1604,11 @@ var encodePayload = ({
       task.value = null;
       return true;
     }
-    const headerReserveBytes = dynamicUtf8ReserveBytesWithExtra(task, headerText, payloadLength, "EnvelopeDynamicHeader");
+    const headerReserveBytes = dynamicUtf8ReserveBytesWithExtra(task, headerText, payloadLength, headerIsString ? "EnvelopeDynamicHeaderString" : "EnvelopeDynamicHeader");
     if (headerReserveBytes < 0)
       return false;
-    task[2 /* Type */] = 41 /* EnvelopeDynamicHeader */;
+    task[2 /* Type */] = headerIsString ? 43 /* EnvelopeDynamicHeaderString */ : 41 /* EnvelopeDynamicHeader */;
     const reservedSlot = reserveDynamicObject(task, headerReserveBytes + payloadLength);
-    if (reservedSlot === -1)
-      return false;
     const baseStart = task[3 /* Start */];
     const writtenHeaderBytes = writeDynamicUtf8(headerText, baseStart, headerReserveBytes);
     if (writtenHeaderBytes < 0) {
@@ -1128,12 +1627,16 @@ var encodePayload = ({
     return true;
   };
   const encodeObjectPromise = (task, promise) => {
-    const markedTask = task;
-    markedTask[PromisePayloadHandlerSymbol] = onPromise;
-    if (markedTask[PromisePayloadMarker] !== true) {
-      markedTask[PromisePayloadMarker] = true;
-      markedTask[PromisePayloadStatusSymbol] = 0 /* Idle */;
-      promise.then(markedTask[PromisePayloadFulfillSymbol], markedTask[PromisePayloadRejectSymbol]);
+    if (beginPromisePayload(task)) {
+      promise.then((value) => {
+        finishPromisePayload(task);
+        task.value = value;
+        onPromise(task, false, value);
+      }, (reason) => {
+        finishPromisePayload(task);
+        task.value = reason;
+        onPromise(task, true, reason);
+      });
     }
     return false;
   };
@@ -1160,10 +1663,6 @@ var encodePayload = ({
             return false;
           }
           const reservedSlot = reserveDynamic(task, binaryBytes);
-          if (reservedSlot < 0) {
-            clearBigIntScratch(binaryBytes);
-            return false;
-          }
           const written = writeDynamicBinary(binary, task[3 /* Start */]);
           if (written < 0) {
             clearBigIntScratch(binaryBytes);
@@ -1179,7 +1678,6 @@ var encodePayload = ({
         task[2 /* Type */] = 2 /* BigInt */;
         task[3 /* Start */] = Uint32View[0];
         task[4 /* End */] = Uint32View[1];
-        task.value = null;
         return true;
       case "boolean":
         task[2 /* Type */] = task.value === true ? 3 /* True */ : 4 /* False */;
@@ -1208,7 +1706,11 @@ var encodePayload = ({
         objectDynamicSlot = -1;
         try {
           const objectValue = args;
-          if (arrayIsArray(objectValue) || isPlainJsonObject(objectValue)) {
+          const objectProto = objectGetPrototypeOf(objectValue);
+          if (objectValue instanceof Uint8Array) {
+            return encodeObjectUint8Array(task, slotIndex, objectValue);
+          }
+          if (arrayIsArray(objectValue) || objectProto === objectPrototype || objectProto === null) {
             let text;
             try {
               text = stringifyJSON(objectValue);
@@ -1235,22 +1737,17 @@ var encodePayload = ({
             if (reserveBytes < 0)
               return false;
             const reservedSlot = reserveDynamicObject(task, reserveBytes);
-            if (reservedSlot === -1)
-              return false;
             const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
-            if (written < 0)
+            if (written < 0) {
               return failDynamicWriteAfterReserve(task, reservedSlot);
+            }
             task[5 /* PayloadLen */] = written;
             setSlotLength(reservedSlot, written);
             task.value = null;
             return true;
           }
-          if (NodeBuffer2.isBuffer(objectValue)) {
-            return encodeObjectBinary(task, slotIndex, objectValue, 38 /* Buffer */, 39 /* StaticBuffer */);
-          }
-          switch (objectValue.constructor) {
-            case Uint8Array:
-              return encodeObjectBinary(task, slotIndex, objectValue, 17 /* Binary */, 18 /* StaticBinary */);
+          const objectCtor = objectValue.constructor;
+          switch (objectCtor) {
             case ArrayBuffer:
               return encodeObjectArrayBuffer(task, slotIndex, objectValue);
             case Int32Array: {
@@ -1280,8 +1777,9 @@ var encodePayload = ({
             case Error:
               return encodeErrorObject(task, objectValue);
           }
-          if (objectValue instanceof Date)
+          if (objectValue instanceof Date) {
             return encodeObjectDate(task, objectValue);
+          }
           if (objectValue instanceof Envelope) {
             return encodeObjectEnvelope(task, slotIndex, objectValue);
           }
@@ -1323,11 +1821,10 @@ var encodePayload = ({
         if (reserveBytes < 0)
           return false;
         const reservedSlot = reserveDynamic(task, reserveBytes);
-        if (reservedSlot < 0)
-          return false;
         const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
-        if (written < 0)
+        if (written < 0) {
           return failDynamicWriteAfterReserve(task, reservedSlot);
+        }
         task[5 /* PayloadLen */] = written;
         setSlotLength(reservedSlot, written);
         task.value = null;
@@ -1356,11 +1853,10 @@ var encodePayload = ({
         if (reserveBytes < 0)
           return false;
         const reservedSlot = reserveDynamic(task, reserveBytes);
-        if (reservedSlot < 0)
-          return false;
         const written = writeDynamicUtf8(key, task[3 /* Start */], reserveBytes);
-        if (written < 0)
+        if (written < 0) {
           return failDynamicWriteAfterReserve(task, reservedSlot);
+        }
         task[5 /* PayloadLen */] = written;
         setSlotLength(reservedSlot, written);
         task.value = null;
@@ -1380,15 +1876,15 @@ var decodePayload = ({
   sab,
   payloadConfig,
   headersBuffer,
-  host,
-  sharedRegister
+  headerSlotStrideU32,
+  host
 }) => {
   const payloadSab = payload?.sab ?? sab;
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
     sab: payloadSab,
     options: payload?.config ?? payloadConfig
   });
-  const { free } = sharedRegister ?? register({
+  const { free } = register({
     lockSector
   });
   const freeTaskSlot = (task) => free(getTaskSlotIndex(task));
@@ -1407,9 +1903,10 @@ var decodePayload = ({
     readUtf8: readStaticUtf8,
     readBytesCopy: readStaticBytesCopy,
     readBytesBufferCopy: readStaticBufferCopy,
+    readUint8ArrayCopy: readStaticUint8ArrayCopy,
     readBytesArrayBufferCopy: readStaticArrayBufferCopy,
     read8BytesFloatCopy: readStatic8BytesFloatCopy
-  } = requireStaticIO(headersBuffer);
+  } = requireStaticIO(headersBuffer, headerSlotStrideU32);
   return (task, slotIndex, specialFlags) => {
     switch (task[2 /* Type */]) {
       case 2 /* BigInt */:
@@ -1451,19 +1948,23 @@ var decodePayload = ({
       case 16 /* StaticJson */:
         task.value = parseJSON(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
         return;
-      case 40 /* EnvelopeStaticHeader */: {
-        const header = parseJSON(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+      case 40 /* EnvelopeStaticHeader */:
+      case 42 /* EnvelopeStaticHeaderString */: {
+        const rawHeader = readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex);
+        const header = task[2 /* Type */] === 42 /* EnvelopeStaticHeaderString */ ? rawHeader : parseJSON(rawHeader);
         const payloadLength = task[4 /* End */];
         const payload2 = payloadLength > 0 ? readDynamicArrayBufferCopy(task[3 /* Start */], task[3 /* Start */] + payloadLength) : new ArrayBuffer(0);
         task.value = new Envelope(header, payload2);
         freeTaskSlot(task);
         return;
       }
-      case 41 /* EnvelopeDynamicHeader */: {
+      case 41 /* EnvelopeDynamicHeader */:
+      case 43 /* EnvelopeDynamicHeaderString */: {
         const headerStart = task[3 /* Start */];
         const payloadStart = headerStart + task[5 /* PayloadLen */];
         const payloadLength = task[4 /* End */];
-        const header = parseJSON(readDynamicUtf8(headerStart, payloadStart));
+        const rawHeader = readDynamicUtf8(headerStart, payloadStart);
+        const header = task[2 /* Type */] === 43 /* EnvelopeDynamicHeaderString */ ? rawHeader : parseJSON(rawHeader);
         const payload2 = payloadLength > 0 ? readDynamicArrayBufferCopy(payloadStart, payloadStart + payloadLength) : new ArrayBuffer(0);
         task.value = new Envelope(header, payload2);
         freeTaskSlot(task);
@@ -1552,7 +2053,7 @@ var decodePayload = ({
         freeTaskSlot(task);
         return;
       case 18 /* StaticBinary */:
-        task.value = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+        task.value = readStaticUint8ArrayCopy(0, task[5 /* PayloadLen */], slotIndex);
         return;
       case 36 /* ArrayBuffer */:
         task.value = readDynamicArrayBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
@@ -1604,16 +2105,23 @@ var PayloadBuffer;
   PayloadBuffer2[PayloadBuffer2["StaticBuffer"] = 39] = "StaticBuffer";
   PayloadBuffer2[PayloadBuffer2["EnvelopeStaticHeader"] = 40] = "EnvelopeStaticHeader";
   PayloadBuffer2[PayloadBuffer2["EnvelopeDynamicHeader"] = 41] = "EnvelopeDynamicHeader";
+  PayloadBuffer2[PayloadBuffer2["EnvelopeStaticHeaderString"] = 42] = "EnvelopeStaticHeaderString";
+  PayloadBuffer2[PayloadBuffer2["EnvelopeDynamicHeaderString"] = 43] = "EnvelopeDynamicHeaderString";
 })(PayloadBuffer ||= {});
 var LOCK_CACHE_LINE_BYTES = 64;
 var LOCK_SECTOR_BYTES = 256;
 var PromisePayloadMarker = Symbol.for("knitting.promise.payload");
-var PromisePayloadHandlerSymbol = Symbol.for("knitting.promise.payload.handler");
-var PromisePayloadStatusSymbol = Symbol.for("knitting.promise.payload.status");
-var PromisePayloadResultSymbol = Symbol.for("knitting.promise.payload.result");
-var PromisePayloadFulfillSymbol = Symbol.for("knitting.promise.payload.fulfill");
-var PromisePayloadRejectSymbol = Symbol.for("knitting.promise.payload.reject");
-var getPromisePayloadResult = (task) => task[PromisePayloadResultSymbol];
+var pendingPromisePayloads = new WeakSet;
+var beginPromisePayload = (task) => {
+  if (pendingPromisePayloads.has(task))
+    return false;
+  pendingPromisePayloads.add(task);
+  return true;
+};
+var finishPromisePayload = (task) => {
+  pendingPromisePayloads.delete(task);
+};
+var isPromisePayloadPending = (task) => pendingPromisePayloads.has(task);
 var TASK_SLOT_INDEX_BITS = 5;
 var TASK_SLOT_INDEX_MASK = (1 << TASK_SLOT_INDEX_BITS) - 1;
 var TASK_SLOT_META_BITS = 32 - TASK_SLOT_INDEX_BITS;
@@ -1634,6 +2142,10 @@ var LOCK_SECTOR_BYTE_LENGTH = LOCK_SECTOR_BYTES;
 var PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 2;
 var PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 3;
 var HEADER_SLOT_STRIDE_U32 = 0 /* header */ + 144 /* TotalBuff */;
+var HEADER_SLOT_STRIDE_BYTES = HEADER_SLOT_STRIDE_U32 * Uint32Array.BYTES_PER_ELEMENT;
+var HEADER_TASK_LINE_U32 = LOCK_CACHE_LINE_BYTES / Uint32Array.BYTES_PER_ELEMENT;
+var HEADER_STATIC_PAYLOAD_U32 = 144 /* TotalBuff */ - HEADER_TASK_LINE_U32;
+var HEADER_TASK_OFFSET_IN_SLOT_U32 = HEADER_STATIC_PAYLOAD_U32;
 var HEADER_U32_LENGTH = 0 /* header */ + HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
 var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
 var INDEX_ID = 0;
@@ -1643,34 +2155,6 @@ var createTaskShell = () => {
   task.value = null;
   task.resolve = def;
   task.reject = def;
-  task[PromisePayloadMarker] = false;
-  task[PromisePayloadHandlerSymbol] = undefined;
-  task[PromisePayloadStatusSymbol] = 0 /* Idle */;
-  task[PromisePayloadResultSymbol] = {
-    status: "fulfilled",
-    value: undefined,
-    reason: undefined
-  };
-  task[PromisePayloadFulfillSymbol] = (value) => {
-    task[PromisePayloadMarker] = false;
-    task[PromisePayloadStatusSymbol] = 1 /* Fulfilled */;
-    task.value = value;
-    const result = task[PromisePayloadResultSymbol];
-    result.status = "fulfilled";
-    result.value = value;
-    result.reason = undefined;
-    task[PromisePayloadHandlerSymbol](task, result);
-  };
-  task[PromisePayloadRejectSymbol] = (reason) => {
-    task[PromisePayloadMarker] = false;
-    task[PromisePayloadStatusSymbol] = 2 /* Rejected */;
-    task.value = reason;
-    const result = task[PromisePayloadResultSymbol];
-    result.status = "rejected";
-    result.value = undefined;
-    result.reason = reason;
-    task[PromisePayloadHandlerSymbol](task, result);
-  };
   return task;
 };
 var makeTask = () => {
@@ -1702,6 +2186,7 @@ var settleTask = (task) => {
 };
 var lock2 = ({
   headers,
+  headerSlotStrideU32,
   LockBoundSector,
   payload,
   payloadConfig,
@@ -1710,30 +2195,35 @@ var lock2 = ({
   toSentList,
   recycleList
 }) => {
-  const LockBoundSAB = LockBoundSector ?? new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
-  const hostBits = new Int32Array(LockBoundSAB, LOCK_HOST_BITS_OFFSET_BYTES, 1);
-  const workerBits = new Int32Array(LockBoundSAB, LOCK_WORKER_BITS_OFFSET_BYTES, 1);
-  const bufferHeadersBuffer = headers ?? new SharedArrayBuffer(HEADER_BYTE_LENGTH);
-  const headersBuffer = new Uint32Array(bufferHeadersBuffer);
+  const lockSectorRegion = toSharedBufferRegion(LockBoundSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
+  const LockBoundSAB = lockSectorRegion.sab;
+  const hostBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_HOST_BITS_OFFSET_BYTES, 1);
+  const workerBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_WORKER_BITS_OFFSET_BYTES, 1);
+  const headersRegion = toSharedBufferRegion(headers ?? createWasmSharedArrayBuffer(HEADER_BYTE_LENGTH));
+  const headersBuffer = new Uint32Array(headersRegion.sab, headersRegion.byteOffset, headersRegion.byteLength >>> 2);
+  const headersSlotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
     sab: payload,
     options: payloadConfig
   });
   const payloadSAB = payload ?? (resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes));
-  const payloadLockSAB = payloadSector ?? LockBoundSAB;
-  const payloadRegister = register({
-    lockSector: payloadLockSAB
-  });
+  const payloadLockRegion = toSharedBufferRegion(payloadSector ?? lockSectorRegion);
   let promiseHandler;
+  let trackedDeferredTasks = new WeakSet;
   const encodeTask = encodePayload({
     payload: {
       sab: payloadSAB,
       config: resolvedPayloadConfig
     },
     headersBuffer,
-    lockSector: payloadLockSAB,
-    onPromise: (task, result) => promiseHandler?.(task, result),
-    sharedRegister: payloadRegister
+    headerSlotStrideU32: headersSlotStride,
+    lockSector: payloadLockRegion,
+    onPromise: (task, isRejected, value) => {
+      if (trackedDeferredTasks.delete(task) && pendingPromiseCount > 0) {
+        pendingPromiseCount = pendingPromiseCount - 1 | 0;
+      }
+      promiseHandler(task, isRejected, value);
+    }
   });
   const decodeTask = decodePayload({
     payload: {
@@ -1741,8 +2231,8 @@ var lock2 = ({
       config: resolvedPayloadConfig
     },
     headersBuffer,
-    lockSector: payloadLockSAB,
-    sharedRegister: payloadRegister
+    headerSlotStrideU32: headersSlotStride,
+    lockSector: payloadLockRegion
   });
   let LastLocal = 0 | 0;
   let LastWorker = 0 | 0;
@@ -1750,6 +2240,8 @@ var lock2 = ({
   const toBeSent = toSentList ?? new RingQueue;
   const recyclecList = recycleList ?? new RingQueue;
   const resolved = resultList ?? new RingQueue;
+  let deferredCount = 0 | 0;
+  let pendingPromiseCount = 0 | 0;
   const a_load = Atomics.load;
   const a_store = Atomics.store;
   const toBeSentPush = (task) => toBeSent.push(task);
@@ -1757,9 +2249,13 @@ var lock2 = ({
   const toBeSentUnshift = (task) => toBeSent.unshift(task);
   const recycleShift = () => recyclecList.shiftNoClear();
   const resolvedPush = (task) => resolved.push(task);
-  const SLOT_SIZE = HEADER_SLOT_STRIDE_U32;
   const clz32 = Math.clz32;
-  const slotOffset = (at) => at * SLOT_SIZE + 0 /* header */;
+  const slotOffset = (at) => getStridedSlotOffsetU32({
+    slotIndex: at,
+    slotStrideU32: headersSlotStride,
+    baseU32: 0 /* header */,
+    extraU32: HEADER_TASK_OFFSET_IN_SLOT_U32
+  });
   const takeTask = ({ queue }) => (at) => {
     const off = slotOffset(at);
     const task = queue[headersBuffer[off + 1 /* ID */]];
@@ -1767,6 +2263,12 @@ var lock2 = ({
     return task;
   };
   const enlist = (task) => toBeSentPush(task);
+  const trackDeferredTask = (task) => {
+    if (trackedDeferredTasks.has(task))
+      return;
+    trackedDeferredTasks.add(task);
+    pendingPromiseCount = pendingPromiseCount + 1 | 0;
+  };
   let selectedSlotIndex = 0 | 0, selectedSlotBit = 0 >>> 0;
   const encodeWithState = (task, state) => {
     const free = ~state;
@@ -1777,9 +2279,10 @@ var lock2 = ({
     encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
     return selectedSlotBit;
   };
-  const encodeManyFrom = (list) => {
+  const encodeManyFrom = (list, trackDeferreds = false) => {
     let state = LastLocal ^ a_load(workerBits, 0) | 0;
     let encoded = 0 | 0;
+    deferredCount = 0 | 0;
     if (list === toBeSent) {
       while (true) {
         const task = toBeSentShift();
@@ -1787,6 +2290,12 @@ var lock2 = ({
           break;
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
+          if (isPromisePayloadPending(task)) {
+            deferredCount = deferredCount + 1 | 0;
+            if (trackDeferreds)
+              trackDeferredTask(task);
+            continue;
+          }
           toBeSentUnshift(task);
           break;
         }
@@ -1800,6 +2309,12 @@ var lock2 = ({
           break;
         const bit = encodeWithState(task, state) | 0;
         if (bit === 0) {
+          if (isPromisePayloadPending(task)) {
+            deferredCount = deferredCount + 1 | 0;
+            if (trackDeferreds)
+              trackDeferredTask(task);
+            continue;
+          }
           list.unshift(task);
           break;
         }
@@ -1812,17 +2327,25 @@ var lock2 = ({
   const encodeAll = () => {
     if (toBeSent.isEmpty)
       return true;
-    encodeManyFrom(toBeSent);
+    encodeManyFrom(toBeSent, true);
+    deferredCount = 0 | 0;
     return toBeSent.isEmpty;
   };
   const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
   const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
-  const encode = (task, state = LastLocal ^ a_load(workerBits, 0) | 0) => {
+  const encode = (task, state = LastLocal ^ a_load(workerBits, 0) | 0, trackDeferreds = false) => {
+    deferredCount = 0 | 0;
     const free = ~state;
     if (free === 0)
       return false;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
+    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
+      if (isPromisePayloadPending(task)) {
+        deferredCount = 1;
+        if (trackDeferreds)
+          trackDeferredTask(task);
+      }
       return false;
+    }
     return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
   };
   const encodeAt = (task, at, bit) => {
@@ -1870,10 +2393,12 @@ var lock2 = ({
   };
   const resolveHost = ({
     queue,
-    onResolved
+    onResolved,
+    shouldSettle
   }) => {
     const getTask = takeTask({ queue });
     const HAS_RESOLVE = onResolved ? true : false;
+    const HAS_SHOULD_SETTLE = shouldSettle ? true : false;
     let lastResolved = 32;
     return () => {
       let diff = a_load(hostBits, 0) ^ LastWorker | 0;
@@ -1888,8 +2413,11 @@ var lock2 = ({
         const task = getTask(idx);
         decodeTask(task, idx);
         consumedBits = consumedBits ^ selectedBit | 0;
-        settleTask(task);
-        if (HAS_RESOLVE) {
+        const CAN_SETTLE = !HAS_SHOULD_SETTLE || shouldSettle(task);
+        if (CAN_SETTLE) {
+          settleTask(task);
+        }
+        if (CAN_SETTLE && HAS_RESOLVE) {
           onResolved(task);
         }
         diff ^= selectedBit;
@@ -1911,8 +2439,11 @@ var lock2 = ({
         const task = getTask(idx);
         decodeTask(task, idx);
         consumedBits = consumedBits ^ selectedBit | 0;
-        settleTask(task);
-        if (HAS_RESOLVE) {
+        const CAN_SETTLE = !HAS_SHOULD_SETTLE || shouldSettle(task);
+        if (CAN_SETTLE) {
+          settleTask(task);
+        }
+        if (CAN_SETTLE && HAS_RESOLVE) {
           onResolved(task);
         }
         diff ^= selectedBit;
@@ -1949,11 +2480,36 @@ var lock2 = ({
     resolvedPush(task);
     return true;
   };
+  const publish = (task) => {
+    if (encode(task, undefined, true))
+      return true;
+    if ((deferredCount | 0) !== 0) {
+      deferredCount = 0 | 0;
+      return false;
+    }
+    toBeSentPush(task);
+    return false;
+  };
+  const flushPending = () => {
+    if (toBeSent.isEmpty)
+      return false;
+    const encoded = encodeManyFrom(toBeSent, true) | 0;
+    deferredCount = 0 | 0;
+    return encoded !== 0;
+  };
+  const resetPendingState = () => {
+    toBeSent.clear();
+    deferredCount = 0 | 0;
+    pendingPromiseCount = 0 | 0;
+    trackedDeferredTasks = new WeakSet;
+  };
   return {
     enlist,
     encode,
     encodeManyFrom,
     encodeAll,
+    publish,
+    flushPending,
     decode,
     hasSpace,
     resolved,
@@ -1961,6 +2517,15 @@ var lock2 = ({
     workerBits,
     recyclecList,
     resolveHost,
+    hasPendingFrames: () => toBeSent.size !== 0,
+    getPendingFrameCount: () => toBeSent.size | 0,
+    getPendingPromiseCount: () => pendingPromiseCount | 0,
+    resetPendingState,
+    takeDeferredCount: () => {
+      const count = deferredCount | 0;
+      deferredCount = 0 | 0;
+      return count;
+    },
     setPromiseHandler: (handler) => {
       promiseHandler = handler;
     }
@@ -2170,12 +2735,13 @@ var createWorkerRxQueue = ({
     },
     serviceBatchImmediate: () => {
       let processed = 0;
-      while (toWork.size !== 0) {
+      while (processed < 5 && toWork.size !== 0) {
         const slot = toWorkShift();
         try {
           const fnIndex = slot[0 /* FunctionID */] & FUNCTION_ID_MASK;
           const result = runByIndex[fnIndex](slot);
           slot[IDX_FLAGS] = 0;
+          slot.value = null;
           if (result instanceof Promise) {
             awaiting++;
             result.then((value) => settleNow(slot, false, value, true), (err) => settleNow(slot, true, err, true));
@@ -2203,24 +2769,27 @@ var SIGNAL_OFFSETS = {
   rxStatus: CACHE_LINE_BYTES,
   txStatus: CACHE_LINE_BYTES * 2
 };
+var TRANSPORT_SIGNAL_BYTES = CACHE_LINE_BYTES * 3;
 var a_store = Atomics.store;
 var createSharedMemoryTransport = ({ sabObject, isMain, startTime }) => {
   const toGrow = sabObject?.size ?? page2;
   const roundedSize = toGrow + (page2 - toGrow % page2) % page2;
-  const sab = sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(roundedSize, page2 * page2);
+  const signalRegion = toSharedBufferRegion(sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(roundedSize, page2 * page2));
+  const sab = signalRegion.sab;
+  const baseByteOffset = signalRegion.byteOffset;
   const startAt = startTime ?? performance.now();
-  const opView = new Int32Array(sab, SIGNAL_OFFSETS.op, 1);
+  const opView = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.op, 1);
   if (isMain)
     a_store(opView, 0, 0);
-  const rxStatus = new Int32Array(sab, SIGNAL_OFFSETS.rxStatus, 1);
+  const rxStatus = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.rxStatus, 1);
   a_store(rxStatus, 0, 1);
   return {
-    sab,
+    sab: signalRegion,
     op: opView,
     startAt,
     opView,
     rxStatus,
-    txStatus: new Int32Array(sab, SIGNAL_OFFSETS.txStatus, 1)
+    txStatus: new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.txStatus, 1)
   };
 };
 
@@ -2228,23 +2797,22 @@ var createSharedMemoryTransport = ({ sabObject, isMain, startTime }) => {
 var endpointSymbol = Symbol.for("task");
 
 // src/common/module-url.ts
-import { pathToFileURL } from "node:url";
-var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
-var WINDOWS_UNC_PATH = /^\\\\[^\\/?]+\\[^\\/?]+/;
-var encodeFilePath = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var WINDOWS_DRIVE_PATH2 = /^[A-Za-z]:[\\/]/;
+var WINDOWS_UNC_PATH2 = /^\\\\[^\\/?]+\\[^\\/?]+/;
+var encodeFilePath2 = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
 var toModuleUrl = (specifier) => {
-  if (WINDOWS_DRIVE_PATH.test(specifier)) {
+  if (WINDOWS_DRIVE_PATH2.test(specifier)) {
     const normalized = specifier.replace(/\\/g, "/");
-    return `file:///${encodeFilePath(normalized)}`;
+    return `file:///${encodeFilePath2(normalized)}`;
   }
-  if (WINDOWS_UNC_PATH.test(specifier)) {
+  if (WINDOWS_UNC_PATH2.test(specifier)) {
     const normalized = specifier.replace(/^\\\\+/, "").replace(/\\/g, "/");
-    return `file://${encodeFilePath(normalized)}`;
+    return `file://${encodeFilePath2(normalized)}`;
   }
   try {
     return new URL(specifier).href;
   } catch {
-    return pathToFileURL(specifier).href;
+    return pathToFileURLCompat(specifier).href;
   }
 };
 
@@ -2486,9 +3054,9 @@ var scrubWorkerDataSensitiveBuffers = (value) => {
   } catch {}
 };
 // src/worker/safety/startup.ts
-var hasLockBuffers = (value) => !!value?.headers && !!value?.lockSector && !!value?.payload && !!value?.payloadSector;
+var hasLockBuffers = (value) => isSharedBufferSource(value?.headers) && isSharedBufferSource(value?.lockSector) && value?.payload instanceof SharedArrayBuffer && isSharedBufferSource(value?.payloadSector);
 var assertWorkerSharedMemoryBootData = ({ sab, lock, returnLock }) => {
-  if (!sab) {
+  if (!isSharedBufferSource(sab)) {
     throw new Error("worker missing transport SAB");
   }
   if (!hasLockBuffers(lock)) {
@@ -2518,7 +3086,8 @@ var signalAbortFactory = ({
   sab,
   maxSignals
 }) => {
-  const atomicView = new Uint32Array(sab);
+  const sabRegion = toSharedBufferRegion(sab);
+  const atomicView = new Uint32Array(sabRegion.sab, sabRegion.byteOffset, sabRegion.byteLength / Uint32Array.BYTES_PER_ELEMENT);
   const size = atomicView.length;
   const inUse = new Uint32Array(size);
   const physicalMax = size * SLOT_BITS;
@@ -2641,11 +3210,11 @@ var reportWorkerStartupFatal = (error) => {
     [WORKER_FATAL_MESSAGE_KEY]: message
   };
   try {
-    parentPort?.postMessage(payload);
+    RUNTIME_PARENT_PORT?.postMessage?.(payload);
     return;
   } catch {}
   try {
-    globalThis.postMessage?.(payload);
+    globalThis.postMessage(payload);
   } catch {}
 };
 var workerMainLoop = async (startupData) => {
@@ -2686,6 +3255,7 @@ var workerMainLoop = async (startupData) => {
   });
   const lockState = lock2({
     headers: lock.headers,
+    headerSlotStrideU32: lock.headerSlotStrideU32,
     LockBoundSector: lock.lockSector,
     payload: lock.payload,
     payloadSector: lock.payloadSector,
@@ -2693,6 +3263,7 @@ var workerMainLoop = async (startupData) => {
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
+    headerSlotStrideU32: returnLock.headerSlotStrideU32,
     LockBoundSector: returnLock.lockSector,
     payload: returnLock.payload,
     payloadSector: returnLock.payloadSector,
@@ -2745,7 +3316,7 @@ var workerMainLoop = async (startupData) => {
     enqueueLock,
     write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0
   });
-  const channel = new MessageChannel;
+  const channel = createRuntimeMessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
@@ -2830,7 +3401,7 @@ var workerMainLoop = async (startupData) => {
   port2.start?.();
   scheduleMacro();
 };
-var isWebWorkerScope = () => {
+var isWebWorkerScope2 = () => {
   const scopeCtor = globalThis.WorkerGlobalScope;
   if (typeof scopeCtor !== "function")
     return false;
@@ -2844,13 +3415,13 @@ var isLockBuffers = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return candidate.headers instanceof SharedArrayBuffer && candidate.lockSector instanceof SharedArrayBuffer && candidate.payload instanceof SharedArrayBuffer && candidate.payloadSector instanceof SharedArrayBuffer;
+  return isSharedBufferSource(candidate.headers) && isSharedBufferSource(candidate.lockSector) && candidate.payload instanceof SharedArrayBuffer && isSharedBufferSource(candidate.payloadSector);
 };
 var isWorkerBootPayload = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return candidate.sab instanceof SharedArrayBuffer && Array.isArray(candidate.list) && Array.isArray(candidate.ids) && Array.isArray(candidate.at) && typeof candidate.thread === "number" && typeof candidate.totalNumberOfThread === "number" && typeof candidate.startAt === "number" && isLockBuffers(candidate.lock) && isLockBuffers(candidate.returnLock);
+  return isSharedBufferSource(candidate.sab) && Array.isArray(candidate.list) && Array.isArray(candidate.ids) && Array.isArray(candidate.at) && typeof candidate.thread === "number" && typeof candidate.totalNumberOfThread === "number" && typeof candidate.startAt === "number" && (candidate.abortSignalSAB === undefined || isSharedBufferSource(candidate.abortSignalSAB)) && isLockBuffers(candidate.lock) && isLockBuffers(candidate.returnLock);
 };
 var installWebWorkerBootstrap = () => {
   const g = globalThis;
@@ -2880,9 +3451,9 @@ var installWebWorkerBootstrap = () => {
     start(data);
   };
 };
-if (isMainThread2 === false && isWorkerBootPayload(workerData)) {
-  workerMainLoop(workerData).catch(reportWorkerStartupFatal);
-} else if (isWebWorkerScope()) {
+if (RUNTIME_IS_MAIN_THREAD === false && isWorkerBootPayload(RUNTIME_WORKER_DATA)) {
+  workerMainLoop(RUNTIME_WORKER_DATA).catch(reportWorkerStartupFatal);
+} else if (isWebWorkerScope2()) {
   installWebWorkerBootstrap();
 }
 
@@ -2904,6 +3475,18 @@ var INTERNAL_CALLER_FUNCTIONS = new Set([
   "importTask"
 ]);
 var isDefined = (value) => value !== undefined;
+var looksLikeStackFile = (value) => value.startsWith("file:") || value.startsWith("http:") || value.startsWith("https:") || value.startsWith("blob:") || value.startsWith("webpack-internal:") || value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(value);
+var extractStackFile = (line) => {
+  const trimmed = line.trim();
+  if (trimmed.length === 0)
+    return;
+  const candidates = [
+    trimmed.match(/\((.+?):\d+:\d+\)$/)?.[1],
+    trimmed.match(/at (.+?):\d+:\d+$/)?.[1],
+    trimmed.match(/^(?:.+@)?(.+?):\d+:\d+$/)?.[1]
+  ];
+  return candidates.find((value) => typeof value === "string" && looksLikeStackFile(value));
+};
 var isInternalCallerFrame = (file) => INTERNAL_CALLER_HINTS.some((hint) => file.includes(hint));
 var isRuntimeInternalFrame = (file) => file.startsWith("node:") || file.startsWith("native:") || file.startsWith("bun:") || file.startsWith("internal/");
 var isInternalCallerFunction = (functionName, methodName) => functionName !== undefined && INTERNAL_CALLER_FUNCTIONS.has(functionName) || methodName !== undefined && INTERNAL_CALLER_FUNCTIONS.has(methodName);
@@ -2913,6 +3496,17 @@ var collectStackFrames = () => {
   try {
     ErrorCtor.prepareStackTrace = (_error, stack2) => stack2;
     const stack = new Error().stack;
+    if (typeof stack === "string") {
+      return stack.split(`
+`).map((line) => {
+        const file = extractStackFile(line);
+        return file ? {
+          file,
+          functionName: undefined,
+          methodName: undefined
+        } : undefined;
+      }).filter(isDefined);
+    }
     if (!Array.isArray(stack))
       return [];
     const frames = stack.map((site) => {
@@ -2990,7 +3584,7 @@ function createHostTxQueue({
     const task = makeTask();
     task[1 /* ID */] = id;
     task[0 /* FunctionID */] = 0;
-    task.value = undefined;
+    task.value = null;
     task.resolve = PLACE_HOLDER;
     task.reject = PLACE_HOLDER;
     return task;
@@ -2998,36 +3592,32 @@ function createHostTxQueue({
   const initialSize = max ?? 10;
   const queue = Array.from({ length: initialSize }, (_, index) => newSlot(index));
   const freeSockets = Array.from({ length: initialSize }, (_, i) => i);
-  const toBeSent = new RingQueue;
-  const toBeSentPush = (task) => toBeSent.push(task);
-  const toBeSentShift = () => toBeSent.shiftNoClear();
   const freePush = (id) => freeSockets.push(id);
   const freePop = () => freeSockets.pop();
   const queuePush = (task) => queue.push(task);
-  const { encode, encodeManyFrom } = lock;
-  let toBeSentCount = 0 | 0;
+  const {
+    publish,
+    flushPending,
+    hasPendingFrames,
+    getPendingFrameCount,
+    getPendingPromiseCount,
+    resetPendingState
+  } = lock;
   let inUsed = 0 | 0;
-  let pendingPromises = 0 | 0;
   const resetSignal = abortSignals?.resetSignal;
   const nowTime = now ?? p_now3;
-  const isPromisePending = (task) => task[PromisePayloadMarker] === true;
   const resolveReturn = returnLock.resolveHost({
     queue,
+    shouldSettle: (task) => task.reject !== PLACE_HOLDER,
     onResolved: (task) => {
       inUsed = inUsed - 1 | 0;
+      task.value = null;
+      task.resolve = PLACE_HOLDER;
+      task.reject = PLACE_HOLDER;
       freePush(task[1 /* ID */]);
     }
   });
-  const hasPendingFrames = () => toBeSentCount > 0;
-  const txIdle = () => toBeSentCount === 0 && inUsed === pendingPromises;
-  const handleEncodeFailure = (task) => {
-    if (isPromisePending(task)) {
-      pendingPromises = pendingPromises + 1 | 0;
-      return;
-    }
-    toBeSentPush(task);
-    toBeSentCount = toBeSentCount + 1 | 0;
-  };
+  const txIdle = () => getPendingFrameCount() === 0 && inUsed === getPendingPromiseCount();
   const rejectAll = (reason) => {
     for (let index = 0;index < queue.length; index++) {
       const slot = queue[index];
@@ -3040,28 +3630,12 @@ function createHostTxQueue({
         queue[index] = newSlot(index);
       }
     }
-    while (toBeSent.size > 0) {
-      toBeSentShift();
-    }
-    toBeSentCount = 0 | 0;
+    resetPendingState();
     inUsed = 0 | 0;
-    pendingPromises = 0 | 0;
   };
-  const flushToWorker = () => {
-    if (toBeSentCount === 0)
-      return false;
-    const encoded = encodeManyFrom(toBeSent) | 0;
-    if (encoded === 0)
-      return false;
-    toBeSentCount = toBeSentCount - encoded | 0;
-    return true;
-  };
+  const flushToWorker = () => flushPending();
   const enqueueKnown = (task) => {
-    if (!encode(task)) {
-      handleEncodeFailure(task);
-      return false;
-    }
-    return true;
+    return publish(task);
   };
   return {
     rejectAll,
@@ -3091,7 +3665,7 @@ function createHostTxQueue({
           if (maybeSignal === abortSignals.closeNow) {
             return Promise.reject(AbortSignalPoolExhausted);
           }
-          new OneShotDeferred(deferred, () => resetSignal?.(maybeSignal));
+          new OneShotDeferred(deferred, () => resetSignal(maybeSignal));
           const encodedSignalMeta = (maybeSignal + ABORT_SIGNAL_META_OFFSET2 & FUNCTION_META_MASK) >>> 0;
           slot[0 /* FunctionID */] = (encodedSignalMeta << FUNCTION_META_SHIFT | functionIDMasked) >>> 0;
         }
@@ -3102,37 +3676,32 @@ function createHostTxQueue({
         if (HAS_TIMER) {
           slot[6 /* slotBuffer */] = (slot[6 /* slotBuffer */] & SLOT_INDEX_MASK | (nowTime() >>> 0 & SLOT_META_MASK) << SLOT_META_SHIFT >>> 0) >>> 0;
         }
-        if (!encode(slot)) {
-          handleEncodeFailure(slot);
-        }
+        publish(slot);
         inUsed = inUsed + 1 | 0;
         return deferred.promise;
       };
     },
     flushToWorker,
     enqueueKnown,
-    settlePromisePayload: (task) => {
-      if (task.reject === PLACE_HOLDER)
-        return false;
-      if (pendingPromises > 0)
-        pendingPromises = pendingPromises - 1 | 0;
-      const promiseStatus = task[PromisePayloadStatusSymbol];
-      task[PromisePayloadStatusSymbol] = 0 /* Idle */;
-      if (promiseStatus === 2 /* Rejected */) {
+    settlePromisePayload: (task, isRejected, value) => {
+      if (isRejected) {
         try {
-          task.reject(task.value);
+          task.reject(value);
         } catch {}
+        task.value = null;
+        task.resolve = PLACE_HOLDER;
+        task.reject = PLACE_HOLDER;
         inUsed = inUsed - 1 | 0;
         freePush(task[1 /* ID */]);
         return false;
       }
+      task.value = value;
       return enqueueKnown(task);
     }
   };
 }
 
 // src/runtime/dispatcher.ts
-import { MessageChannel as MessageChannel2 } from "node:worker_threads";
 var hostDispatcherLoop = ({
   signalBox: {
     opView,
@@ -3237,7 +3806,7 @@ class ChannelHandler {
   port2;
   #post2;
   constructor() {
-    this.channel = new MessageChannel2;
+    this.channel = createRuntimeMessageChannel();
     this.port1 = this.channel.port1;
     this.port2 = this.channel.port2;
     this.#post2 = this.port2.postMessage.bind(this.port2);
@@ -3258,14 +3827,12 @@ class ChannelHandler {
   close() {
     this.port1.onmessage = null;
     this.port2.onmessage = null;
-    this.port1.close();
-    this.port2.close();
+    this.port1.close?.();
+    this.port2.close?.();
   }
 }
 
 // src/runtime/pool.ts
-import { Worker } from "node:worker_threads";
-var poliWorker = Worker;
 var WORKER_FATAL_MESSAGE_KEY2 = "__knittingWorkerFatal";
 var execFlagKey = (flag) => flag.split("=", 1)[0];
 var NODE_PERMISSION_EXEC_FLAGS = new Set([
@@ -3354,9 +3921,13 @@ var spawnWorkerContext = ({
   usesAbortSignal
 }) => {
   const tsFileUrl = new URL(import.meta.url);
+  const poliWorker = RUNTIME_WORKER;
   if (debug?.logHref === true) {
     console.log(tsFileUrl);
     jsrIsGreatAndWorkWithoutBugs();
+  }
+  if (typeof poliWorker !== "function") {
+    throw new Error("Worker is not available in this runtime");
   }
   const sanitizeBytes = (value) => {
     if (!Number.isFinite(value))
@@ -3377,19 +3948,34 @@ var spawnWorkerContext = ({
   const defaultAbortSignalCapacity = 258;
   const requestedAbortSignalCapacity = sanitizeBytes(abortSignalCapacity);
   const resolvedAbortSignalCapacity = requestedAbortSignalCapacity ?? defaultAbortSignalCapacity;
-  const makeLockBuffers = () => {
-    const lockSector = new SharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH);
-    return {
-      headers: new SharedArrayBuffer(HEADER_BYTE_LENGTH),
-      lockSector,
-      payload: makePayloadBuffer(),
-      payloadSector: lockSector
-    };
+  const abortSignalWords = Math.max(1, Math.ceil(resolvedAbortSignalCapacity / 32));
+  const requestedSignalBytes = sanitizeBytes(sab?.size);
+  const externalSignalSab = sab?.sharedSab;
+  const makeLockControlLayout = () => {
+    const signalBytes = Math.max(TRANSPORT_SIGNAL_BYTES, requestedSignalBytes ?? TRANSPORT_SIGNAL_BYTES);
+    const abortBytes = abortSignalWords * Uint32Array.BYTES_PER_ELEMENT;
+    return createLockControlCarpet({
+      signalBytes,
+      abortBytes,
+      lockSectorBytes: LOCK_SECTOR_BYTE_LENGTH,
+      headerSlotStrideU32: HEADER_SLOT_STRIDE_U32,
+      slotCount: 32 /* slots */,
+      headerLayout: "split",
+      createBuffer: createWasmSharedArrayBuffer
+    });
   };
-  const lockBuffers = makeLockBuffers();
-  const returnLockBuffers = makeLockBuffers();
+  const controlLayout = makeLockControlLayout();
+  const lockBuffers = {
+    ...controlLayout.lock,
+    payload: makePayloadBuffer()
+  };
+  const returnLockBuffers = {
+    ...controlLayout.returnLock,
+    payload: makePayloadBuffer()
+  };
   const lock = lock2({
     headers: lockBuffers.headers,
+    headerSlotStrideU32: lockBuffers.headerSlotStrideU32,
     LockBoundSector: lockBuffers.lockSector,
     payload: lockBuffers.payload,
     payloadSector: lockBuffers.payloadSector,
@@ -3397,19 +3983,22 @@ var spawnWorkerContext = ({
   });
   const returnLock = lock2({
     headers: returnLockBuffers.headers,
+    headerSlotStrideU32: returnLockBuffers.headerSlotStrideU32,
     LockBoundSector: returnLockBuffers.lockSector,
     payload: returnLockBuffers.payload,
     payloadSector: returnLockBuffers.payloadSector,
     payloadConfig: resolvedPayloadConfig
   });
-  const abortSignalWords = Math.max(1, Math.ceil(resolvedAbortSignalCapacity / 32));
-  const abortSignalSAB = usesAbortSignal === true ? new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * abortSignalWords) : undefined;
+  const abortSignalSAB = usesAbortSignal === true ? controlLayout.abortSignals : undefined;
   const abortSignals = abortSignalSAB ? signalAbortFactory({
     sab: abortSignalSAB,
     maxSignals: resolvedAbortSignalCapacity
   }) : undefined;
   const signals = createSharedMemoryTransport({
-    sabObject: sab,
+    sabObject: externalSignalSab == null ? {
+      size: requestedSignalBytes,
+      sharedSab: controlLayout.signals
+    } : sab,
     isMain: true,
     thread,
     debug
@@ -3459,36 +4048,43 @@ var spawnWorkerContext = ({
   const nodeResourceLimits = toNodeWorkerResourceLimits(workerOptions?.resourceLimits);
   const baseNodeWorkerOptions = nodeResourceLimits ? { ...baseWorkerOptions, resourceLimits: nodeResourceLimits } : baseWorkerOptions;
   const withExecArgv = workerExecArgv && workerExecArgv.length > 0 ? { ...baseNodeWorkerOptions, execArgv: workerExecArgv } : baseNodeWorkerOptions;
-  try {
-    worker = new poliWorker(workerUrl, withExecArgv);
-  } catch (error) {
-    if (error?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
-      const fallbackExecArgv = toWorkerSafeExecArgv(withExecArgv.execArgv);
-      if (fallbackExecArgv && fallbackExecArgv.length > 0) {
-        try {
-          worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: fallbackExecArgv });
-        } catch (fallbackError) {
-          if (fallbackError?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
-            const compatExecArgv = toWorkerCompatExecArgv(fallbackExecArgv);
-            if (compatExecArgv && compatExecArgv.length > 0) {
-              try {
-                worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: compatExecArgv });
-              } catch {
+  if (HAS_NODE_WORKER_THREADS) {
+    try {
+      worker = new poliWorker(workerUrl, withExecArgv);
+    } catch (error) {
+      if (error?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
+        const fallbackExecArgv = toWorkerSafeExecArgv(withExecArgv.execArgv);
+        if (fallbackExecArgv && fallbackExecArgv.length > 0) {
+          try {
+            worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: fallbackExecArgv });
+          } catch (fallbackError) {
+            if (fallbackError?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
+              const compatExecArgv = toWorkerCompatExecArgv(fallbackExecArgv);
+              if (compatExecArgv && compatExecArgv.length > 0) {
+                try {
+                  worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: compatExecArgv });
+                } catch {
+                  worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+                }
+              } else {
                 worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
               }
             } else {
-              worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+              throw fallbackError;
             }
-          } else {
-            throw fallbackError;
           }
+        } else {
+          worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
         }
       } else {
-        worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+        throw error;
       }
-    } else {
-      throw error;
     }
+  } else {
+    worker = new poliWorker(workerUrl, {
+      type: "module"
+    });
+    worker.postMessage?.(workerDataPayload);
   }
   let closedReason;
   const markWorkerClosed = (reason) => {
@@ -3498,23 +4094,44 @@ var spawnWorkerContext = ({
     rejectAll(reason);
     channelHandler.close();
   };
-  const nodeWorker = worker;
-  nodeWorker.on?.("message", (message) => {
+  const onWorkerMessage = (message) => {
     if (!isWorkerFatalMessage(message))
       return;
     markWorkerClosed(`Worker startup failed: ${message[WORKER_FATAL_MESSAGE_KEY2]}`);
     terminateWorkerQuietly(worker);
-  });
-  nodeWorker.on?.("error", (error) => {
+  };
+  const onWorkerError = (error) => {
     const message = String(error?.message ?? error);
     markWorkerClosed(`Worker crashed: ${message}`);
-  });
-  nodeWorker.on?.("exit", (code) => {
-    if (typeof code === "number" && code === 0)
-      return;
-    const normalized = typeof code === "number" ? code : -1;
-    markWorkerClosed(`Worker exited with code ${normalized}`);
-  });
+  };
+  const nodeWorker = worker;
+  if (typeof nodeWorker.on === "function") {
+    nodeWorker.on("message", onWorkerMessage);
+    nodeWorker.on("error", onWorkerError);
+    nodeWorker.on("exit", (code) => {
+      if (typeof code === "number" && code === 0)
+        return;
+      const normalized = typeof code === "number" ? code : -1;
+      markWorkerClosed(`Worker exited with code ${normalized}`);
+    });
+  } else {
+    const webWorker = worker;
+    if (typeof webWorker.addEventListener === "function") {
+      webWorker.addEventListener("message", (event) => {
+        onWorkerMessage(event?.data);
+      });
+      webWorker.addEventListener("error", (event) => {
+        onWorkerError(event?.error ?? event?.message ?? event);
+      });
+    } else {
+      webWorker.onmessage = (event) => {
+        onWorkerMessage(event?.data);
+      };
+      webWorker.onerror = (event) => {
+        onWorkerError(event);
+      };
+    }
+  }
   const thisSignal = signalBox.opView;
   const a_add = Atomics.add;
   const a_load2 = Atomics.load;
@@ -3529,8 +4146,8 @@ var spawnWorkerContext = ({
       a_notify(thisSignal, 0, 1);
     }
   };
-  lock.setPromiseHandler((task) => {
-    queue.settlePromisePayload(task);
+  lock.setPromiseHandler((task, isRejected, value) => {
+    queue.settlePromisePayload(task, isRejected, value);
     send();
   });
   const call = ({ fnNumber, timeout, abortSignal }) => {
@@ -3555,22 +4172,16 @@ var spawnWorkerContext = ({
   return context;
 };
 
-// src/api.ts
-import { isMainThread as isMainThread3, workerData as workerData2 } from "node:worker_threads";
-
-// src/permission/protocol.ts
-import path2 from "node:path";
-import { existsSync, realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 // src/common/path-canonical.ts
-import path from "node:path";
-var toCanonicalPath = (candidate, fsApi = {}) => {
-  const absolute = path.resolve(candidate);
+var toCanonicalPath = (candidate, fsApi = {
+  existsSync: existsSyncCompat,
+  realpathSync: realpathSyncCompat
+}) => {
+  const absolute = pathResolve(candidate);
   const { existsSync, realpathSync } = fsApi;
   if (typeof realpathSync === "function") {
     try {
-      return path.resolve(realpathSync(absolute));
+      return pathResolve(realpathSync(absolute));
     } catch {}
   } else {
     return absolute;
@@ -3580,10 +4191,10 @@ var toCanonicalPath = (candidate, fsApi = {}) => {
   const missingSegments = [];
   let cursor = absolute;
   while (!existsSync(cursor)) {
-    const parent = path.dirname(cursor);
+    const parent = pathDirname(cursor);
     if (parent === cursor)
       return absolute;
-    missingSegments.push(path.basename(cursor));
+    missingSegments.push(pathBasename(cursor));
     cursor = parent;
   }
   let base = cursor;
@@ -3592,9 +4203,9 @@ var toCanonicalPath = (candidate, fsApi = {}) => {
   } catch {}
   let rebuilt = base;
   for (let i = missingSegments.length - 1;i >= 0; i--) {
-    rebuilt = path.join(rebuilt, missingSegments[i]);
+    rebuilt = pathJoin(rebuilt, missingSegments[i]);
   }
-  return path.resolve(rebuilt);
+  return pathResolve(rebuilt);
 };
 
 // src/permission/protocol.ts
@@ -3743,7 +4354,7 @@ var expandHomePath = (value, home) => {
   if (value === "~")
     return home;
   if (value.startsWith("~/") || value.startsWith("~\\")) {
-    return path2.resolve(home, value.slice(2));
+    return pathResolve(home, value.slice(2));
   }
   return value;
 };
@@ -3751,19 +4362,19 @@ var toAbsolutePath = (value, cwd, home) => {
   if (value instanceof URL) {
     if (value.protocol !== "file:")
       return;
-    return path2.resolve(fileURLToPath(value));
+    return pathResolve(fileURLToPathCompat(value));
   }
   const expanded = expandHomePath(value, home);
-  if (path2.isAbsolute(expanded)) {
-    return path2.resolve(expanded);
+  if (pathIsAbsolute(expanded)) {
+    return pathResolve(expanded);
   }
   try {
     const parsed = new URL(expanded);
     if (parsed.protocol !== "file:")
       return;
-    return path2.resolve(fileURLToPath(parsed));
+    return pathResolve(fileURLToPathCompat(parsed));
   } catch {
-    return path2.resolve(cwd, expanded);
+    return pathResolve(cwd, expanded);
   }
 };
 var toPath = (value, cwd, home) => value == null ? undefined : toAbsolutePath(value, cwd, home);
@@ -3783,27 +4394,27 @@ var toEnvFiles = (input, cwd, home) => {
   const values = Array.isArray(input) ? input : input ? [input] : [DEFAULT_ENV_FILE];
   return toUniquePathList(values, cwd, home);
 };
-var rawRealpathSync = realpathSync.native ?? realpathSync;
+var rawRealpathSync = realpathSyncCompat;
 var toCanonicalPath2 = (candidate) => {
   return toCanonicalPath(candidate, {
-    existsSync,
+    existsSync: existsSyncCompat,
     realpathSync: rawRealpathSync
   });
 };
 var isPathWithin = (base, candidate) => {
   const canonicalBase = toCanonicalPath2(base);
   const canonicalCandidate = toCanonicalPath2(candidate);
-  const relative = path2.relative(canonicalBase, canonicalCandidate);
-  return relative === "" || !relative.startsWith("..") && !path2.isAbsolute(relative);
+  const relative = pathRelative(canonicalBase, canonicalCandidate);
+  return relative === "" || !relative.startsWith("..") && !pathIsAbsolute(relative);
 };
 var defaultSensitiveProjectAndHomePaths = (cwd, home) => {
-  const projectSensitive = DEFAULT_DENY_RELATIVE.map((entry) => path2.resolve(cwd, entry));
-  const homeSensitive = home ? DEFAULT_DENY_HOME.map((entry) => path2.resolve(home, entry)) : [];
+  const projectSensitive = DEFAULT_DENY_RELATIVE.map((entry) => pathResolve(cwd, entry));
+  const homeSensitive = home ? DEFAULT_DENY_HOME.map((entry) => pathResolve(home, entry)) : [];
   return normalizeList([...projectSensitive, ...homeSensitive]);
 };
 var defaultSensitiveReadDenyPaths = (cwd, home) => {
   const projectAndHome = defaultSensitiveProjectAndHomePaths(cwd, home);
-  const osSensitive = isWindows() ? [] : DEFAULT_DENY_ABSOLUTE_POSIX.map((entry) => path2.resolve(entry));
+  const osSensitive = isWindows() ? [] : DEFAULT_DENY_ABSOLUTE_POSIX.map((entry) => pathResolve(entry));
   return normalizeList([...projectAndHome, ...osSensitive]);
 };
 var collectWritePaths = (cwd, values) => {
@@ -3822,7 +4433,7 @@ var collectReadPaths = ({
 }) => {
   const out = [
     cwd,
-    path2.resolve(cwd, NODE_MODULES_DIR),
+    pathResolve(cwd, NODE_MODULES_DIR),
     ...read,
     ...moduleFiles,
     ...envFiles
@@ -3837,7 +4448,7 @@ var resolveDenoLock = (input, cwd, home) => {
   if (input && input !== true) {
     return toPath(input, cwd, home);
   }
-  return path2.resolve(cwd, DEFAULT_DENO_LOCK_FILE);
+  return pathResolve(cwd, DEFAULT_DENO_LOCK_FILE);
 };
 var resolveNodePermissionActivationFlag = () => {
   try {
@@ -4001,7 +4612,7 @@ var resolvePermissionProtocol = ({
   const mode = rawMode === "unsafe" || rawMode === "off" ? "unsafe" : rawMode === "custom" ? "custom" : "strict";
   const unsafe = mode === "unsafe";
   const allowConsole = input.console ?? unsafe;
-  const cwd = path2.resolve(input.cwd ?? getCwd());
+  const cwd = pathResolve(input.cwd ?? getCwd());
   const home = getHome();
   const envFiles = toEnvFiles(input.env?.files, cwd, home);
   const moduleFiles = toUniquePathList(modules, cwd, home);
@@ -4062,7 +4673,7 @@ var resolvePermissionProtocol = ({
       l3: cloneL3Keys()
     };
   }
-  const nodeModulesPath = path2.resolve(cwd, NODE_MODULES_DIR);
+  const nodeModulesPath = pathResolve(cwd, NODE_MODULES_DIR);
   const hasExplicitDenyRead = hasOwn(input, "denyRead");
   const hasExplicitDenyWrite = hasOwn(input, "denyWrite");
   const hasExplicitRead = hasOwn(input, "read");
@@ -4359,7 +4970,6 @@ function firstIdleRandom(contexts) {
 }
 
 // src/runtime/inline-executor.ts
-import { MessageChannel as MessageChannel3 } from "node:worker_threads";
 var normalizeTimeout2 = (timeout) => {
   if (timeout == null)
     return;
@@ -4444,7 +5054,7 @@ var createInlineExecutor = ({
   let isInMacro = false;
   let isInMicro = false;
   const batchLimit = Number.isFinite(batchSize) ? Math.max(1, Math.floor(batchSize ?? 1)) : Number.POSITIVE_INFINITY;
-  const channel = new MessageChannel3;
+  const channel = createRuntimeMessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
   const post2 = port2.postMessage.bind(port2);
@@ -4615,7 +5225,7 @@ var createInlineExecutor = ({
 // src/api.ts
 var MAX_FUNCTION_ID = 65535;
 var MAX_FUNCTION_COUNT = MAX_FUNCTION_ID + 1;
-var isMain = isMainThread3;
+var isMain = RUNTIME_IS_MAIN_THREAD;
 var toListAndIds = (args) => {
   const result = Object.values(args).reduce((acc, v) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc), [
     new Set,
@@ -4646,9 +5256,9 @@ var createPool = ({
   dispatcher,
   host
 }) => (tasks) => {
-  if (isMainThread3 === false) {
+  if (RUNTIME_IS_MAIN_THREAD === false) {
     if (debug?.extras === true) {
-      console.warn("createPool has been called with : " + JSON.stringify(workerData2));
+      console.warn("createPool has been called with : " + JSON.stringify(RUNTIME_WORKER_DATA));
     }
     const notMainThreadError = () => {
       throw new Error("createPool can only be called in the main thread.");
@@ -4884,7 +5494,7 @@ var buildTaskDefinitionFromCaller = (input, callerHref, at) => {
     [endpointSymbol]: true
   };
   out.createPool = (options) => {
-    if (isMainThread3 === false) {
+    if (RUNTIME_IS_MAIN_THREAD === false) {
       return out;
     }
     return createSingleTaskPool(out, options);
