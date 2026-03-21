@@ -1,49 +1,68 @@
-import { task } from "./knitting.js";
+import { importTask, task } from "./knitting.js";
 
-const isWorkerScope = () => {
-  const scopeCtor = globalThis.WorkerGlobalScope;
-  if (typeof scopeCtor !== "function") return false;
+const TASK_MODULE_HREF = import.meta.url;
+const IMPORTED_TASK_MODULE_HREF = new URL(
+  "./knitting-browser-debug-imported.js",
+  import.meta.url,
+).href;
 
-  try {
-    return globalThis instanceof scopeCtor;
-  } catch {
-    return false;
-  }
+const setStableTaskIdentity = (taskDefinition, at, meta = {}) => {
+  taskDefinition.importedFrom = TASK_MODULE_HREF;
+  taskDefinition.at = at;
+  Object.assign(taskDefinition, meta);
+  return taskDefinition;
 };
 
-export const browserRoundTrip = task({
-  f: async (payload) => {
-    const text = typeof payload?.text === "string" ? payload.text : "";
-    const numbers = Array.isArray(payload?.numbers)
-      ? payload.numbers.map((value) => {
-          const parsed = Number(value);
-          return Number.isFinite(parsed) ? parsed : 0;
-        })
-      : [];
+const toUint8Array = (value) => {
+  if (value instanceof Uint8Array) return value;
 
-    return {
-      ok: true,
-      receivedAt: new Date().toISOString(),
-      worker: {
-        inWorker: isWorkerScope(),
-        crossOriginIsolated: globalThis.crossOriginIsolated === true,
-        hasSharedArrayBuffer: typeof SharedArrayBuffer === "function",
-        hasAtomics: typeof Atomics === "object",
-        locationHref:
-          typeof globalThis.location?.href === "string"
-            ? globalThis.location.href
-            : null,
-      },
-      payload: {
-        ...payload,
-        text,
-        numbers,
-      },
-      transformed: {
-        upper: text.toUpperCase(),
-        reversed: text.split("").reverse().join(""),
-        sum: numbers.reduce((total, value) => total + value, 0),
-      },
-    };
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+
+  if (Array.isArray(value)) {
+    return Uint8Array.from(value);
+  }
+
+  return new Uint8Array(0);
+};
+
+export const browserRoundTrip = setStableTaskIdentity(importTask({
+  href: IMPORTED_TASK_MODULE_HREF,
+  name: "browserRoundTripImported",
+}), 0, {
+  api: "importTask",
+  loadsFrom: IMPORTED_TASK_MODULE_HREF,
+});
+
+export const browserNumberRoundTrip = setStableTaskIdentity(task({
+  href: TASK_MODULE_HREF,
+  f: async (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed + 1 : Number.NaN;
   },
+}), 1, {
+  api: "task",
+  loadsFrom: TASK_MODULE_HREF,
+});
+
+export const browserUint8RoundTrip = setStableTaskIdentity(task({
+  href: TASK_MODULE_HREF,
+  f: async (value) => {
+    const bytes = toUint8Array(value);
+    let sum = 0;
+
+    for (const byte of bytes) {
+      sum += byte;
+    }
+
+    return sum;
+  },
+}), 2, {
+  api: "task",
+  loadsFrom: TASK_MODULE_HREF,
 });

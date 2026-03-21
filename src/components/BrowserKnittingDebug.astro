@@ -8,8 +8,8 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
       <p class="browser-knitting-debug__eyebrow">Browser smoke test</p>
       <h2>Run a real worker round-trip</h2>
       <p class="browser-knitting-debug__copy">
-        This loads the browser bundle, creates a one-thread pool, calls a task, and prints the
-        result or the startup error.
+        This loads the browser bundle, runs both a direct `task()` check and an `importTask()`
+        check, then prints the result or the startup error.
       </p>
     </div>
 
@@ -43,6 +43,46 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
 
 <script is:inline>
   const sections = document.querySelectorAll("[data-browser-knitting-debug]");
+  const IMPORT_TIMEOUT_MS = 4_000;
+  const CALL_TIMEOUT_MS = 4_000;
+  const SHUTDOWN_TIMEOUT_MS = 2_000;
+  const TEST_SPECS = [
+    {
+      key: "taskNumberPayload",
+      label: "task:number",
+      api: "task",
+      exportName: "browserNumberRoundTrip",
+      createInput: () => 41,
+      previewInput: (value) => value,
+      previewResult: (value) => value,
+    },
+    {
+      key: "taskUint8Payload",
+      label: "task:uint8",
+      api: "task",
+      exportName: "browserUint8RoundTrip",
+      createInput: () => new Uint8Array([3, 1, 4, 1, 5, 9]),
+      previewInput: (value) => ({
+        type: "Uint8Array",
+        byteLength: value.byteLength,
+        bytes: Array.from(value),
+      }),
+      previewResult: (value) => value,
+    },
+    {
+      key: "importTaskObjectPayload",
+      label: "importTask:object",
+      api: "importTask",
+      exportName: "browserRoundTrip",
+      createInput: () => ({
+        text: "stockinette",
+        numbers: [2, 3, 5, 8, 13],
+        requestedFrom: window.location.href,
+      }),
+      previewInput: (value) => value,
+      previewResult: (value) => value,
+    },
+  ];
 
   const serializeError = (error) => {
     if (error instanceof Error) {
@@ -74,6 +114,86 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
   const writeJson = (element, value) => {
     element.textContent = JSON.stringify(value, null, 2);
   };
+
+  const withTimeout = async (promise, label, timeoutMs) => {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      return await promise;
+    }
+
+    let timeoutId;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  };
+
+  const getTaskIdentity = (taskDefinition) => ({
+    href: taskDefinition?.href ?? null,
+    importedFrom: taskDefinition?.importedFrom ?? null,
+    at: taskDefinition?.at ?? null,
+    id: taskDefinition?.id ?? null,
+    api: taskDefinition?.api ?? null,
+    loadsFrom: taskDefinition?.loadsFrom ?? null,
+  });
+
+  const summarizeTaskModule = (module) => {
+    const taskEntries = Object.fromEntries(
+      TEST_SPECS.map((spec) => [spec.exportName, module?.[spec.exportName] ?? null]),
+    );
+
+    return {
+      exports: Object.keys(module ?? {}).sort(),
+      tasks: taskEntries,
+      checks: Object.fromEntries(
+        TEST_SPECS.map((spec) => [
+          spec.exportName,
+          {
+            exists:
+              typeof taskEntries[spec.exportName] === "object" &&
+              taskEntries[spec.exportName] !== null,
+            hasCreatePool:
+              typeof taskEntries[spec.exportName]?.createPool === "function",
+          },
+        ]),
+      ),
+      identities: Object.fromEntries(
+        TEST_SPECS.map((spec) => [
+          spec.exportName,
+          getTaskIdentity(taskEntries[spec.exportName]),
+        ]),
+      ),
+    };
+  };
+
+  const buildTaskDiagnostics = (taskModule, taskUrl) =>
+    Object.fromEntries(
+      TEST_SPECS.map((spec) => [
+        spec.key,
+        {
+          api: spec.api,
+          exportName: spec.exportName,
+          exists: taskModule.checks[spec.exportName]?.exists === true,
+          hasCreatePool:
+            taskModule.checks[spec.exportName]?.hasCreatePool === true,
+          identity: taskModule.identities[spec.exportName] ?? null,
+          taskUrlMatchesImportedFrom:
+            taskModule.identities[spec.exportName]?.importedFrom === taskUrl,
+          identityApiMatches:
+            taskModule.identities[spec.exportName]?.api === spec.api,
+        },
+      ]),
+    );
 
   const updateFacts = (root) => {
     const snapshot = environmentSnapshot();
@@ -114,7 +234,100 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
       setStatus(root, "Running", "running");
 
       const startedAt = window.performance.now();
-      let pool;
+      let taskDiagnostics = null;
+      const testResults = {};
+
+      const runSingleTaskCheck = async (spec, taskDefinition) => {
+        const input = spec.createInput();
+        const inputPreview = spec.previewInput(input);
+        let pool;
+        let shutdownSummary = {
+          attempted: false,
+          ok: null,
+          durationMs: null,
+          error: null,
+        };
+
+        const shutdownPool = async () => {
+          if (shutdownSummary.attempted) return shutdownSummary;
+
+          shutdownSummary.attempted = true;
+
+          if (!pool?.shutdown) {
+            shutdownSummary.ok = true;
+            shutdownSummary.durationMs = 0;
+            return shutdownSummary;
+          }
+
+          const shutdownStartedAt = window.performance.now();
+
+          try {
+            await withTimeout(
+              Promise.resolve(pool.shutdown()),
+              `${spec.exportName} shutdown`,
+              SHUTDOWN_TIMEOUT_MS,
+            );
+            shutdownSummary.ok = true;
+          } catch (error) {
+            shutdownSummary.ok = false;
+            shutdownSummary.error = serializeError(error);
+          } finally {
+            shutdownSummary.durationMs = Number(
+              (window.performance.now() - shutdownStartedAt).toFixed(2),
+            );
+          }
+
+          return shutdownSummary;
+        };
+
+        const taskStartedAt = window.performance.now();
+
+        try {
+          pool = taskDefinition.createPool({
+            threads: 1,
+            worker: {
+              hardTimeoutMs: CALL_TIMEOUT_MS,
+            },
+          });
+
+          const result = await withTimeout(
+            Promise.resolve(pool.call(input)),
+            `${spec.exportName} call`,
+            CALL_TIMEOUT_MS,
+          );
+          const shutdown = await shutdownPool();
+
+          if (shutdown.ok === false) {
+            throw new Error(`${spec.exportName} completed, but pool shutdown failed.`, {
+              cause: shutdown.error,
+            });
+          }
+
+          return {
+            ok: true,
+            api: spec.api,
+            durationMs: Number(
+              (window.performance.now() - taskStartedAt).toFixed(2),
+            ),
+            input: inputPreview,
+            result: spec.previewResult(result),
+            shutdown,
+          };
+        } catch (error) {
+          const shutdown = await shutdownPool();
+
+          return {
+            ok: false,
+            api: spec.api,
+            durationMs: Number(
+              (window.performance.now() - taskStartedAt).toFixed(2),
+            ),
+            input: inputPreview,
+            error: serializeError(error),
+            shutdown,
+          };
+        }
+      };
 
       try {
         const knittingUrl = resolveFromBase(baseUrl, "knitting.js");
@@ -127,32 +340,102 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
           environment: environmentSnapshot(),
         });
 
-        const knitting = await import(knittingUrl);
-        const tasks = await import(taskUrl);
+        const knitting = await withTimeout(
+          import(knittingUrl),
+          "Import knitting.js",
+          IMPORT_TIMEOUT_MS,
+        );
+        const tasks = await withTimeout(
+          import(taskUrl),
+          "Import knitting-browser-debug-task.js",
+          IMPORT_TIMEOUT_MS,
+        );
+        const taskModule = summarizeTaskModule(tasks);
+        taskDiagnostics = buildTaskDiagnostics(taskModule, taskUrl);
 
-        pool = knitting.createPool({ threads: 1 })({
-          browserRoundTrip: tasks.browserRoundTrip,
+        if (typeof knitting.createPool !== "function") {
+          throw new TypeError("knitting.js is missing createPool().");
+        }
+
+        for (const spec of TEST_SPECS) {
+          if (!taskModule.checks[spec.exportName]?.exists) {
+            throw new TypeError(
+              `knitting-browser-debug-task.js is missing the "${spec.exportName}" export.`,
+            );
+          }
+
+          if (!taskModule.checks[spec.exportName]?.hasCreatePool) {
+            throw new TypeError(
+              `"${spec.exportName}" is exported, but it is not a Knitting task with createPool().`,
+            );
+          }
+        }
+
+        writeJson(output, {
+          phase: "calling",
+          knittingUrl,
+          taskUrl,
+          exports: {
+            knitting: Object.keys(knitting).sort(),
+            tasks: taskModule.exports,
+          },
+          taskDiagnostics,
+          environment: environmentSnapshot(),
+          currentTest: null,
+          results: testResults,
         });
 
-        const payload = {
-          text: "stockinette",
-          numbers: [2, 3, 5, 8, 13],
-          requestedFrom: window.location.href,
-        };
+        for (const spec of TEST_SPECS) {
+          setStatus(root, `Running ${spec.label}`, "running");
 
-        const result = await pool.call.browserRoundTrip(payload);
+          writeJson(output, {
+            phase: "calling",
+            knittingUrl,
+            taskUrl,
+            exports: {
+              knitting: Object.keys(knitting).sort(),
+              tasks: taskModule.exports,
+            },
+            taskDiagnostics,
+            environment: environmentSnapshot(),
+            currentTest: spec.key,
+            results: testResults,
+          });
+
+          testResults[spec.key] = await runSingleTaskCheck(
+            spec,
+            taskModule.tasks[spec.exportName],
+          );
+
+          writeJson(output, {
+            phase: "calling",
+            knittingUrl,
+            taskUrl,
+            exports: {
+              knitting: Object.keys(knitting).sort(),
+              tasks: taskModule.exports,
+            },
+            taskDiagnostics,
+            environment: environmentSnapshot(),
+            currentTest: spec.key,
+            results: testResults,
+          });
+        }
+
         const durationMs = Number((window.performance.now() - startedAt).toFixed(2));
+        const ok = Object.values(testResults).every((result) => result?.ok === true);
 
-        setStatus(root, "Passed", "success");
+        setStatus(root, ok ? "Passed" : "Failed", ok ? "success" : "error");
         writeJson(output, {
-          ok: true,
+          ok,
           durationMs,
           exports: {
             knitting: Object.keys(knitting).sort(),
             tasks: Object.keys(tasks).sort(),
           },
+          taskDiagnostics,
           environment: environmentSnapshot(),
-          result,
+          results: testResults,
         });
       } catch (error) {
         const durationMs = Number((window.performance.now() - startedAt).toFixed(2));
@@ -169,19 +452,39 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
           hints.push("SharedArrayBuffer is unavailable in this browser context.");
         }
 
+        if (taskDiagnostics) {
+          for (const [key, diagnostic] of Object.entries(taskDiagnostics)) {
+            if (
+              diagnostic?.identity?.importedFrom &&
+              diagnostic.identity.importedFrom !== resolveFromBase(baseUrl, "knitting-browser-debug-task.js")
+            ) {
+              hints.push(
+                `${key} task identity mismatch: expected ${resolveFromBase(baseUrl, "knitting-browser-debug-task.js")} but task reports ${diagnostic.identity.importedFrom}.`,
+              );
+            }
+
+            if (
+              diagnostic?.identity?.api &&
+              diagnostic.identity.api !== diagnostic.api
+            ) {
+              hints.push(
+                `${key} API mismatch: expected ${diagnostic.api} but task reports ${diagnostic.identity.api}.`,
+              );
+            }
+          }
+        }
+
         setStatus(root, "Failed", "error");
         writeJson(output, {
           ok: false,
           durationMs,
           environment,
           error: serializeError(error),
+          taskDiagnostics,
+          results: testResults,
           hints,
         });
       } finally {
-        try {
-          await pool?.shutdown?.();
-        } catch {}
-
         runButton.disabled = false;
         running = false;
       }

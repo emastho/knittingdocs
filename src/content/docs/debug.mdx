@@ -6,7 +6,8 @@ description: Smoke test the browser build of Knitting from inside the docs site.
 import BrowserKnittingDebug from "../../components/BrowserKnittingDebug.astro";
 
 This page is a small browser-side check for the `public/knitting.js` bundle. It loads the browser
-module, imports a task module, starts a one-thread pool, and runs a real worker call.
+module, imports a debug task module that uses both `task()` and `importTask()`, starts one-thread
+pools, and runs real worker calls through both paths.
 
 If the check fails and `crossOriginIsolated` is `false`, the usual cause is missing
 `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers, which browsers commonly

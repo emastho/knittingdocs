@@ -300,6 +300,70 @@ var toSharedBufferRegion = (value) => value instanceof SharedArrayBuffer ? {
   byteLength: value.byteLength
 } : value;
 
+// src/common/shared-buffer-text.ts
+var textEncode = new TextEncoder;
+var textDecode = new TextDecoder;
+var isSharedBufferTextCompatTypeError = (error) => error instanceof TypeError;
+var makeProbeView = (source) => {
+  const region = toSharedBufferRegion(source);
+  const probeLength = Math.min(1, region.byteLength);
+  return new Uint8Array(region.sab, region.byteOffset, probeLength);
+};
+var isSharedBufferTextCompat = (value) => {
+  if (!value || typeof value !== "object")
+    return false;
+  const candidate = value;
+  return typeof candidate.encodeInto === "boolean" && typeof candidate.decode === "boolean";
+};
+var isLockBufferTextCompat = (value) => {
+  if (!value || typeof value !== "object")
+    return false;
+  const candidate = value;
+  return isSharedBufferTextCompat(candidate.headers) && isSharedBufferTextCompat(candidate.payload);
+};
+var probeSharedBufferTextCompat = (source) => {
+  const view = makeProbeView(source);
+  const encodeInto = (() => {
+    if (typeof textEncode.encodeInto !== "function")
+      return false;
+    const probe = view.byteLength > 0 ? view : view.subarray(0, 0);
+    const restoredByte = probe.byteLength > 0 ? probe[0] : undefined;
+    try {
+      textEncode.encodeInto(probe.byteLength > 0 ? "a" : "", probe);
+      return true;
+    } catch (error) {
+      if (!isSharedBufferTextCompatTypeError(error))
+        throw error;
+      return false;
+    } finally {
+      if (restoredByte !== undefined) {
+        probe[0] = restoredByte;
+      }
+    }
+  })();
+  const decode = (() => {
+    try {
+      textDecode.decode(view);
+      return true;
+    } catch (error) {
+      if (!isSharedBufferTextCompatTypeError(error))
+        throw error;
+      return false;
+    }
+  })();
+  return {
+    encodeInto,
+    decode
+  };
+};
+var probeLockBufferTextCompat = ({
+  headers,
+  payload
+}) => ({
+  headers: probeSharedBufferTextCompat(headers),
+  payload: probeSharedBufferTextCompat(payload)
+});
+
 // src/ipc/tools/RingQueue.ts
 class RingQueue {
   #buf;
@@ -932,21 +996,21 @@ var resolvePayloadBufferOptions = ({
 
 // src/memory/createSharedBufferIO.ts
 var page = 1024 * 4;
-var textEncode = new TextEncoder;
-var textDecode = new TextDecoder;
+var textEncode2 = new TextEncoder;
+var textDecode2 = new TextDecoder;
 var DYNAMIC_HEADER_BYTES = 64;
 var DYNAMIC_SAFE_PADDING_BYTES = page;
-var sharedBufferEncodeIntoUnsupported = false;
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
 var isExactUint8Array = (src) => src.constructor === Uint8Array;
 var canonicalDynamicUint8Array = (src) => isExactUint8Array(src) ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
 var isSharedArrayBufferBacked = (view) => typeof SharedArrayBuffer === "function" && view.buffer instanceof SharedArrayBuffer;
 var isSharedBufferEncodeIntoError = (error) => error instanceof TypeError;
+var isSharedBufferDecodeError = (error) => error instanceof TypeError;
 var manualEncodeInto = (str, target) => {
   let read = 0;
   let written = 0;
   for (const char of str) {
-    const encoded = textEncode.encode(char);
+    const encoded = textEncode2.encode(char);
     if (written + encoded.byteLength > target.byteLength)
       break;
     target.set(encoded, written);
@@ -957,33 +1021,59 @@ var manualEncodeInto = (str, target) => {
 };
 var fallbackEncodeInto = (str, target) => {
   const scratch = new Uint8Array(target.byteLength);
-  const result = typeof textEncode.encodeInto === "function" ? textEncode.encodeInto(str, scratch) : manualEncodeInto(str, scratch);
+  const result = typeof textEncode2.encodeInto === "function" ? textEncode2.encodeInto(str, scratch) : manualEncodeInto(str, scratch);
   if (result.written > 0) {
     target.set(scratch.subarray(0, result.written), 0);
   }
   return result;
 };
-var encodeIntoCompat = (str, target) => {
-  if (typeof textEncode.encodeInto !== "function") {
-    return fallbackEncodeInto(str, target);
-  }
-  const sharedBacked = isSharedArrayBufferBacked(target);
-  if (!sharedBacked || !sharedBufferEncodeIntoUnsupported) {
+var createTextCompatIO = (textCompat) => {
+  let sharedBufferEncodeIntoUnsupported = textCompat?.encodeInto === false;
+  let sharedBufferDecodeUnsupported = textCompat?.decode === false;
+  const encodeIntoCompat = (str, target) => {
+    if (typeof textEncode2.encodeInto !== "function") {
+      return fallbackEncodeInto(str, target);
+    }
+    const sharedBacked = isSharedArrayBufferBacked(target);
+    if (sharedBacked && sharedBufferEncodeIntoUnsupported) {
+      return fallbackEncodeInto(str, target);
+    }
     try {
-      return textEncode.encodeInto(str, target);
+      return textEncode2.encodeInto(str, target);
     } catch (error) {
       if (!sharedBacked || !isSharedBufferEncodeIntoError(error)) {
         throw error;
       }
       sharedBufferEncodeIntoUnsupported = true;
+      return fallbackEncodeInto(str, target);
     }
-  }
-  return fallbackEncodeInto(str, target);
+  };
+  const decodeCompat = (bytes) => {
+    const sharedBacked = isSharedArrayBufferBacked(bytes);
+    if (sharedBacked && sharedBufferDecodeUnsupported) {
+      return textDecode2.decode(new Uint8Array(bytes));
+    }
+    try {
+      return textDecode2.decode(bytes);
+    } catch (error) {
+      if (!sharedBacked || !isSharedBufferDecodeError(error)) {
+        throw error;
+      }
+      sharedBufferDecodeUnsupported = true;
+      return textDecode2.decode(new Uint8Array(bytes));
+    }
+  };
+  return {
+    encodeIntoCompat,
+    decodeCompat
+  };
 };
 var createSharedDynamicBufferIO = ({
   sab,
-  payloadConfig
+  payloadConfig,
+  textCompat
 }) => {
+  const { encodeIntoCompat, decodeCompat } = createTextCompatIO(textCompat);
   const resolvedPayload = resolvePayloadBufferOptions({
     sab,
     options: payloadConfig
@@ -1007,7 +1097,7 @@ var createSharedDynamicBufferIO = ({
     f64 = new Float64Array(lockSAB, DYNAMIC_HEADER_BYTES, lockSAB.byteLength - DYNAMIC_HEADER_BYTES >>> 3);
     return true;
   };
-  const readUtf8 = (start, end) => textDecode.decode(u8.subarray(start, end));
+  const readUtf8 = (start, end) => decodeCompat(u8.subarray(start, end));
   const writeBinary = (src, start = 0) => {
     const bytes = canonicalDynamicUint8Array(src);
     if (!ensureCapacity(start + bytes.byteLength)) {
@@ -1057,8 +1147,10 @@ var createSharedDynamicBufferIO = ({
 };
 var createSharedStaticBufferIO = ({
   headersBuffer,
-  slotStrideU32
+  slotStrideU32,
+  textCompat
 }) => {
+  const { encodeIntoCompat, decodeCompat } = createTextCompatIO(textCompat);
   const buffer = headersBuffer instanceof Uint32Array ? headersBuffer.buffer : headersBuffer;
   const baseByteOffset = headersBuffer instanceof Uint32Array ? headersBuffer.byteOffset : 0;
   const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
@@ -1086,7 +1178,7 @@ var createSharedStaticBufferIO = ({
   };
   const readUtf8 = (start, end, at) => {
     const slotStart = slotByteOffsets[at];
-    return textDecode.decode(baseU8.subarray(slotStart + start, slotStart + end));
+    return decodeCompat(baseU8.subarray(slotStart + start, slotStart + end));
   };
   const writeBinary = (src, at, start = 0) => {
     baseU8.set(src, slotByteOffsets[at] + start);
@@ -1194,7 +1286,7 @@ var memory = new ArrayBuffer(8);
 var Float64View = new Float64Array(memory);
 var BigInt64View = new BigInt64Array(memory);
 var Uint32View = new Uint32Array(memory);
-var textEncode2 = new TextEncoder;
+var textEncode3 = new TextEncoder;
 var BIGINT64_MIN = -(1n << 63n);
 var BIGINT64_MAX = (1n << 63n) - 1n;
 var { parse: parseJSON, stringify: stringifyJSON } = JSON;
@@ -1319,7 +1411,7 @@ var decodeBigIntBinary = (bytes) => {
   }
   return sign === 1 ? -value : value;
 };
-var initStaticIO = (headersBuffer, headerSlotStrideU32) => {
+var initStaticIO = (headersBuffer, headerSlotStrideU32, textCompat) => {
   const slotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
   const requiredBytes = getStridedRegionSpanBytes({
     slotCount: 32 /* slots */,
@@ -1332,11 +1424,12 @@ var initStaticIO = (headersBuffer, headerSlotStrideU32) => {
   }
   return createSharedStaticBufferIO({
     headersBuffer,
-    slotStrideU32: slotStride
+    slotStrideU32: slotStride,
+    textCompat
   });
 };
-var requireStaticIO = (headersBuffer, headerSlotStrideU32) => {
-  const staticIO = initStaticIO(headersBuffer, headerSlotStrideU32);
+var requireStaticIO = (headersBuffer, headerSlotStrideU32, textCompat) => {
+  const staticIO = initStaticIO(headersBuffer, headerSlotStrideU32, textCompat);
   if (staticIO === null) {
     throw new RangeError("headersBuffer is too small for static payload IO");
   }
@@ -1349,6 +1442,7 @@ var encodePayload = ({
   payloadConfig,
   headersBuffer,
   headerSlotStrideU32,
+  textCompat,
   onPromise
 }) => {
   const payloadSab = payload?.sab ?? sab;
@@ -1366,7 +1460,8 @@ var encodePayload = ({
     writeUtf8: writeDynamicUtf8
   } = createSharedDynamicBufferIO({
     sab: payloadSab,
-    payloadConfig: resolvedPayloadConfig
+    payloadConfig: resolvedPayloadConfig,
+    textCompat: textCompat?.payload
   });
   const {
     maxBytes: staticMaxBytes,
@@ -1374,7 +1469,7 @@ var encodePayload = ({
     writeExactUint8Array: writeStaticExactUint8Array,
     write8Binary: writeStatic8Binary,
     writeUtf8: writeStaticUtf8
-  } = requireStaticIO(headersBuffer, headerSlotStrideU32);
+  } = requireStaticIO(headersBuffer, headerSlotStrideU32, textCompat?.headers);
   const dynamicLimitError = (task, actualBytes, label) => encoderError({
     task,
     type: 3 /* Serializable */,
@@ -1397,7 +1492,7 @@ var encodePayload = ({
     const estimatedTotal = estimatedBytes + extraBytes;
     if (estimatedTotal <= maxPayloadBytes)
       return estimatedBytes;
-    const exactBytes = textEncode2.encode(text).byteLength;
+    const exactBytes = textEncode3.encode(text).byteLength;
     const exactTotal = exactBytes + extraBytes;
     if (exactTotal > maxPayloadBytes) {
       dynamicLimitError(task, exactTotal, label);
@@ -1918,6 +2013,7 @@ var decodePayload = ({
   payloadConfig,
   headersBuffer,
   headerSlotStrideU32,
+  textCompat,
   host
 }) => {
   const payloadSab = payload?.sab ?? sab;
@@ -1938,7 +2034,8 @@ var decodePayload = ({
     read8BytesFloatView: readDynamic8BytesFloatView
   } = createSharedDynamicBufferIO({
     sab: payloadSab,
-    payloadConfig: resolvedPayloadConfig
+    payloadConfig: resolvedPayloadConfig,
+    textCompat: textCompat?.payload
   });
   const {
     readUtf8: readStaticUtf8,
@@ -1947,7 +2044,7 @@ var decodePayload = ({
     readUint8ArrayCopy: readStaticUint8ArrayCopy,
     readBytesArrayBufferCopy: readStaticArrayBufferCopy,
     read8BytesFloatCopy: readStatic8BytesFloatCopy
-  } = requireStaticIO(headersBuffer, headerSlotStrideU32);
+  } = requireStaticIO(headersBuffer, headerSlotStrideU32, textCompat?.headers);
   return (task, slotIndex, specialFlags) => {
     switch (task[2 /* Type */]) {
       case 2 /* BigInt */:
@@ -2232,6 +2329,7 @@ var lock2 = ({
   payload,
   payloadConfig,
   payloadSector,
+  textCompat,
   resultList,
   toSentList,
   recycleList
@@ -2249,6 +2347,10 @@ var lock2 = ({
   });
   const payloadSAB = payload ?? (resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes));
   const payloadLockRegion = toSharedBufferRegion(payloadSector ?? lockSectorRegion);
+  const resolvedTextCompat = textCompat ?? probeLockBufferTextCompat({
+    headers: headersRegion,
+    payload: payloadSAB
+  });
   let promiseHandler;
   let trackedDeferredTasks = new WeakSet;
   const encodeTask = encodePayload({
@@ -2259,6 +2361,7 @@ var lock2 = ({
     headersBuffer,
     headerSlotStrideU32: headersSlotStride,
     lockSector: payloadLockRegion,
+    textCompat: resolvedTextCompat,
     onPromise: (task, isRejected, value) => {
       if (trackedDeferredTasks.delete(task) && pendingPromiseCount > 0) {
         pendingPromiseCount = pendingPromiseCount - 1 | 0;
@@ -2273,7 +2376,8 @@ var lock2 = ({
     },
     headersBuffer,
     headerSlotStrideU32: headersSlotStride,
-    lockSector: payloadLockRegion
+    lockSector: payloadLockRegion,
+    textCompat: resolvedTextCompat
   });
   let LastLocal = 0 | 0;
   let LastWorker = 0 | 0;
@@ -3095,7 +3199,7 @@ var scrubWorkerDataSensitiveBuffers = (value) => {
   } catch {}
 };
 // src/worker/safety/startup.ts
-var hasLockBuffers = (value) => isSharedBufferSource(value?.headers) && isSharedBufferSource(value?.lockSector) && value?.payload instanceof SharedArrayBuffer && isSharedBufferSource(value?.payloadSector);
+var hasLockBuffers = (value) => isSharedBufferSource(value?.headers) && isSharedBufferSource(value?.lockSector) && value?.payload instanceof SharedArrayBuffer && isSharedBufferSource(value?.payloadSector) && (value?.textCompat === undefined || isLockBufferTextCompat(value.textCompat));
 var assertWorkerSharedMemoryBootData = ({ sab, lock, returnLock }) => {
   if (!isSharedBufferSource(sab)) {
     throw new Error("worker missing transport SAB");
@@ -3300,7 +3404,8 @@ var workerMainLoop = async (startupData) => {
     LockBoundSector: lock.lockSector,
     payload: lock.payload,
     payloadSector: lock.payloadSector,
-    payloadConfig
+    payloadConfig,
+    textCompat: lock.textCompat
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
@@ -3308,7 +3413,8 @@ var workerMainLoop = async (startupData) => {
     LockBoundSector: returnLock.lockSector,
     payload: returnLock.payload,
     payloadSector: returnLock.payloadSector,
-    payloadConfig
+    payloadConfig,
+    textCompat: returnLock.textCompat
   });
   const timers = workerOptions?.timers;
   const spinMicroseconds = timers?.spinMicroseconds ?? Math.max(1, totalNumberOfThread) * 50;
@@ -3456,7 +3562,7 @@ var isLockBuffers = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return isSharedBufferSource(candidate.headers) && isSharedBufferSource(candidate.lockSector) && candidate.payload instanceof SharedArrayBuffer && isSharedBufferSource(candidate.payloadSector);
+  return isSharedBufferSource(candidate.headers) && isSharedBufferSource(candidate.lockSector) && candidate.payload instanceof SharedArrayBuffer && isSharedBufferSource(candidate.payloadSector) && (candidate.textCompat === undefined || isLockBufferTextCompat(candidate.textCompat));
 };
 var isWorkerBootPayload = (value) => {
   if (!value || typeof value !== "object")
@@ -4006,13 +4112,23 @@ var spawnWorkerContext = ({
     });
   };
   const controlLayout = makeLockControlLayout();
+  const lockPayload = makePayloadBuffer();
   const lockBuffers = {
     ...controlLayout.lock,
-    payload: makePayloadBuffer()
+    payload: lockPayload,
+    textCompat: probeLockBufferTextCompat({
+      headers: controlLayout.lock.headers,
+      payload: lockPayload
+    })
   };
+  const returnPayload = makePayloadBuffer();
   const returnLockBuffers = {
     ...controlLayout.returnLock,
-    payload: makePayloadBuffer()
+    payload: returnPayload,
+    textCompat: probeLockBufferTextCompat({
+      headers: controlLayout.returnLock.headers,
+      payload: returnPayload
+    })
   };
   const lock = lock2({
     headers: lockBuffers.headers,
@@ -4020,7 +4136,8 @@ var spawnWorkerContext = ({
     LockBoundSector: lockBuffers.lockSector,
     payload: lockBuffers.payload,
     payloadSector: lockBuffers.payloadSector,
-    payloadConfig: resolvedPayloadConfig
+    payloadConfig: resolvedPayloadConfig,
+    textCompat: lockBuffers.textCompat
   });
   const returnLock = lock2({
     headers: returnLockBuffers.headers,
@@ -4028,7 +4145,8 @@ var spawnWorkerContext = ({
     LockBoundSector: returnLockBuffers.lockSector,
     payload: returnLockBuffers.payload,
     payloadSector: returnLockBuffers.payloadSector,
-    payloadConfig: resolvedPayloadConfig
+    payloadConfig: resolvedPayloadConfig,
+    textCompat: returnLockBuffers.textCompat
   });
   const abortSignalSAB = usesAbortSignal === true ? controlLayout.abortSignals : undefined;
   const abortSignals = abortSignalSAB ? signalAbortFactory({

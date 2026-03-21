@@ -76,13 +76,8 @@ const crossOriginIsolationHeaders = {
 export default defineConfig({
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
-  vite: {
-    server: {
-      headers: crossOriginIsolationHeaders,
-    },
-    preview: {
-      headers: crossOriginIsolationHeaders,
-    },
+  server: {
+    headers: crossOriginIsolationHeaders,
   },
   markdown: {
     remarkPlugins: [remarkMath],
