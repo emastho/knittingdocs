@@ -5,6 +5,9 @@ description: Download the browser build of Knitting, start quickly, and smoke te
 
 import BrowserKnittingDebug from "../../components/BrowserKnittingDebug.astro";
 
+<BrowserKnittingDebug />
+
+
 This page is the browser entry point for Knitting. You can download the current stable browser bundle, jump to the regular Quick Start, or run the in-page smoke test against the hosted `public/knitting.js` build.
 
 <div class="browser-page-actions">
@@ -63,6 +66,5 @@ export const add = task({
 
 That is the same idea used by this page: load `knitting.js` from a browser URL, keep task identity stable with `import.meta.url`, and let workers import the task module from its URL.
 
-<BrowserKnittingDebug />
 
 
