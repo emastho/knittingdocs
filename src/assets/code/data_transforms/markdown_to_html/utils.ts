@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import { marked } from "marked";
 import { brotliCompressSync } from "node:zlib";
 

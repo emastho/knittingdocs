@@ -1,0 +1,222 @@
+---
+title: Process workers
+description: Run each worker as a separate OS process for stronger isolation — through a sandbox like bubblewrap or a container like Docker.
+sidebar:
+  order: 5
+---
+
+By default Knitting runs workers as **threads** — the lowest-overhead option.
+When you need stronger isolation, run each worker as a **separate process**. A
+process worker has its own memory and permissions, and — because it's just a
+child process — you can launch it inside a sandbox like `bwrap` or a container
+like Docker.
+
+```ts
+const pool = createPool({
+  threads: 2,
+  worker: {
+    runtime: "process",
+    processRuntime: "node", // "node" | "deno" | "bun" (default "deno")
+  },
+})({ add });
+```
+
+That's the whole switch: the same `call` API and the same tasks, now running in
+another process. Everything below is about wrapping that process.
+
+## Keep isolated code out of the host
+
+Isolation only helps if the code you want contained never runs on the host. Use
+[`importTask`](/guides/defining-tasks/#importing-worker-side-code-with-importtask)
+so the host holds a typed wrapper while only the worker imports and evaluates the
+module:
+
+```ts
+// worker-tasks.ts — only the sandboxed worker imports this.
+export const add = ([a, b]: [number, number]) => a + b;
+```
+
+```ts
+// main.ts
+export const add = importTask<[number, number], number>({
+  href: "./worker-tasks.ts",
+  name: "add",
+});
+```
+
+## The fd-0 handshake
+
+Process workers receive their shared-memory handle on **stdin — file descriptor
+0**. That one detail decides how a wrapper has to behave:
+
+- Wrappers that leave stdin alone (most sandboxes) work as-is, inheriting the fd.
+- Wrappers that replace, close, or proxy stdin (most containers) break the
+  handshake. For those, switch to **named** shared memory so the worker reopens
+  the mapping by name instead of inheriting an fd:
+
+  ```ts
+  worker: {
+    runtime: "process",
+    processSharedMemory: "named", // or { mode: "named", namePrefix: "knit" }
+  }
+  ```
+
+  Named memory needs both sides in the **same OS IPC namespace** (for Docker,
+  `--ipc=host`).
+
+:::note
+On Windows, Knitting always uses named shared memory for process workers, so you
+don't need to set `processSharedMemory` yourself.
+:::
+
+## `processCommandPrefix`
+
+`processCommandPrefix` is the wrapper command placed **before** Knitting's own
+worker launch. Knitting appends the real command — runtime plus the worker file —
+after your prefix, so the prefix is just "how to start a process that will then
+run the worker."
+
+### Bubblewrap (keeps fd 0)
+
+`bwrap` preserves stdin, so the inherited-fd path works and no named memory is
+needed. This runs Bun workers with new namespaces (no network) and a read-only
+filesystem:
+
+```ts
+import { createPool, importTask, isMain } from "knitting";
+
+export const add = importTask<[number, number], number>({
+  href: "./worker-tasks.ts",
+  name: "add",
+});
+
+if (isMain) {
+  using pool = createPool({
+    worker: {
+      runtime: "process",
+      processRuntime: "bun",
+      processCommandPrefix: [
+        "bwrap",
+        "--unshare-all",        // new namespaces, no network
+        "--ro-bind", "/", "/",  // read-only filesystem
+        "--dev-bind", "/dev", "/dev",
+        "--proc", "/proc",
+        "--tmpfs", "/tmp",      // writable scratch
+        "--die-with-parent",
+      ],
+    },
+  })({ add });
+
+  console.log(await pool.call.add([1, 2])); // 3
+}
+```
+
+:::caution
+`--tmpfs <path>` masks whatever is at that path. Don't put your project — the
+files the worker imports — under a tmpfs-masked path, or the worker can't load
+them. And remember it's isolation, not a full sandbox: a read-only bind is still
+readable.
+:::
+
+### Docker (named shared memory)
+
+Containers replace stdin, so use `processSharedMemory: "named"` and share the IPC
+namespace with `--ipc=host`. The container also needs to see the same files at
+the same path (a volume mount) and receive Knitting's two boot env vars.
+
+```ts
+// docker-worker-tasks.ts — imported only inside the container.
+import { isMain } from "knitting";
+
+export const addOne = (n: number) => n + 1;
+export const reportIsMain = () => isMain; // false: this runs off the host
+```
+
+```ts
+// main.ts
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createPool, importTask, isMain } from "knitting";
+
+const docker = process.env.DOCKER_BINARY ?? "docker";
+const image = process.env.KNITTING_DOCKER_IMAGE ?? "node:24-trixie-slim";
+const cwd = process.cwd();
+
+export const addOne = importTask<number, number>({
+  href: "./docker-worker-tasks.ts",
+  name: "addOne",
+});
+export const reportIsMain = importTask<void, boolean>({
+  href: "./docker-worker-tasks.ts",
+  name: "reportIsMain",
+});
+
+// Record the container id so we can always clean it up.
+const dockerPrefix = (cidfile: string): string[] => [
+  docker, "run",
+  "--ipc=host",                          // share the shared-memory namespace
+  "--cidfile", cidfile,
+  "-v", `${cwd}:${cwd}`,                 // same files, same path
+  "-w", cwd,
+  "-e", "KNITTING_PROCESS_WORKER",       // forward Knitting's boot payload
+  "-e", "KNITTING_PROCESS_WORKER_BOOT",
+  image,
+];
+
+const removeContainer = async (cidfile: string) => {
+  const id = await readFile(cidfile, "utf8").then((s) => s.trim()).catch(() => "");
+  if (!id) return;
+  await new Promise<void>((resolve) => {
+    spawn(docker, ["rm", "-f", id], { stdio: "ignore" })
+      .once("error", () => resolve())
+      .once("exit", () => resolve());
+  });
+};
+
+if (isMain) {
+  const dir = await mkdtemp(join(tmpdir(), "knitting-docker-"));
+  const cidfile = join(dir, "worker.cid");
+
+  const pool = createPool({
+    threads: 1,
+    worker: {
+      runtime: "process",
+      processRuntime: "node",
+      processSharedMemory: "named",
+      processCommandPrefix: dockerPrefix(cidfile),
+    },
+    permission: "unsafe", // the container is the boundary here
+  })({ addOne, reportIsMain });
+
+  try {
+    const [value, workerIsMain] = await Promise.all([
+      pool.call.addOne(41),
+      pool.call.reportIsMain(),
+    ]);
+    console.log({ value, workerIsMain, ok: value === 42 && workerIsMain === false });
+  } finally {
+    await removeContainer(cidfile);
+    await pool.shutdown().catch(() => undefined);
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+```
+
+Why `permission: "unsafe"` here? The container — not Knitting's per-worker flags —
+is the isolation boundary, so the in-container worker runs without extra
+permission flags. Keep the image and mounts tight instead. See
+[Permissions](/guides/permissions/).
+
+## Choosing a wrapper
+
+| Wrapper | stdin (fd 0) | Shared memory |
+| --- | --- | --- |
+| None (plain process) | inherited | inherited (default) |
+| `bwrap` / sandbox | preserved | inherited (default) |
+| Docker / container | replaced | `"named"` + `--ipc=host` |
+
+This is same-host communication. Named shared memory is fast because both sides
+map the same bytes, but it's not a network transport. For the lower-level
+building block behind all of this, see [Shared memory](/guides/shared-memory/).

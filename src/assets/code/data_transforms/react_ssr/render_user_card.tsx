@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import {
   clamp,
   engagementScore,

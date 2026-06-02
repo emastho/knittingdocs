@@ -2,7 +2,7 @@
 title: Performance
 description: Tips about performance and good practices.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 import { Badge } from '@astrojs/starlight/components';
@@ -277,7 +277,7 @@ The same pattern also works when the task expects an `Envelope`. You can shape
 the value with `.then(...)` and still avoid awaiting the body first:
 
 ```ts
-import { Envelope } from "@vixeny/knitting";
+import { Envelope } from "knitting";
 
 app.post("/upload", async (c) => {
   const result = await handlers.call.storeUpload(

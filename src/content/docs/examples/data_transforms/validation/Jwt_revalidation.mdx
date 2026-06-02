@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
@@ -58,16 +57,6 @@ The task returns a JSON string. A successful non-renewed response looks like:
 
 If the token is near expiry but still renewable, the same shape comes back with `renewed: true`
 and a replacement `token`.
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 Uses built-in Web Crypto APIs -- no extra JWT package required.
 

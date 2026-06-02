@@ -1,11 +1,11 @@
 ---
 title: Installation
-description: Install Knitting from JSR for Node.js, Deno, and Bun, and verify runtime requirements for shared-memory worker IPC.
+description: Install Knitting from npm for Node.js, Deno, and Bun, and verify runtime requirements for shared-memory worker IPC.
 head:
   - tag: meta
     attrs:
       name: keywords
-      content: "install Knitting, JSR package, Node.js worker IPC, Deno install, Bun install"
+      content: "install Knitting, npm package, JSR package, Node.js worker IPC, Deno install, Bun install"
   - tag: meta
     attrs:
       property: og:type
@@ -26,24 +26,20 @@ Use this page to check runtime requirements and install Knitting correctly for y
 
 - Node.js 22+
 - Deno 2+
-- Bun (recent stable)
+- Bun 1.0+
 
 ## Install
 
-Knitting is published on JSR. Latest release as of March 23, 2026: `0.1.38`.
+Knitting is published on npm as `knitting`. Latest release: `0.1.51`.
 
 <Tabs>
-  <TabItem label="Deno"><Code code="deno add --npm jsr:@vixeny/knitting" lang="bash" title={"deno.sh"} mark={['--npm']} /></TabItem>
-  <TabItem label="NPM"><Code code="npx jsr add @vixeny/knitting" lang="bash" title={"npm.sh"} /></TabItem>
-  <TabItem label="Bun"><Code code="bunx jsr add @vixeny/knitting" lang="bash" title={"bun.sh"} /></TabItem>
+  <TabItem label="npm"><Code code="npm install knitting" lang="bash" title={"npm.sh"} /></TabItem>
+  <TabItem label="Deno"><Code code="deno add --npm knitting" lang="bash" title={"deno.sh"} mark={['--npm']} /></TabItem>
+  <TabItem label="Bun"><Code code="bun add knitting" lang="bash" title={"bun.sh"} /></TabItem>
 </Tabs>
 
 :::note
-Knitting needs a physical npm module entry for Deno to resolve it correctly, so use
-`--npm` when installing through `deno` or `jsr`.
-
-If Deno keeps resolving the package incorrectly, remove the generated entry from
-`deno.json` and install again with `--npm`.
-
-<Code code="jsr add --npm @vixeny/knitting" lang="bash" title={"jsr.sh"} mark={['--npm']}/>
+Knitting is also published on JSR as `@vixeny/knitting` — the same code under a
+scoped name. The npm package is the simplest path on every runtime, so prefer it
+unless you specifically need the JSR entry.
 :::

@@ -9,6 +9,13 @@ sidebar:
 
 - `call.<task>(args)` enqueue a task and return a promise.
 - `shutdown(delayMs?)` stop workers immediately or after an optional delay.
+- `[Symbol.dispose]` so a `using` declaration closes the pool when its scope ends.
+
+Prefer `using pool = createPool(...)({ ... })` and let the pool dispose itself.
+`shutdown()` is still there, though — call `await pool.shutdown()` to close the
+pool **before** the `using` scope ends, when you need to await teardown, or when
+you are on a runtime without `using`. `using` simply calls `shutdown()` for you
+at scope exit.
 
 `call.*()` always returns a promise.
 Inputs may also be native promises; they are resolved on the host before
@@ -51,6 +58,15 @@ createPool({
       | "firstIdleOrRandom"
   } | "roundRobin" | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
+    runtime?: "thread" | "process",
+    processRuntime?: "node" | "deno" | "bun",
+    processCommandPrefix?: string[],
+    processSharedMemory?: "inherit" | "named" | {
+      mode?: "inherit" | "named",
+      namePrefix?: string,
+      unlinkOnShutdown?: boolean,
+    },
+    bootstrap?: { href: string, name?: string, data?: unknown },
     resolveAfterFinishingAll?: true,
     timers?: {
       spinMicroseconds?: number,
@@ -162,21 +178,20 @@ const pool = createPool({
 Basic example:
 
 ```ts
-import { createPool, isMain, task } from "@vixeny/knitting";
+import { createPool, isMain, task } from "knitting";
 
 export const add = task<[number, number], number>({
   f: async ([a, b]) => a + b,
 });
 
-const { call, shutdown } = createPool({
-  threads: 2,
-})({ add });
-
 if (isMain) {
-  const jobs = [call.add([1, 2]), call.add([3, 4])];
-  const results = await Promise.all(jobs);
-  console.log(results);
-  await shutdown();
+  using pool = createPool({ threads: 2 })({ add });
+
+  const results = await Promise.all([
+    pool.call.add([1, 2]),
+    pool.call.add([3, 4]),
+  ]);
+  console.log(results); // [3, 7]
 }
 ```
 
@@ -212,6 +227,21 @@ Adds an extra lane that runs tasks on the main thread.
 See [Inliner guide](/guides/inliner) for detail.
 
 ## worker
+
+### runtime
+
+`"thread"` (default) runs workers as runtime-local threads — the lowest-overhead
+option. `"process"` runs each worker as a separate OS process for stronger
+isolation, and unlocks `processRuntime`, `processCommandPrefix`, and
+`processSharedMemory`. See [Process workers](/guides/process-workers) for the
+full story — sandboxes, containers, and the stdin / fd-0 handshake.
+
+### bootstrap
+
+A privileged module imported and awaited once per worker before task modules
+load: `{ href, name?, data? }`. Use it to install runtime guards, strip
+environment variables, or prepare worker-only globals. Bootstrap is worker-only
+and cannot be combined with the inline lane.
 
 ### resolveAfterFinishingAll
 

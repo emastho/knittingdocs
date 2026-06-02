@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_html.ts");
@@ -28,16 +27,6 @@ Three files:
 - `run_markdown_to_html.ts` -- a small runnable example that compares host and worker output
 - `bench_markdown_to_html.ts` -- the optional host-vs-worker benchmark
 - `utils.ts` -- markdown rendering, compression tasks, and shared helpers
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["marked", "mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 ## Run
 

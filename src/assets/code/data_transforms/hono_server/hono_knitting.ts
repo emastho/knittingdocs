@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { createPool } from "@vixeny/knitting";
+import { createPool } from "knitting";
 import { Hono } from "hono";
 import { issueJwt } from "./hono_components_jwt.ts";
 import { renderSsrPage } from "./hono_componets_ssr.tsx";

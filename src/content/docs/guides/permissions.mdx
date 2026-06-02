@@ -11,16 +11,20 @@ access at runtime.
 Set `permission` in `createPool(...)`:
 
 ```ts
-import { createPool, task } from "@vixeny/knitting";
+import { createPool, isMain, task } from "knitting";
 
 export const work = task({
   f: async (x: number) => x * 2,
 });
 
-createPool({
-  threads: 2,
-  permission: {},
-})({ work });
+if (isMain) {
+  using pool = createPool({
+    threads: 2,
+    permission: { mode: "strict" },
+  })({ work });
+
+  console.log(await pool.call.work(21)); // 42
+}
 ```
 
 ## Modes
@@ -39,6 +43,41 @@ Default is `false` in strict mode and `true` in unsafe mode.
 createPool({ permission: { mode: "strict", console: true } })({ work });
 createPool({ permission: "unsafe" })({ work });
 ```
+
+## Fine-grained policy
+
+In object mode you grant exactly what your tasks need — anything you don't list
+stays denied:
+
+```ts
+createPool({
+  permission: {
+    mode: "strict",
+    allowImport: true,          // allow task-module imports
+    read: ["./data"],           // path allow-list (or `true` for all)
+    write: ["./out"],
+    net: ["api.example.com"],   // host allow-list (or `true` for all)
+    env: { allow: ["NODE_ENV"] },
+    run: ["git"],               // subprocess allow-list
+    console: true,
+  },
+})({ work });
+```
+
+| Field | Meaning |
+| --- | --- |
+| `read` / `write` | Path allow-lists. `true` means unrestricted. |
+| `denyRead` / `denyWrite` | Explicit deny entries layered on top. |
+| `net` / `denyNet` | Network host allow / deny lists. |
+| `allowImport` | Modules the worker may import. `true` allows all. |
+| `env` | `{ allow, deny, files }` for environment-variable access. |
+| `run` / `denyRun` | Subprocess execution allow / deny lists. |
+| `console` | Let worker `console.*` reach the host. |
+
+Enforcement uses each runtime's native mechanism, so coverage varies (see
+[Runtime mapping](#runtime-mapping)). Treat permissions as a guardrail, not the
+only boundary for hostile code — for that, combine them with
+[process workers](/guides/process-workers/).
 
 ## Strict defaults
 
@@ -96,6 +135,6 @@ runtime flags.
 Object mode supports runtime-specific process execution overrides:
 
 - `node.allowChildProcess?: boolean`
-- `deno.allowRun?: boolean`
+- `deno.allowRun?: boolean` — legacy, superseded by the top-level `run` allow-list.
 
 Both default to `false` in strict mode.

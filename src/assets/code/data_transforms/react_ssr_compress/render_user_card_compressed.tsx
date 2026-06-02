@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import { brotliCompressSync } from "node:zlib";
 import { renderUserCardHost } from "../react_ssr/render_user_card.tsx";
 

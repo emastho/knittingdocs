@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import { encoding_for_model } from "tiktoken";
 
 export type PromptInput = {

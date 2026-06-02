@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const server = getCode("data_transforms/hono_server/hono_knitting.ts");
@@ -37,17 +36,7 @@ This example is split into three files:
 - **`@hono/node-server`**: a thin adapter that runs a Hono `fetch` handler on Node/Bun.
 - **React SSR (`react-dom/server`)**: renders a tiny HTML page for `/ssr` so you can simulate CPU-heavy server work.
 - **`hono/jwt`**: signs a JWT (HS256) for `/jwt` so the example includes common auth-like CPU work.
-- **Knitting (`@vixeny/knitting`)**: runs selected transforms in a worker pool (threads). This is the core “offload expensive work” technique the example demonstrates.
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["hono", "@hono/node-server", "react", "react-dom", "zod"]}
-  denoUseNpmInterop={true}
-/>
-:::
+- **Knitting (`knitting`)**: runs selected transforms in a worker pool (threads). This is the core “offload expensive work” technique the example demonstrates.
 
 The JWT route uses `hono/jwt` and signs with HS256.
 Set `JWT_SECRET` in production.

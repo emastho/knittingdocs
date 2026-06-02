@@ -2,7 +2,7 @@
 title: Inliner
 description: Run pure compute on the host thread as an extra lane.
 sidebar:
-  order: 3
+  order: 8
 ---
 
 The `inliner` option adds the host (main thread) as one extra lane in the pool.
@@ -159,16 +159,15 @@ the host thread.
 High batch size, host joins after workers:
 
 ```ts
-const { call, shutdown } = createPool({
+using pool = createPool({
   threads: 4,
   inliner: { position: "last", batchSize: 64 },
   balancer: "firstIdleOrRandom",
 })({ scoreChunk });
 
 const results = await Promise.all(
-  chunks.map((chunk) => call.scoreChunk(chunk)),
+  chunks.map((chunk) => pool.call.scoreChunk(chunk)),
 );
-await shutdown();
 ```
 
 ### Burst drain with threshold
@@ -176,7 +175,7 @@ await shutdown();
 Host stays out until concurrency spikes:
 
 ```ts
-const { call, shutdown } = createPool({
+using pool = createPool({
   threads: 2,
   inliner: {
     position: "last",
@@ -193,7 +192,7 @@ Useful when you want one worker for isolation but the host can handle the easy
 math too:
 
 ```ts
-const { call, shutdown } = createPool({
+using pool = createPool({
   threads: 1,
   inliner: { position: "first", batchSize: 8 },
   balancer: "roundRobin",

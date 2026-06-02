@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/prompt_token_budgeting/run_prompt_token_budget.ts");
@@ -68,16 +67,6 @@ Output shape:
 
 The useful part is not just the final `prompt`; you also get the bookkeeping needed to explain
 why a prompt was trimmed and by how much.
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["tiktoken", "openai", "mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 `openai` is optional. These examples only prepare prompts and token budgets.
 `mitata` is only needed for the benchmark script.

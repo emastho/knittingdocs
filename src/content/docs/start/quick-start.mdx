@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: Build your first Knitting worker pool, define tasks, call them like functions, and run parallel JavaScript across CPU cores.
+description: Build your first Knitting worker pool, define tasks, call them like async functions, run them in parallel, and shut down cleanly with `using`.
 head:
   - tag: meta
     attrs:
@@ -24,11 +24,12 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { FileTree } from '@astrojs/starlight/components';
 
 export const hello = getCode('hello_world.ts');
-export const two = getCode('multi_thread.ts');
-export const inline = getCode('inline.ts');
-export const multi = getCode('inline_multiple.ts');
+export const parallel = getCode('multi_thread.ts');
+export const multi = getCode('multi_task.ts');
+export const options = getCode('task_options.ts');
 
-This quick start shows how to define tasks, create a worker pool, execute task calls, and shut down cleanly.
+This quick start walks the whole loop: define tasks, create a pool, call tasks
+like async functions, and let the pool shut down cleanly with `using`.
 
 ## Introduction
 
@@ -40,139 +41,117 @@ If you already know what workers are, think of Knitting as:
 
 A few words we’ll use a lot:
 
-- **Task**: an exported function wrapped with `task({ f })`. Tasks live at module scope so workers can load them consistently.
+- **Task**: a function the workers can run. The simplest task is just an
+  exported function; wrap it with `task({ f })` when you want options like
+  timeouts or aborts.
 - **`call.*()`**: runs a task on the pool and returns a `Promise` with the result.
-- **`isMain`**: a safe boolean that’s `true` only on the host (main thread). Use it to avoid running “host code” inside workers.
-- **`createPool()`**: creates the worker pool and returns helpers like `call` and `shutdown`.
-- **Thread pool**: the set of workers available to execute tasks.
-- **Inlining / inliner**: optionally includes the host as an extra “lane”, so some work can run locally instead of always going to workers.
-- **Host ↔ Worker**: the host is the process that creates the pool; workers are the spawned threads.
+- **`isMain`**: a boolean that’s `true` only on the host. Workers re-import your
+  module, so guard host-only code — like creating the pool — with it.
+- **`createPool()`**: starts the workers and returns a typed `call` object plus
+  `shutdown`. The pool is also disposable, so `using` can close it for you.
+- **Host ↔ Worker**: the host is the process that creates the pool; workers are
+  the threads (or processes) that run the tasks.
 
 ### Examples
 
-Now that we share the vocabulary, the snippets should feel much more familiar.
+Now that we share the vocabulary, the snippets should feel familiar.
 
 <Tabs>
-  <TabItem label="1 Thread"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
-  <TabItem label="2 Threads"><Code code={two} lang="ts" title={"multi_thread.ts"} /></TabItem>
-  <TabItem label="Host + 2 Threads"><Code code={inline} lang="ts" title={"inline.ts"} /></TabItem>
-  <TabItem label="Multiple tasks"><Code code={multi} lang="ts" title={"inline_multiple.ts"} /></TabItem>
+  <TabItem label="One task"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
+  <TabItem label="Parallel"><Code code={parallel} lang="ts" title={"multi_thread.ts"} /></TabItem>
+  <TabItem label="Multiple tasks"><Code code={multi} lang="ts" title={"multi_task.ts"} /></TabItem>
+  <TabItem label="Task options"><Code code={options} lang="ts" title={"task_options.ts"} /></TabItem>
 </Tabs>
 
-## Workflow
+## Build it step by step
 
 <Steps>
 
-1. Import Knitting:
+1. Import what you need:
 
    ```ts
-   import { isMain, task, createPool } from "@vixeny/knitting";
+   import { createPool, isMain } from "knitting";
    ```
 
-2. Define your tasks:
+2. Export your tasks. The simplest task is just an exported function, kept at
+   module scope so workers can load it by name:
 
    ```ts
-   import { task } from "@vixeny/knitting";
-
-   export const hello = task({
-     f: () => "hello ",
-   });
-
-   export const world = task({
-     f: (args: string) => args + "world!",
-   });
+   export const square = (n: number) => n * n;
+   export const greet = (name: string) => `hello ${name}`;
    ```
 
-3. Create a pool:
+3. Create the pool inside an `isMain` guard. Workers re-import this module, and
+   the guard keeps them from re-running your host code:
 
    ```ts
-   import { task, createPool } from "@vixeny/knitting";
-
-   export const hello = task({
-     f: () => "hello ",
-   });
-
-   export const world = task({
-     f: (args: string) => args + "world!",
-   });
-
-   const { call, shutdown } = createPool({
-     threads: 1, // default
-   })({
-     hello,
-     world,
-   });
-   ```
-
-   Or create it from a single task:
-
-   ```ts
-   import { task } from "@vixeny/knitting";
-
-   export const world = task({
-     f: (args: string) => args + "world",
-   }).createPool();
-   ```
-
-4. Only run host code on the host (`isMain`), then call tasks:
-
-   ```ts
-   import { isMain, task, createPool } from "@vixeny/knitting";
-
-   export const hello = task({
-     f: () => "hello ",
-   });
-
-   export const world = task({
-     f: (args: string) => args + "world!",
-   });
-
-   const { call, shutdown } = createPool({ threads: 1 })({
-     hello,
-     world,
-   });
-
    if (isMain) {
-     Promise.all(
-       Array.from({ length: 5 }, () => call.world(call.hello())),
-     )
-       .then(console.log)
-       .finally(shutdown);
+     using pool = createPool({ threads: 2 })({ square, greet });
    }
    ```
 
-   `call.world(call.hello())` is intentional: `call.hello()` returns a promise,
-   and Knitting resolves promise inputs on the host before dispatching `world`.
+   `using` makes the pool close itself when the block ends — no manual cleanup.
 
-   Or the “single task pool” version:
+4. Call tasks like async functions. They’re just promises, so batch them with
+   `Promise.all`:
 
    ```ts
-   import { isMain, task } from "@vixeny/knitting";
-
-   export const world = task({
-     f: (args: string) => args + "world",
-   }).createPool();
-
    if (isMain) {
-     world.call("hello ")
-       .then(console.log)
-       .finally(world.shutdown);
+     using pool = createPool({ threads: 2 })({ square, greet });
+
+     const [n, message] = await Promise.all([
+       pool.call.square(8),
+       pool.call.greet("knitting"),
+     ]);
+
+     console.log({ n, message }); // { n: 64, message: "hello knitting" }
    }
    ```
 
 5. Shut down when you’re done.
 
-   Workers don’t magically disappear. Call `shutdown()` to clean up and let the process exit.
+   With `using`, that already happens at the end of the block: workers stop and
+   the process can exit. When you need to control the timing — or you’re on a
+   runtime without `using` — call `shutdown()` yourself:
+
+   ```ts
+   const pool = createPool({ threads: 2 })({ square, greet });
+   try {
+     console.log(await pool.call.square(8));
+   } finally {
+     await pool.shutdown();
+   }
+   ```
 
 </Steps>
 
-## Best practices
+### A task can make its own pool
 
-Make it once, keep it tidy.
+For a quick script with a single task, skip the separate `createPool` call:
+
+```ts
+import { isMain, task } from "knitting";
+
+export const double = task({
+  f: (n: number) => n * 2,
+}).createPool({ threads: 2 });
+
+if (isMain) {
+  try {
+    console.log(await double.call(21)); // 42
+  } finally {
+    await double.shutdown();
+  }
+}
+```
+
+## Good habits
+
+A few things that keep Knitting code clean and fast.
 
 ### Keep tasks in their own module(s)
 
-It keeps your app code clean and helps workers load only what they need.
+It keeps your app code tidy and lets workers load only what they need.
 
 <FileTree>
 
@@ -190,22 +169,11 @@ It keeps your app code clean and helps workers load only what they need.
 
 </FileTree>
 
-### Prefer request -> transform -> response tasks
-
-Knitting is tuned for local server workloads: parse a request body, validate it,
-render something, compress it, sign it, return a compact result. That is why so
-many examples focus on SSR, JWTs, markdown, and validation.
-
-If you are building an HTTP service, start with those shapes before reaching
-for more exotic worker patterns. See [Hono server routes](/examples/data_transforms/rendering_output/hono_server).
-
 ### Promise inputs are awaited on the host
 
 `call.*()` accepts `Promise<supported>` inputs. Knitting resolves them on the
 host before dispatch, so unresolved promise state never crosses the thread
-boundary.
-
-That is useful in request handlers because you can pass body reads directly:
+boundary. That is handy in request handlers — you can pass a body read directly:
 
 ```ts
 app.post("/validate", async (c) => {
@@ -214,50 +182,29 @@ app.post("/validate", async (c) => {
 });
 ```
 
-This keeps handler code short and avoids extra staging variables. If the input
-promise rejects, the host call rejects and the worker task does not run.
+If the input promise rejects, the host call rejects and the worker never runs.
 
-### Pick the cheapest payload type that fits
+### Pick the cheapest payload that fits
 
-For hot paths, simpler types are better:
+Smaller, flatter values move fastest: numbers, booleans, and short strings,
+then typed arrays and `Buffer`, then compact JSON. For bytes-plus-metadata, use
+`Envelope`. See [Supported payloads](/guides/payloads/).
 
-- Best: `number`, `boolean`, `null`, `undefined`, `Date`, small `string`
-- Fast: `Buffer`, `ArrayBuffer`, typed arrays like `Uint8Array`
-- Good: compact JSON-like `Object` / `Array`
-- Heavier: large objects, large strings, `Error` payloads
+### Start strict, open up later
 
-If you are moving bytes plus a little metadata, use `Envelope`:
+Worker permissions are restricted by default — sensitive paths like `.env`,
+`.git`, `~/.ssh`, and `/etc` are blocked, and `node_modules` is deny-write.
+Open only what your tasks actually need. See [Permissions](/guides/permissions/).
 
-```ts
-import { Envelope } from "@vixeny/knitting";
+## Where to go next
 
-const payload = new Envelope(
-  { route: "/upload", contentType: "image/png" },
-  fileBuffer,
-);
+- [Defining tasks](/guides/defining-tasks/) — `task()`, `importTask()`, timeouts, and aborts.
+- [Creating pools](/guides/creating-pools/) — threads, balancers, and shutdown.
+- [Payloads](/guides/payloads/) — what crosses the boundary, and `Envelope`.
+- [Performance](/guides/performance/) and the [inliner](/guides/inliner/) — when to let the host run some work too.
 
-await pool.call.processUpload(payload);
-```
-
-That shape is a good fit for server-style binary work because it keeps headers
-small and the binary payload explicit. See [Supported payloads](/guides/payloads/).
-
-### Avoid the inliner for HTTP/server workloads
-
-For web servers, start with workers only. The point is usually to keep the main
-thread free for routing and I/O. The `inliner` adds the host as another compute
-lane, which can be great for tiny math-heavy loops but can also put work back
-onto the event loop you are trying to protect.
-
-So the default advice is simple: do **not** turn on `inliner` first. Add it
-later only if you have measured a workload where it clearly helps. See the
-[Performance guide](/guides/performance/) and [Inliner guide](/guides/inliner/).
-
-### Worker permissions start conservative
-
-Worker access is restricted by default. Sensitive paths such as `.env`, `.git`,
-`.npmrc`, `~/.ssh`, `~/.aws`, and system paths like `/proc`, `/sys`, `/dev`,
-and `/etc` are blocked, and `node_modules` is deny-write.
-
-That is the right default for server code: start strict, then open only what
-your tasks actually need. See [Permissions](/guides/permissions/).
+Going further: Knitting can also run each worker as a **separate process** — even
+inside a `bwrap` sandbox or a container — for stronger isolation (see
+[Process workers](/guides/process-workers/)), and move large buffers with
+**`ProcessSharedBuffer`** (shared memory, no copy — see
+[Shared memory](/guides/shared-memory/)).

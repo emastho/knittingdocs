@@ -1,5 +1,5 @@
 import { sign } from "hono/jwt";
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import { z } from "zod";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });

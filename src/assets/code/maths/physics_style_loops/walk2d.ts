@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 
 type Args = readonly [
   seed: number,

@@ -11,7 +11,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("maths/gravity/run_tsp.ts");
@@ -30,12 +29,6 @@ This is the most computationally intensive example in the set, and it shows what
 5. The host picks the global best, validates the tour, and recomputes the length for correctness.
 
 The key insight: a single heuristic run can get stuck in a local minimum. Running many independent trials in parallel increases the chance that at least one finds a better region of the search space. This is **embarrassingly parallel** -- restarts are independent, results are small, and the host just picks the best.
-
-## Install
-
-:::info
-<LibraryInstallTabs jsrPackages={["@vixeny/knitting"]} denoUseNpmInterop={true} />
-:::
 
 ## Run
 

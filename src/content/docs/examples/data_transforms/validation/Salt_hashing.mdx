@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
@@ -50,16 +49,6 @@ login attempt -> derive again with stored salt -> constant-time compare
 ```
 
 That makes the worker boundary simple: small input, small output, expensive CPU work in the middle.
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 Uses built-in Web Crypto APIs -- no extra crypto package required.
 

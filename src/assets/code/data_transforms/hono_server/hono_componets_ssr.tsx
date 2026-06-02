@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 import { z } from "zod";
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });

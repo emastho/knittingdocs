@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

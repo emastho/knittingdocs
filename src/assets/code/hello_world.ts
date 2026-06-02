@@ -1,10 +1,11 @@
-import { isMain, task } from "@vixeny/knitting";
+import { createPool, isMain } from "knitting";
 
-export const world = task({
-  f: (args: string) => args + " world",
-}).createPool();
+// A task is just an exported function the workers can run.
+export const greet = (name: string) => `hello ${name}`;
 
 if (isMain) {
-  world.call("hello")
-    .then(console.log).finally(world.shutdown);
+  // `using` shuts the pool down automatically when this block ends.
+  using pool = createPool({ threads: 1 })({ greet });
+
+  console.log(await pool.call.greet("knitting")); // hello knitting
 }

@@ -5,12 +5,14 @@ sidebar:
   order: 7
 banner:
   content: |
-    This is just an example and there are some simplification.
+    A simplified mental model — plenty of real-world detail is left out for the sake of sanity.
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-This guide explains what happens between `call.myTask(args)` and receiving the result. If you just want to use Knitting, you don't need this -- the [Quick start](/start/quick-start) and [Creating pools](/guides/creating-pools) guides are enough. Read this when you want to understand *why* things are fast, debug unexpected behavior, or tune advanced options.
+Ever wondered what actually happens between `call.myTask(args)` and the result landing back in your hands? This page walks that path. You don't need any of it to *use* Knitting -- the [Quick start](/start/quick-start/) and [Creating pools](/guides/creating-pools/) guides have you covered -- but it's here for when you're curious *why* things are fast, chasing a strange bug, or reaching for the advanced knobs.
+
+One caveat up front: this is a **simplified mental model**. The real implementation has many more moving parts -- fast paths, edge cases, platform quirks -- that are deliberately left out so the big picture stays readable. Treat the numbers and steps below as the shape of things, not the full contract.
 
 ## High-level picture
 
@@ -54,6 +56,8 @@ Knitting has three layers:
   +----------------------------------------+
   (one set per worker)
 ```
+
+The diagram shows **thread** workers -- the default. Knitting can also run each worker as a **separate process** (for sandboxing or containers). The transport is the same shared-memory idea; a process worker just reaches the memory through a *named* mapping instead of an inherited handle. See [Process workers](/guides/process-workers/) and [Shared memory](/guides/shared-memory/).
 
 ## Transport: shared-memory mailboxes
 
@@ -106,7 +110,7 @@ Each worker allocates two `SharedArrayBuffer` regions:
 - **Request payload buffer** -- for arguments sent host -> worker
 - **Return payload buffer** -- for results sent worker -> host
 
-Sizes are controlled by `payloadInitialBytes` (default 4 MiB) and `payloadMaxBytes` (default 64 MiB). When growable `SharedArrayBuffer` is available in the runtime, buffers start small and grow on demand. Otherwise, they're allocated at max size upfront.
+Sizes are controlled by `payloadInitialBytes` (default 4 MiB) and `payloadMaxByteLength` (default 64 MiB). When growable `SharedArrayBuffer` is available in the runtime, buffers start small and grow on demand. Otherwise, they're allocated at max size upfront.
 
 ### Three encoding paths (fast -> slow)
 
@@ -186,10 +190,10 @@ If the task throws, step 8 writes an error result instead, and step 10 rejects t
 ### Startup (`createPool`)
 
 1. Allocates shared memory regions (mailboxes + payload buffers) for each worker.
-2. Spawns `threads` worker threads. Each worker imports the task module to discover exported `task()` values.
+2. Spawns `threads` workers -- threads by default, or separate processes when configured. Each worker imports the task module to discover exported `task()` values.
 3. Workers enter their idle spin/park loop, waiting for work.
 4. If `permission` is set, generates runtime-specific CLI flags and passes them via `workerExecArgv`.
-5. Returns the `{ call, shutdown }` interface.
+5. Returns the pool -- a typed `{ call, shutdown }` object that is also disposable, so a `using` declaration can close it for you.
 
 ### Running
 
@@ -198,6 +202,10 @@ If the task throws, step 8 writes an error result instead, and step 10 rejects t
 - The host dispatcher manages backoff independently.
 
 ### Shutdown
+
+A `using` pool shuts down on its own when the scope ends. Calling `shutdown()`
+yourself runs the same teardown -- just earlier, the moment you ask for it.
+Either way:
 
 1. `shutdown()` signals all workers to stop.
 2. If `resolveAfterFinishingAll` is `true`, workers finish all pending promises before exiting.
@@ -225,14 +233,14 @@ This is cooperative, not preemptive -- the worker must check. If it doesn't, the
 With default settings and 4 workers, the shared memory footprint is roughly:
 `4 workers x (2 mailboxes + 2 x 4 MiB payload buffers) ~ 32 MiB initial`
 
-Payload buffers grow on demand up to `payloadMaxBytes` if the runtime supports growable `SharedArrayBuffer`.
+Payload buffers grow on demand up to `payloadMaxByteLength` if the runtime supports growable `SharedArrayBuffer`.
 
 ## What Knitting does NOT do
 
-Understanding the boundaries helps avoid misuse:
+Knowing where Knitting stops is as useful as knowing what it does:
 
 - **No message passing protocol.** Knitting is task-call oriented. If you need pub/sub or event-style messaging, use `postMessage` / `MessagePort`.
 - **No preemption.** A long-running task blocks its lane until it finishes. Use `abortSignal` with `hasAborted()` polling for cooperative cancellation.
-- **No cross-process or cross-machine communication.** Shared memory is local to a single process.
-- **No automatic scaling.** Thread count is fixed at pool creation. You choose the parallelism level upfront.
-- **No browser support (intentionally).** Shared memory in browsers has security constraints (Spectre). Knitting stays server-side.
+- **Same host only.** Workers can be threads *or* separate processes on one machine, but the shared memory never crosses the network -- there is no cross-machine transport. Pair Knitting with one if you need to scale out.
+- **No automatic scaling.** Worker count is fixed at pool creation. You choose the parallelism level upfront.
+- **Browser support is limited.** There is a [browser build](/browser/), but shared memory there needs cross-origin isolation (`COOP` / `COEP` headers) because of Spectre-era constraints. Most Knitting work still happens server-side.

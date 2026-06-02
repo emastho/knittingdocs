@@ -12,7 +12,6 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
 import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const bench = getCode("data_transforms/react_ssr/bench_react_ssr.ts");
@@ -62,16 +61,6 @@ Result:
 ```html
 <article class="user-card" data-user-id="u42">...</article>
 ```
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["react", "react-dom", "mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 ## Deno setup (TSX + npm)
 

@@ -1,4 +1,4 @@
-import { createPool, isMain } from "@vixeny/knitting";
+import { createPool, isMain } from "knitting";
 import { bench, boxplot, run, summary } from "mitata";
 import {
   preparePromptBatchFast,

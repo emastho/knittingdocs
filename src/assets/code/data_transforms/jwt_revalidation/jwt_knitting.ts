@@ -1,4 +1,4 @@
-import { createPool, isMain } from "@vixeny/knitting";
+import { createPool, isMain } from "knitting";
 import {
   buildDemoRevalidateRequests,
   type RenewalSummary,

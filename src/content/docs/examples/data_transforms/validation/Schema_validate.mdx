@@ -10,7 +10,6 @@ sidebar:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
 import { getCode } from '../../../../../lib/code-snippets';
-import LibraryInstallTabs from '../../../../../components/LibraryInstallTabs.astro';
 import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const run = getCode("data_transforms/schema_validate/schema_knitting.ts");
@@ -55,16 +54,6 @@ Three files:
 The first returns `{ ok: true, value }`. The second returns `{ ok: false, issues }`, with
 messages like `displayName: String must contain at least 2 character(s)` or
 `age: Expected number, received string`.
-
-## Install
-
-:::info
-<LibraryInstallTabs
-  jsrPackages={["@vixeny/knitting"]}
-  npmPackages={["zod", "mitata"]}
-  denoUseNpmInterop={true}
-/>
-:::
 
 ## Run
 

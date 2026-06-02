@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 
 export const DEMO_JWT_SECRET = "knitting-docs-demo-hs256-secret";
 

@@ -83,6 +83,11 @@ export default defineConfig({
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
   },
+  vite: {
+    resolve: {
+      alias: [{ find: /^knitting$/, replacement: "@vixeny/knitting" }],
+    },
+  },
   integrations: [
     starlight({
       title: "Knitting",

@@ -1,0 +1,117 @@
+---
+title: Shared memory
+description: ProcessSharedBuffer — the lower-level shared-memory channel for passing bytes between workers and processes without copying.
+sidebar:
+  order: 6
+---
+
+`ProcessSharedBuffer` is the building block under process workers: a block of
+shared memory two processes can read and write **without copying** the payload on
+every call. Reach for it when workers or processes need to see the *same bytes* —
+counters, ring buffers, large frames — instead of message-passing copies.
+
+It lives on a subpath:
+
+```ts
+import {
+  getDefaultProcessSharedBufferPrimitives,
+  ProcessSharedBuffer,
+} from "knitting/process-shared-buffer";
+```
+
+The `primitives` are the platform's shared-memory functions. Grab the defaults
+once and reuse them.
+
+## Anonymous buffers (parent ↔ child)
+
+The default is anonymous: a private handle passed intentionally through
+Knitting's transport. It's the safest option and needs no name.
+
+```ts
+import { createPool, isMain, task } from "knitting";
+import {
+  getDefaultProcessSharedBufferPrimitives,
+  ProcessSharedBuffer,
+} from "knitting/process-shared-buffer";
+
+export const readFirstCell = task<ProcessSharedBuffer, number>({
+  f: (buffer) => Atomics.load(buffer.view(Int32Array), 0),
+});
+
+if (isMain) {
+  using pool = createPool({ threads: 1 })({ readFirstCell });
+
+  const primitives = getDefaultProcessSharedBufferPrimitives();
+  const shared = ProcessSharedBuffer.create(64, primitives);
+
+  try {
+    Atomics.store(shared.view(Int32Array), 0, 42);
+    console.log(await pool.call.readFirstCell(shared)); // 42
+  } finally {
+    shared.descriptor.mapping?.close?.();
+  }
+}
+```
+
+A `ProcessSharedBuffer` is a supported [payload](/guides/payloads/), so you pass
+it straight to a task. `view(Int32Array)` returns a typed-array view over the
+same memory — pair it with `Atomics` for safe cross-process reads and writes.
+
+## Named channels (independent processes)
+
+When two processes don't share a parent — so there's no fd to inherit — use a
+**named** channel. One side creates the name, the other opens it.
+
+```ts
+const name = "knitting-demo-channel";
+const primitives = getDefaultProcessSharedBufferPrimitives();
+
+const owner = ProcessSharedBuffer.create(
+  { name, size: 64, mode: "create" },
+  primitives,
+);
+
+try {
+  Atomics.store(owner.view(Int32Array), 0, 7);
+
+  const peer = ProcessSharedBuffer.create(
+    { name, size: 64, mode: "open" },
+    primitives,
+  );
+
+  try {
+    console.log(Atomics.load(peer.view(Int32Array), 0)); // 7
+  } finally {
+    peer.descriptor.mapping?.close?.();
+  }
+} finally {
+  owner.descriptor.mapping?.close?.();
+  primitives.unlinkSharedMemory?.(name);
+}
+```
+
+Use `"create"` on the owner and `"open"` on the peer. **The name is the
+capability** — anyone who knows it can map the memory — so generate a
+hard-to-guess name, keep it private, and `unlinkSharedMemory` it when you're
+done.
+
+## Sending one to a container
+
+Docker process workers can receive a `ProcessSharedBuffer`, but it must be
+**named** — the default anonymous form is fd-backed and private to the
+parent/child path, which a container can't reopen. Create the payload with
+`mode: "create"` and a name, run the pool with `processSharedMemory: "named"`,
+and add `--ipc=host` so the container shares the namespace. See
+[Process workers](/guides/process-workers/) for the pool side.
+
+## Cleaning up
+
+Shared memory is not garbage-collected for you:
+
+- Close every mapping you open with `descriptor.mapping?.close?.()`.
+- For named channels, the owner also calls
+  `primitives.unlinkSharedMemory?.(name)` once nobody needs the name anymore.
+
+This is a same-host, fast path — both sides map the same bytes — not a network
+transport. Anonymous is the safe default; reach for named only when processes
+can't inherit a handle.

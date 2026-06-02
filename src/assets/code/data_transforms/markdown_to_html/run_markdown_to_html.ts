@@ -1,4 +1,4 @@
-import { createPool, isMain } from "@vixeny/knitting";
+import { createPool, isMain } from "knitting";
 import { markdownToHtml, markdownToHtmlHost } from "./utils.ts";
 
 function intArg(name: string, fallback: number): number {

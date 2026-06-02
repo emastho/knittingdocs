@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 
 type ChunkArgs = readonly [seed: number, samples: number];
 type ChunkResult = { inside: number; samples: number };

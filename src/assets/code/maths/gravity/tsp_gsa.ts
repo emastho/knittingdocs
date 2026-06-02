@@ -1,4 +1,4 @@
-import { task } from "@vixeny/knitting";
+import { task } from "knitting";
 
 type Args = readonly [
   worldSeed: number, // generates the same city map for all runs

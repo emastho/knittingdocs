@@ -141,6 +141,30 @@ export const add = ([a, b]: [number, number]) => a + b;
 // read-only bind is still readable: it is isolation, not a full sandbox.
 `;
 
+export const sharedMemory = `import { createPool, isMain, task } from "knitting";
+import {
+  getDefaultProcessSharedBufferPrimitives,
+  ProcessSharedBuffer,
+} from "knitting/process-shared-buffer";
+
+// Read shared memory inside a worker — no payload copy.
+export const readFirst = task<ProcessSharedBuffer, number>({
+  f: (buf) => Atomics.load(buf.view(Int32Array), 0),
+});
+
+if (isMain) {
+  using pool = createPool({ threads: 1 })({ readFirst });
+
+  const shared = ProcessSharedBuffer.create(
+    64,
+    getDefaultProcessSharedBufferPrimitives(),
+  );
+  Atomics.store(shared.view(Int32Array), 0, 42);
+
+  console.log(await pool.call.readFirst(shared)); // 42
+  shared.descriptor.mapping?.close?.();
+}`;
+
 export const install = `npm install knitting
 deno add --npm knitting`;
 
@@ -208,6 +232,9 @@ deno add --npm knitting`;
       <TabItem label="worker-tasks.ts">
         <Code code={workerTasks} lang="ts" title={"worker-tasks.ts"} />
       </TabItem>
+      <TabItem label="shared.ts">
+        <Code code={sharedMemory} lang="ts" title={"shared.ts"} />
+      </TabItem>
     </Tabs>
   </div>
   
@@ -251,7 +278,72 @@ deno add --npm knitting`;
         Use threads for the fast path, or process workers when permissions,
         wrappers, containers, or stronger separation matter more.
       </p>
-      <a href="/guides/permissions/">Review permissions</a>
+      <a href="/guides/process-workers/">Process workers</a>
+    </article>
+  </div>
+</section>
+
+<section class="kh-shell" aria-labelledby="kh-box-title">
+  <div class="kh-section-head">
+    <p class="kh-eyebrow">What's in the box</p>
+    <h2 id="kh-box-title">Batteries you'd otherwise wire up by hand.</h2>
+    <p>
+      The function-call ergonomics are the headline. The useful part is
+      everything that rides along with them &mdash; payloads, deadlines,
+      isolation, and scheduling, all handled at the pool boundary.
+    </p>
+  </div>
+
+  <div class="kh-grid kh-grid--three">
+    <article class="kh-card">
+      <h3>Typed payloads</h3>
+      <p>
+        Primitives, typed arrays, <code>Buffer</code>, <code>Envelope</code>,
+        and zero-copy <code>ProcessSharedBuffer</code>. Promise inputs resolve
+        on the host before dispatch.
+      </p>
+      <a href="/guides/payloads/">Payloads</a>
+    </article>
+    <article class="kh-card">
+      <h3>Timeouts and aborts</h3>
+      <p>
+        Give a task a deadline, or make it abort-aware and cancel it
+        cooperatively from the host or inside the worker.
+      </p>
+      <a href="/guides/defining-tasks/">Defining tasks</a>
+    </article>
+    <article class="kh-card">
+      <h3>Threads or processes</h3>
+      <p>
+        Fast runtime threads by default, or separate processes &mdash; even
+        inside a <code>bwrap</code> sandbox or a container &mdash; when
+        isolation matters.
+      </p>
+      <a href="/guides/process-workers/">Process workers</a>
+    </article>
+    <article class="kh-card">
+      <h3>Strict permissions</h3>
+      <p>
+        Workers start locked down. Open only the paths, env, and network your
+        tasks actually need.
+      </p>
+      <a href="/guides/permissions/">Permissions</a>
+    </article>
+    <article class="kh-card">
+      <h3>Scheduling control</h3>
+      <p>
+        Balance calls across lanes with pluggable strategies, and optionally
+        add the host itself as an inline lane for tiny compute.
+      </p>
+      <a href="/guides/inliner/">Inliner</a>
+    </article>
+    <article class="kh-card">
+      <h3>Shared memory</h3>
+      <p>
+        <code>ProcessSharedBuffer</code> moves bytes between processes with no
+        copy &mdash; the lower-level channel under process workers.
+      </p>
+      <a href="/guides/shared-memory/">Shared memory</a>
     </article>
   </div>
 </section>
@@ -339,7 +431,7 @@ deno add --npm knitting`;
     <h2 id="kh-links-title">Small doors into the docs.</h2>
   </div>
 
-  <div class="kh-grid kh-grid--four">
+  <div class="kh-grid kh-grid--three">
     <a class="kh-link-card" href="/start/welcome/">
       <span>Start here</span>
       <strong>Welcome</strong>
@@ -351,6 +443,14 @@ deno add --npm knitting`;
     <a class="kh-link-card" href="/guides/payloads/">
       <span>Data model</span>
       <strong>Payloads</strong>
+    </a>
+    <a class="kh-link-card" href="/guides/process-workers/">
+      <span>Isolation</span>
+      <strong>Process workers</strong>
+    </a>
+    <a class="kh-link-card" href="/guides/shared-memory/">
+      <span>Zero-copy</span>
+      <strong>Shared memory</strong>
     </a>
     <a class="kh-link-card" href="/examples/intro_examples/">
       <span>Copyable patterns</span>
