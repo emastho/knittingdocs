@@ -62,10 +62,15 @@ const orderOf = (d: Doc): number => {
   return typeof order === "number" ? order : 999;
 };
 
+// llms.txt / llms-full.txt mirror the sidebar: only pages under a navbar
+// section directory are part of the guided, maintained docs. This drops the
+// splash home page and any off-navbar top-level pages (e.g. browser.mdx,
+// license.md) so stale or out-of-band content never leaks into the llms files.
+const SECTION_DIRS = new Set(SECTIONS.map((s) => s.dir));
+
 export async function loadDocs(): Promise<Doc[]> {
   const docs = await getCollection("docs");
-  // The home page body is a splash layout (custom JSX + CSS), not prose.
-  return docs.filter((d) => d.id !== "" && d.id !== "index");
+  return docs.filter((d) => SECTION_DIRS.has(d.id.split("/")[0]));
 }
 
 export function groupDocs(docs: Doc[]): Array<{ label: string; docs: Doc[] }> {

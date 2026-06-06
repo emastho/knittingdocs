@@ -196,6 +196,37 @@ Worker permissions are restricted by default — sensitive paths like `.env`,
 `.git`, `~/.ssh`, and `/etc` are blocked, and `node_modules` is deny-write.
 Open only what your tasks actually need. See [Permissions](/guides/permissions/).
 
+## Footguns
+
+The handful of things that trip people up most — most of them follow from one
+fact: **workers re-import the module that defines your tasks.**
+
+- **One argument per task.** `pool.call.add(a, b)` won't work — pass a tuple or
+  object: `pool.call.add([a, b])` for `([a, b]) => a + b`.
+- **Guard host code with `isMain`.** Without it, pool creation (and any other
+  host-only code) re-runs inside every worker.
+- **Top-level imports run in every worker.** `import` is hoisted, so it executes
+  before any `isMain` check. Keep tasks in their own lean module so workers don't
+  load your whole server framework.
+- **Export your tasks.** An unexported `task()` / `importTask()` is invisible to
+  the worker loader, so the call just hangs — no handler is ever registered.
+- **`importTask` targets are plain functions**, not `task()` wrappers (that
+  throws a `TypeError`). Put `timeout` / `abortSignal` options on the
+  `importTask` call instead.
+- **Worker `console.*` is silent by default** in strict mode. Pass
+  `permission: { console: true }` to surface worker logs.
+- **Only supported payloads cross the boundary.** `Map`, `Set`, class instances,
+  and functions are rejected — see [Payloads](/guides/payloads/).
+- **Dynamic payloads cap at ~8 MiB** by default; raise `payload.maxPayloadBytes`
+  (and `payload.payloadMaxByteLength`) for larger ones.
+
+:::tip[Building with an AI agent?]
+Knitting ships machine-readable docs. Point your agent at
+[`/llms.txt`](/llms.txt) for the essentials, or [`/llms-full.txt`](/llms-full.txt)
+for every page inlined into one file — with those in context it gets the footguns
+above right far more often.
+:::
+
 ## Where to go next
 
 - [Defining tasks](/guides/defining-tasks/) — `task()`, `importTask()`, timeouts, and aborts.

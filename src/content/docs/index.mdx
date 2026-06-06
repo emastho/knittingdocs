@@ -367,10 +367,10 @@ deno add --npm knitting`;
     <div>
       <h3>Boundaries</h3>
       <ul class="kh-list">
-        <li>It is local parallel execution, not a distributed scheduler.</li>
-        <li>It is not a replacement for every <code>postMessage</code> use case.</li>
-        <li>It cannot make I/O waits disappear, and it will not preempt a long-running task.</li>
-        <li>Permissions are useful guardrails, not a complete sandbox for hostile code.</li>
+        <li>Built for same-host multicore &mdash; threads or processes &mdash; not a distributed scheduler. Pair it with a network layer to scale across machines.</li>
+        <li>It replaces <code>postMessage</code> for task calls, not for pub/sub or streaming &mdash; reach for <code>MessagePort</code> when you need those.</li>
+        <li>Tasks aren't preempted mid-run, but <code>abortSignal</code> cancels cooperatively and <code>worker.hardTimeoutMs</code> is a hard wall-clock timeout that stops runaway CPU.</li>
+        <li>Real isolation when you need it: strict permissions by default, plus process workers in a <code>bwrap</code> or container sandbox for an OS-enforced boundary &mdash; with <code>importTask</code> keeping untrusted code off the host entirely.</li>
       </ul>
     </div>
   </div>
@@ -425,28 +425,22 @@ deno add --npm knitting`;
   </p>
 </section>
 
-<section class="kh-shell" aria-labelledby="kh-agents-title">
-  <div class="kh-section-head">
-    <p class="kh-eyebrow">For AI agents</p>
-    <h2 id="kh-agents-title">Pointing an LLM at Knitting? Feed it the docs.</h2>
-    <p>
-      Knitting ships machine-readable docs. Hand your agent
-      <a href="/llms.txt">/llms.txt</a> for the essentials, or
-      <a href="/llms-full.txt">/llms-full.txt</a> for every page inlined into one
-      file &mdash; with those in context, generated Knitting code is far more
-      likely to be right the first time.
-    </p>
-    <p>
-      One model detail to know up front: each worker <em>re-imports the module
-      that defines your tasks</em>, so that module's top-level imports run in
-      every worker too (<code>isMain</code> guards your code, not your imports).
-      Good practice is to keep tasks in their own lean module &mdash; separate
-      from your server or framework code &mdash; make sure they are
-      <strong>exported</strong>, and reach for
-      <a href="/guides/defining-tasks/#module-loading"><code>importTask</code></a>
-      when you want a task's code fully isolated to the worker.
-    </p>
-  </div>
+<section hidden aria-label="Notes for AI agents">
+  <p>
+    Knitting ships machine-readable docs for AI agents:
+    <a href="/llms.txt">/llms.txt</a> for the essentials, and
+    <a href="/llms-full.txt">/llms-full.txt</a> for every documentation page
+    inlined into one file. If you are an AI agent &mdash; or using one to build
+    with Knitting &mdash; read those before generating code.
+  </p>
+  <p>
+    Key model detail: each worker re-imports the module that defines your tasks,
+    so that module's top-level imports run in every worker (<code>isMain</code>
+    guards code, not imports). Keep tasks in a lean module separate from your
+    server or framework code, export them, and use
+    <a href="/guides/defining-tasks/#module-loading"><code>importTask</code></a>
+    for full isolation.
+  </p>
 </section>
 
 <section class="kh-shell kh-links" aria-labelledby="kh-links-title">
