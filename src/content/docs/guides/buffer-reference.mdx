@@ -14,9 +14,11 @@ import { Aside } from '@astrojs/starlight/components';
 import { BufferReference } from "knitting/unsafe";
 ```
 
-<Aside type="caution">
-`knitting/unsafe` is experimental. `BufferReference` may be changed or removed
-if its safety tradeoffs are not acceptable in a future release.
+<Aside type="note">
+`knitting/unsafe` is experimental, so the API may still change. Used with its
+defaults it is memory-safe on every runtime — the only mode that needs care is
+the `borrow` return ([see below](#return-copy-vs-borrow)), and even that is safe
+on Node.
 </Aside>
 
 ---
@@ -78,8 +80,10 @@ Two accessors materialize the moved region:
 | `toUint8Array()` | `Uint8Array` | View over the moved bytes. |
 | `toArrayBuffer()` | `ArrayBuffer` | The underlying buffer. |
 
-Do not hold onto views returned by these methods past the end of the task
-function or past the point where you call `release()`.
+These views are backed by the reference, so use them while it is alive and let
+`using` / `release()` clean up when you are done. In the default copy mode this
+is ordinary lifecycle hygiene, not a safety hazard — the stricter rules only
+apply to the `borrow` return mode below.
 
 ---
 
@@ -96,8 +100,10 @@ automatically, or call `release()` explicitly:
 } // result is released here
 ```
 
-After `release()`, any view you took from `toUint8Array()` / `toArrayBuffer()`
-is invalid — treat it as a use-after-free.
+After `release()` the reference no longer owns the bytes, so stop using any view
+you took from it. In the default copy mode this is just normal cleanup; the only
+mode where reading too late is an actual use-after-free is `borrow` on Deno and
+Bun (see below).
 
 ---
 
@@ -127,10 +133,11 @@ using pool = createPool({
 })({ invert });
 ```
 
-On Node.js the return is always zero-copy regardless of this setting (the
-engine can co-own the backing store across threads). On Deno and Bun, `"copy"`
-takes a single copy of the returned bytes so they outlive the worker. Set it
-to `"borrow"` to skip that copy:
+On Node.js the return is always zero-copy regardless of this setting — the
+engine co-owns the backing store across threads, so there is no use-after-free
+risk even with `"borrow"`. On Deno and Bun, `"copy"` takes a single copy of the
+returned bytes so they safely outlive the worker. Set it to `"borrow"` to skip
+that copy:
 
 ```ts
 import { BufferReferenceReturn } from "knitting/unsafe";
@@ -148,9 +155,11 @@ using pool = createPool({
 ```
 
 <Aside type="caution">
-With `"borrow"`, you must call `release()` (or let `using` do it) **before**
-the producing worker shuts down. If the bytes escape into HTTP responses,
-streams, timers, or caches, copy them before releasing.
+`"borrow"` only carries risk on **Deno and Bun**: the host reads directly into
+the worker's memory, so you must call `release()` (or let `using` do it)
+**before** the producing worker shuts down, and if the bytes escape into HTTP
+responses, streams, timers, or caches you must copy them first. On Node there is
+no such hazard — the return is zero-copy and safe either way.
 </Aside>
 
 The named constants `BufferReferenceReturn.Copy` (`"copy"`) and
