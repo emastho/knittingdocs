@@ -1,0 +1,198 @@
+---
+title: Buffer reference
+description: knitting/unsafe — zero-copy ArrayBuffer handles for thread workers.
+sidebar:
+  order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`BufferReference` is a zero-copy handle for moving `ArrayBuffer` bytes to
+**thread** workers. Import it from the subpath:
+
+```ts
+import { BufferReference } from "knitting/unsafe";
+```
+
+<Aside type="caution">
+`knitting/unsafe` is experimental. `BufferReference` may be changed or removed
+if its safety tradeoffs are not acceptable in a future release.
+</Aside>
+
+---
+
+## Move semantics
+
+Constructing a `BufferReference` **detaches the source immediately**. The
+bytes now belong to the reference; reading or writing the original buffer
+after construction returns zero-length or stale data.
+
+```ts
+const pixels = new Uint8Array([0, 64, 128, 192, 255]);
+
+const ref = new BufferReference(pixels); // pixels.buffer is now detached
+
+console.log(pixels.byteLength);          // 0 — the source was moved
+console.log(ref.byteLength);             // 5
+```
+
+This is intentional: the move is what makes the transfer zero-copy.
+
+---
+
+## Sending to a worker
+
+Use `BufferReference` as a task argument to move bytes to a thread worker
+without serializing them through the transport:
+
+```ts
+import { createPool, isMain, task } from "knitting";
+import { BufferReference } from "knitting/unsafe";
+
+export const invert = task<BufferReference, BufferReference>({
+  f: (ref) => {
+    const pixels = ref.toUint8Array();         // the moved bytes, no copy
+    const out = new Uint8Array(pixels.length);
+    for (let i = 0; i < pixels.length; i++) out[i] = 255 - pixels[i];
+    return new BufferReference(out);           // move the result back
+  },
+});
+
+if (isMain) {
+  const pixels = new Uint8Array([0, 64, 128, 192, 255]);
+  using pool = createPool({ threads: 1 })({ invert });
+
+  const result = await pool.call.invert(new BufferReference(pixels));
+  console.log([...result.toUint8Array()]); // [255, 191, 127, 63, 0]
+}
+```
+
+---
+
+## Reading the bytes
+
+Two accessors materialize the moved region:
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `toUint8Array()` | `Uint8Array` | View over the moved bytes. |
+| `toArrayBuffer()` | `ArrayBuffer` | The underlying buffer. |
+
+Do not hold onto views returned by these methods past the end of the task
+function or past the point where you call `release()`.
+
+---
+
+## Disposing
+
+`BufferReference` implements `Symbol.dispose`. Use `using` to release
+automatically, or call `release()` explicitly:
+
+```ts
+{
+  using result = await pool.call.invert(new BufferReference(pixels));
+  const out = result.toUint8Array();
+  console.log([...out]);
+} // result is released here
+```
+
+After `release()`, any view you took from `toUint8Array()` / `toArrayBuffer()`
+is invalid — treat it as a use-after-free.
+
+---
+
+## Constraints
+
+- **Thread workers only.** The handle is a process-local pointer. Sending a
+  `BufferReference` to a process worker throws. For cross-process sharing use
+  `ProcessSharedBuffer` (see [Shared memory](/guides/shared-memory/)).
+- **`ArrayBuffer` sources only.** `SharedArrayBuffer` cannot be detached and
+  is rejected. SAB-backed typed-array views are also rejected.
+- **One-shot.** Each reference is used once. The worker materializes the bytes
+  with `toUint8Array()` / `toArrayBuffer()`, and those values are borrowed for
+  the duration of the call. Do not use them from fire-and-forget work after the
+  task returns.
+
+---
+
+## Return copy vs borrow
+
+When a worker returns a `BufferReference`, the host must take possession of the
+bytes. The default is **copy** (safe on all runtimes):
+
+```ts
+using pool = createPool({
+  threads: 1,
+  unsafe: { BufferReferenceReturn: "copy" },
+})({ invert });
+```
+
+On Node.js the return is always zero-copy regardless of this setting (the
+engine can co-own the backing store across threads). On Deno and Bun, `"copy"`
+takes a single copy of the returned bytes so they outlive the worker. Set it
+to `"borrow"` to skip that copy:
+
+```ts
+import { BufferReferenceReturn } from "knitting/unsafe";
+
+using pool = createPool({
+  threads: 1,
+  unsafe: { BufferReferenceReturn: BufferReferenceReturn.Borrow },
+})({ invert });
+
+{
+  using result = await pool.call.invert(new BufferReference(pixels));
+  const out = result.toUint8Array(); // borrowed — valid only while result lives
+  console.log([...out]);
+} // result is released here; do not read out after this point
+```
+
+<Aside type="caution">
+With `"borrow"`, you must call `release()` (or let `using` do it) **before**
+the producing worker shuts down. If the bytes escape into HTTP responses,
+streams, timers, or caches, copy them before releasing.
+</Aside>
+
+The named constants `BufferReferenceReturn.Copy` (`"copy"`) and
+`BufferReferenceReturn.Borrow` (`"borrow"`) are exported from `knitting/unsafe`.
+
+---
+
+## As an `Envelope` body
+
+`BufferReference` can be the body of an `Envelope`, combining a JSON header
+with zero-copy bytes:
+
+```ts
+import { Envelope } from "knitting";
+import { BufferReference } from "knitting/unsafe";
+
+export const process = task<
+  Envelope<{ op: string }, BufferReference>,
+  Envelope<{ done: boolean }, BufferReference>
+>({
+  f: (env) => {
+    const pixels = env.payload.toUint8Array();
+    const out = new Uint8Array(pixels.length);
+    for (let i = 0; i < pixels.length; i++) out[i] = 255 - pixels[i];
+    return new Envelope({ done: true }, new BufferReference(out));
+  },
+});
+```
+
+Disposing the envelope also disposes a `BufferReference` body. Disposing is a
+no-op for `ArrayBuffer` and `SharedArrayBuffer` bodies.
+
+See [Payloads — Envelope](/guides/payloads#envelope) for the full body type table.
+
+---
+
+## When to reach for it
+
+Below roughly 256 KiB the per-call pointer setup tends to cost more than just
+copying through the shared transport. Reach for `BufferReference` only when the
+copy cost of a large buffer to a thread worker actually matters in profiling.
+
+For process workers, use `ProcessSharedBuffer` instead.
+For smaller buffers, a plain `ArrayBuffer` or typed array is simpler and works
+for both thread and process workers.

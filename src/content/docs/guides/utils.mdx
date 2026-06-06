@@ -1,0 +1,116 @@
+---
+title: Buffer utilities
+description: knitting/utils — helpers for serializing strings, JSON, and numbers into SharedArrayBuffer and back.
+sidebar:
+  order: 4
+---
+
+`knitting/utils` is a set of helpers for converting between JavaScript values
+and raw buffer bytes. Import from the subpath:
+
+```ts
+import {
+  bufferToBytes,
+  bytesToBuffer,
+  bufferToString,
+  stringToBuffer,
+  bufferToJson,
+  jsonToBuffer,
+  numbersToBuffer,
+  bufferToNumbers,
+} from "knitting/utils";
+```
+
+All functions accept `ArrayBuffer`, `SharedArrayBuffer`, or any typed-array
+view as input (`BufferLike`). Encode functions return `SharedArrayBuffer` so
+the result can be handed to a worker payload or stored in shared memory without
+an extra copy.
+
+---
+
+## Strings
+
+```ts
+const sab = stringToBuffer("hello");         // UTF-8 → SharedArrayBuffer
+const text = bufferToString(sab);            // SharedArrayBuffer → string
+```
+
+`stringToBuffer` uses Node's `Buffer.from` when available (avoids a TextEncoder
+allocation) and falls back to `TextEncoder` on Deno and Bun.
+
+---
+
+## JSON
+
+```ts
+const sab = jsonToBuffer({ status: "ok" });  // JSON.stringify → SharedArrayBuffer
+const obj = bufferToJson(sab);               // SharedArrayBuffer → parsed value
+```
+
+`bufferToJson` is `JSON.parse(bufferToString(source))`. If the value is not
+JSON-serializable, `jsonToBuffer` throws.
+
+---
+
+## Raw bytes
+
+```ts
+const bytes: Uint8Array = bufferToBytes(source);          // any BufferLike → Uint8Array
+const sab: SharedArrayBuffer = bytesToBuffer(source);     // any BufferLike → SharedArrayBuffer
+```
+
+`bufferToBytes` does not copy if the source is already a `Uint8Array`.
+`bytesToBuffer` always copies into a fresh `SharedArrayBuffer`.
+
+---
+
+## Numbers
+
+```ts
+type NumberFormat = "f64" | "f32" | "i32"; // default: "f64"
+
+const sab = numbersToBuffer([1.1, 2.2, 3.3], { format: "f64" });
+const arr: Float64Array = bufferToNumbers(sab, { format: "f64" });
+
+const isab = numbersToBuffer([1, 2, 3], { format: "i32" });
+const iarr: Int32Array = bufferToNumbers(isab, { format: "i32" });
+```
+
+`bufferToNumbers` returns a typed-array view (zero-copy when the byte offset
+is aligned). If the buffer's byte length is not a multiple of the element size
+for the chosen format, it throws a `RangeError`.
+
+---
+
+## Typical use
+
+Passing a string to a worker through shared memory so the bytes are not copied
+on every call:
+
+```ts
+import { createPool, isMain, task } from "knitting";
+import {
+  getDefaultProcessSharedBufferPrimitives,
+  ProcessSharedBuffer,
+} from "knitting/process-shared-buffer";
+import { stringToBuffer, bufferToString } from "knitting/utils";
+
+export const shout = task<ProcessSharedBuffer, string>({
+  f: (buf) => bufferToString(buf.view(Uint8Array)).toUpperCase(),
+});
+
+if (isMain) {
+  using pool = createPool({ threads: 1 })({ shout });
+
+  const primitives = getDefaultProcessSharedBufferPrimitives();
+  const encoded = stringToBuffer("hello knitting");    // SharedArrayBuffer
+  const shared = ProcessSharedBuffer.create(encoded.byteLength, primitives);
+  new Uint8Array(shared.view(Uint8Array)).set(new Uint8Array(encoded));
+
+  console.log(await pool.call.shout(shared));          // HELLO KNITTING
+  shared.descriptor.mapping?.close?.();
+}
+```
+
+See [Payloads](/guides/payloads/) for the full list of types that can cross
+the worker boundary.

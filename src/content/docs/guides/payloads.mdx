@@ -13,12 +13,14 @@ The transport supports the following payloads:
 - `bigint`
 - `undefined` and `null`
 - plain JSON-like `Object` and `Array`
-- `Envelope<header, payload>` where `header` is JSON-like (or string) and
-  `payload` is `ArrayBuffer`
+- `Envelope<H, B>` where `H` is JSON-like and `B` is `ArrayBuffer` (default),
+  `SharedArrayBuffer`, `ProcessSharedBuffer`, or `BufferReference`
 - `Buffer` (Node.js), `ArrayBuffer`
 - `Uint8Array`, `Int32Array`, `Float64Array`, `BigInt64Array`, `BigUint64Array`
 - `DataView`
 - `ProcessSharedBuffer` for zero-copy shared memory (see [Shared memory](/guides/shared-memory/))
+- `BufferReference` from `knitting/unsafe` for zero-copy buffers to thread
+  workers (see [Buffer reference](/guides/buffer-reference/))
 - `Error` (name, message, stack, and cause chain)
 - `Date`
 - `symbol` from `Symbol.for(...)` only
@@ -62,7 +64,7 @@ type ValidInput =
   | void
   | JSONValue
   | symbol
-  | Envelope<JSONValue | string, ArrayBuffer>
+  | Envelope<JSONValue | string, ArrayBuffer | SharedArrayBuffer>
   | Uint8Array
   | Int32Array
   | Float64Array
@@ -100,7 +102,9 @@ batching guidance.
 
 ## Envelope
 
-`Envelope` is optimized for pair-like metadata + binary payload transport:
+`Envelope<H, B>` pairs a JSON-serializable header with a binary body. Use it
+when a call needs both structured metadata and raw bytes — the transport carries
+one special binary value per call, so an envelope is how you attach a header to one.
 
 ```ts
 import { Envelope } from "knitting";
@@ -111,8 +115,36 @@ const message = new Envelope(
 );
 ```
 
+The second type parameter `B` sets the body type and defaults to `ArrayBuffer`.
+The supported body types are:
+
+| Body | Copy? | Works with | Notes |
+|------|-------|------------|-------|
+| `ArrayBuffer` | copied | thread + process | Default. Works everywhere. |
+| `SharedArrayBuffer` | zero-copy, shared | thread only | Shared by reference; process workers reject it. |
+| `ProcessSharedBuffer` | zero-copy, shared | thread + process | Cross-process shared memory. |
+| `BufferReference` | zero-copy, moved | thread only | From `knitting/unsafe`. Source is detached on construction. |
+
+`Envelope` is disposable — `[Symbol.dispose]()` disposes a disposable body (a
+`BufferReference`) and is a no-op for `ArrayBuffer` and `SharedArrayBuffer`.
+Use `using` to dispose automatically when the envelope goes out of scope:
+
+```ts
+using result = await pool.call.processImage(
+  new Envelope({ format: "png" }, buffer),
+);
+console.log(result.header);
+// result is disposed here when the `using` scope exits
+```
+
+For `BufferReference` bodies, see [Buffer reference](/guides/buffer-reference/).
+For `ProcessSharedBuffer` bodies, see [Shared memory](/guides/shared-memory/).
+
 ## Errors
 
 `Error` payloads preserve `name`, `message`, `stack`, and recursive `cause`
 chains. Both sync throws and async rejections inside tasks propagate back to
 the host as `Error` objects.
+
+See also: [knitting/utils](/guides/utils/) for buffer serialization helpers
+and [Buffer reference](/guides/buffer-reference/) for zero-copy thread payloads.

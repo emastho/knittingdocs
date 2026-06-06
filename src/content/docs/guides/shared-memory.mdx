@@ -2,7 +2,7 @@
 title: Shared memory
 description: ProcessSharedBuffer — the lower-level shared-memory channel for passing bytes between workers and processes without copying.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 `ProcessSharedBuffer` is the building block under process workers: a block of
@@ -115,3 +115,6 @@ Shared memory is not garbage-collected for you:
 This is a same-host, fast path — both sides map the same bytes — not a network
 transport. Anonymous is the safe default; reach for named only when processes
 can't inherit a handle.
+
+For thread-only zero-copy transfers within the same process, see
+[Buffer reference](/guides/buffer-reference/).

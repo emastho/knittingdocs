@@ -19,45 +19,10 @@ One caveat up front: this is a **simplified mental model**. The real implementat
 Knitting has three layers:
 
 1. **API layer** -- `task()`, `createPool()`, `call.*()`, `shutdown()`. This is what your code touches.
-2. **Dispatch layer** -- the balancer, lane routing, inliner, and host dispatcher. This decides *where* a call runs.
+2. **Dispatch layer** -- the host handler: lane routing, the optional balancer strategy, and the inliner. This decides *where* a call runs.
 3. **Transport layer** -- shared-memory mailboxes, payload buffers, wakeups. This moves data between threads without going through the runtime's message queue.
 
-```
-+-----------------------------------------------------+
-|  Host thread                                        |
-|                                                     |
-|  call.myTask(args)                                  |
-|       |                                             |
-|       v                                             |
-|  +----------+    +-----------+                      |
-|  | Balancer  |--->| Dispatcher|                      |
-|  +----------+    +-----+-----+                      |
-|       |                |                            |
-|       |         +------+------+                     |
-|       |         v             v                     |
-|       |   +----------+ +----------+                 |
-|       |   | Worker 0 | | Worker 1 |  ... Worker N   |
-|       |   | (thread) | | (thread) |                 |
-|       |   +----------+ +----------+                 |
-|       |                                             |
-|       v (if inliner enabled)                        |
-|  +--------------+                                   |
-|  | Inline lane  | runs on host, no IPC              |
-|  +--------------+                                   |
-+-----------------------------------------------------+
-
-  Shared memory region (SharedArrayBuffer):
-  +----------------------------------------+
-  |  Request mailbox   [32 slots]          |
-  |  Response mailbox  [32 slots]          |
-  |  Payload buffer (request)              |
-  |  Payload buffer (return)               |
-  |  Abort signal bitset                   |
-  +----------------------------------------+
-  (one set per worker)
-```
-
-The diagram shows **thread** workers -- the default. Knitting can also run each worker as a **separate process** (for sandboxing or containers). The transport is the same shared-memory idea; a process worker just reaches the memory through a *named* mapping instead of an inherited handle. See [Process workers](/guides/process-workers/) and [Shared memory](/guides/shared-memory/).
+Knitting runs **thread** workers by default. It can also run each worker as a **separate process** (for sandboxing or containers): the transport is the same shared-memory idea; a process worker just reaches the memory through a *named* mapping instead of an inherited handle. See [Process workers](/guides/process-workers/) and [Shared memory](/guides/shared-memory/).
 
 ## Transport: shared-memory mailboxes
 
@@ -70,14 +35,20 @@ Each worker has two independent mailboxes:
 - **Request mailbox** (host -> worker): the host writes a call header here, the worker reads it.
 - **Response mailbox** (worker -> host): the worker writes the result header here, the host reads it.
 
-Each mailbox has **32 slots**. A slot is a small fixed-size region that holds:
+Each mailbox has **32 slots** -- the slot index is a 5-bit field, so 2⁵ = 32 slots per direction. A slot is a small fixed-size region that holds:
 - Task function ID (`Uint16`, supports up to 65,536 tasks per pool)
 - Payload type tag
 - Small inline values (numbers, booleans, short strings fit directly in the header)
 
-### Slot ownership via bitsets
+### Slot ownership via a two-word lock
 
-Slots are claimed and released using bitset operations on `Int32Array` views of the shared buffer. This is lock-free: no mutexes, no critical sections, just atomic compare-and-swap on the bitset word.
+Slot state lives in two 32-bit atomic words: `hostBits` and `workerBits`. They sit on **separate 64-byte cache lines**, so the host and worker never fight over the same line -- the *false sharing* that would otherwise bounce a cache line between cores and collapse throughput. A slot is **busy** when the two words disagree on its bit and **free** when they agree:
+
+$$
+\text{free} = \sim(H \oplus W)\ \&\ \text{MASK}
+$$
+
+Publishing work is therefore a single atomic toggle of one bit -- not a message copy. Because each direction has exactly one writer (the host writes requests, the worker writes responses), this is a single-producer/single-consumer queue per direction: no mutex, no critical section, just write the payload, then publish the bit. The reader acquires the bit before it trusts the bytes.
 
 The lifecycle of a slot:
 
@@ -91,9 +62,37 @@ The lifecycle of a slot:
 
 ### Wakeups
 
-When the host writes a request, it needs to wake a potentially parked worker. When a worker writes a response, it needs to wake the host dispatcher. Knitting uses `Atomics.notify` (futex-style wakeups) for this.
+When the host writes a request, it needs to wake a potentially parked worker. When a worker writes a response, it needs to wake the host handler. Knitting uses `Atomics.notify` (futex-style wakeups) for this.
 
-Workers don't busy-wait by default. The idle cycle is:
+Workers don't busy-wait by default. The idle cycle is a bounded spin, then a park:
+
+<svg role="img" aria-label="Worker idle cycle: spin, then park, waking to run work and looping back" viewBox="0 0 720 200" width="100%" style="max-width: 660px; height: auto; display: block; margin: 1.25rem auto;" font-family="var(--sl-font, system-ui, sans-serif)" fill="currentColor">
+  <defs>
+    <marker id="wait-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" stroke="none" />
+    </marker>
+  </defs>
+  <circle cx="28" cy="100" r="7" fill="currentColor" />
+  <rect x="60" y="78" width="110" height="44" rx="22" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5" />
+  <text x="115" y="105" text-anchor="middle" font-size="14">Spin</text>
+  <rect x="250" y="78" width="110" height="44" rx="22" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5" />
+  <text x="305" y="105" text-anchor="middle" font-size="14">Park</text>
+  <rect x="450" y="78" width="140" height="44" rx="22" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5" />
+  <text x="520" y="105" text-anchor="middle" font-size="14">Working</text>
+  <circle cx="665" cy="100" r="10" fill="none" stroke="currentColor" stroke-width="1.5" />
+  <circle cx="665" cy="100" r="4.5" fill="currentColor" />
+  <line x1="36" y1="100" x2="58" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <line x1="170" y1="100" x2="248" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <text x="209" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">budget elapsed</text>
+  <line x1="360" y1="100" x2="448" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <text x="404" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">notify / timeout</text>
+  <line x1="590" y1="100" x2="652" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <text x="621" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">shutdown</text>
+  <path d="M115,78 C 115,34 520,34 520,78" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <text x="317" y="30" text-anchor="middle" font-size="11" fill-opacity="0.8">signal changed</text>
+  <path d="M520,122 C 520,166 115,166 115,122" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
+  <text x="317" y="184" text-anchor="middle" font-size="11" fill-opacity="0.8">more work?</text>
+</svg>
 
 1. **Spin** -- check the mailbox in a tight loop for `spinMicroseconds` (default: scales with lane count). Uses `Atomics.pause` to reduce power draw.
 2. **Park** -- call `Atomics.wait` with a timeout of `parkMs`. The thread sleeps until notified or the timeout expires.
@@ -120,20 +119,24 @@ Sizes are controlled by `payloadInitialBytes` (default 4 MiB) and `payloadMaxByt
 | **Static payload** | Small typed arrays, short strings that overflow the header | Low. Copies into a fixed region of the payload buffer. |
 | **Dynamic payload** | Objects, arrays, large strings, `Error` | Higher. Requires allocation, encoding (similar to JSON serialization), and copying. |
 
-The [Performance guide](/guides/performance) has exact tier ratings per type.
+Shared-memory types (`SharedArrayBuffer`, `ProcessSharedBuffer`) and the ownership-move `BufferReference` skip all three: the bytes aren't copied, only a small descriptor crosses. The [Performance guide](/guides/performance) has exact tier ratings per type.
 
-## Dispatch: lanes and balancing
+## Dispatch: lanes and routing
 
 A **lane** is an execution target -- either a worker thread or the inline lane. The total lane count is `threads + (inliner ? 1 : 0)`.
 
-When you call `call.myTask(args)`, the dispatcher:
+When you call `call.myTask(args)`, the host **handler**:
 
 1. Resolves any promise arguments on the host.
-2. Asks the **balancer** which lane should run this call.
+2. Picks a lane (using the balancer strategy when there's more than one).
 3. Encodes the arguments and writes them to that lane's mailbox (or queues them for the inliner).
 4. Returns a promise that resolves when the response arrives.
 
+The handler runs on *every* call. *Which* lane it picks is the job of the **balancer** strategy -- and that only matters when there's more than one lane to choose between. With a single worker and no inliner there is nothing to balance, so the balancer is bypassed entirely.
+
 ### Balancer strategies
+
+These are the values of the `balancer` option on `createPool`:
 
 | Strategy | Behavior |
 | --- | --- |
@@ -142,22 +145,20 @@ When you call `call.myTask(args)`, the dispatcher:
 | `randomLane` | Picks a random lane. Good for uneven task durations. |
 | `firstIdleOrRandom` | First idle lane, else random. Balances fairness with load distribution. |
 
-When the pool has only one lane (one thread, no inliner), the balancer is bypassed entirely.
+### Handler backoff
 
-### Host dispatcher backoff
-
-The host dispatcher has its own stall-avoidance logic:
+The host handler has its own stall-avoidance logic:
 
 - `stallFreeLoops` (default 128): how many immediate notify-check loops run before backoff starts.
 - `maxBackoffMs` (default 10): ceiling for exponential backoff delay.
 
-Under sustained high load, the dispatcher stays in tight loops. Under intermittent load, it backs off to avoid burning CPU while idle.
+Under sustained high load, the handler stays in tight loops. Under intermittent load, it backs off to avoid burning CPU while idle.
 
 ## Inliner: the host as a lane
 
 The optional **inliner** adds the host thread itself as an execution lane. Inline tasks skip the entire transport layer -- no encode, no mailbox write, no decode. The task function runs directly on the main thread.
 
-Inline execution is deferred to a macro-task boundary (via `MessageChannel`) so the dispatcher can handle worker sends/receives first, then the host drains inline work.
+Inline execution is deferred to a macro-task boundary (via `MessageChannel`) so the handler can service worker sends/receives first, then the host drains inline work.
 
 Key details:
 - `position: "first" | "last"` -- where the inline lane sits in the balancer's lane order.
@@ -169,21 +170,57 @@ See [Inliner guide](/guides/inliner) for when to use it and when to avoid it.
 
 ## Task lifecycle (end to end)
 
-Here's what happens for a single `call.add([1, 2])`:
+Once the handler has picked a lane, that lane's **tx-queue** drives the round trip. Here's a single `call.add([1, 2])`:
 
-1. **Host:** `call.add([1, 2])` is invoked. The input is not a promise, so no awaiting needed.
-2. **Host:** The balancer selects a lane (say, worker 0).
-3. **Host:** The dispatcher finds a free slot in worker 0's request mailbox (bitset claim).
-4. **Host:** `[1, 2]` is encoded. A small tuple fits in the static payload path -- it's written to the payload buffer at a known offset, and the slot header records the type tag and offset.
-5. **Host:** `Atomics.notify` wakes worker 0 (or the worker is already spinning and sees the new slot).
-6. **Worker 0:** Reads the slot header, determines it's task `add` (by function ID). Decodes `[1, 2]` from the payload buffer.
-7. **Worker 0:** Calls `([a, b]) => a + b` with `[1, 2]`. Gets `3`.
-8. **Worker 0:** Claims a slot in the response mailbox. `3` is a number -- fits in the header (header-only path). Writes the result.
-9. **Worker 0:** `Atomics.notify` wakes the host dispatcher.
-10. **Host:** Reads the response slot. Decodes `3`. Resolves the promise returned by `call.add([1, 2])`.
-11. **Host:** Releases the response slot (bitset release).
+<svg role="img" aria-label="Lifecycle of one pool.call invocation across user code, host tx-queue, shared memory, and the worker loop" viewBox="0 0 730 390" width="100%" style="max-width: 700px; height: auto; display: block; margin: 1.25rem auto;" font-family="var(--sl-font, system-ui, sans-serif)" fill="currentColor">
+  <defs>
+    <marker id="seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" stroke="none" />
+    </marker>
+  </defs>
+  <rect x="5" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
+  <text x="70" y="30" text-anchor="middle" font-size="11" font-weight="600">User code (host)</text>
+  <rect x="215" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
+  <text x="280" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Host tx-queue</text>
+  <rect x="425" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
+  <text x="490" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Shared memory</text>
+  <rect x="590" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
+  <text x="655" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Worker loop</text>
+  <line x1="70" y1="40" x2="70" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
+  <line x1="280" y1="40" x2="280" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
+  <line x1="490" y1="40" x2="490" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
+  <line x1="655" y1="40" x2="655" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
+  <text x="175" y="72" text-anchor="middle" font-size="10" fill-opacity="0.85">pool.call.fn(args) → Promise</text>
+  <line x1="70" y1="78" x2="278" y2="78" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+  <text x="385" y="106" text-anchor="middle" font-size="10" fill-opacity="0.85">encode header + payload into a free slot</text>
+  <line x1="280" y1="112" x2="488" y2="112" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+  <text x="385" y="140" text-anchor="middle" font-size="10" fill-opacity="0.85">toggle hostBits (publish)</text>
+  <line x1="280" y1="146" x2="488" y2="146" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+  <rect x="585" y="164" width="140" height="38" rx="6" fill="currentColor" fill-opacity="0.09" stroke="currentColor" stroke-width="1.2" />
+  <text x="655" y="181" text-anchor="middle" font-size="10">spin → pause → park</text>
+  <text x="655" y="195" text-anchor="middle" font-size="10">on the signal word</text>
+  <text x="572" y="220" text-anchor="middle" font-size="10" fill-opacity="0.85">signal word changed → wake</text>
+  <line x1="490" y1="226" x2="653" y2="226" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="572" y="254" text-anchor="middle" font-size="10" fill-opacity="0.85">decode args, run task fn</text>
+  <line x1="655" y1="260" x2="492" y2="260" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+  <text x="572" y="288" text-anchor="middle" font-size="10" fill-opacity="0.85">write result, toggle workerBits (publish)</text>
+  <line x1="655" y1="294" x2="492" y2="294" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+  <text x="385" y="322" text-anchor="middle" font-size="10" fill-opacity="0.85">host drains result, toggles its bit</text>
+  <line x1="490" y1="328" x2="282" y2="328" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="175" y="356" text-anchor="middle" font-size="10" fill-opacity="0.85">resolve / reject the Promise</text>
+  <line x1="280" y1="362" x2="72" y2="362" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+</svg>
 
-If the task throws, step 8 writes an error result instead, and step 10 rejects the promise.
+1. **User code (host):** `pool.call.add([1, 2])` returns a `Promise` immediately -- the input isn't a promise, so nothing is awaited first.
+2. **Host tx-queue:** encodes the call header + payload into a free request slot. (`[1, 2]` is a small tuple, so it takes the static-payload path at a known offset.)
+3. **Host tx-queue:** toggles `hostBits` to publish the slot.
+4. **Worker loop:** had been spinning, then parked on the signal word. The signal word changed, so it wakes.
+5. **Worker loop:** decodes the args and runs the task fn -- `([a, b]) => a + b` returns `3`.
+6. **Worker loop:** writes the result into a response slot and toggles `workerBits` to publish.
+7. **Host:** drains the result from shared memory and toggles its bit to release the slot.
+8. **Host:** resolves (or rejects) the `Promise` returned in step 1.
+
+If the task throws, step 6 writes an error result instead, and step 8 rejects the promise.
 
 ## Pool lifecycle
 
@@ -199,7 +236,7 @@ If the task throws, step 8 writes an error result instead, and step 10 rejects t
 
 - Calls flow through the dispatch layer continuously.
 - Workers spin briefly after completing work (in case more arrives), then park.
-- The host dispatcher manages backoff independently.
+- The host handler manages backoff independently.
 
 ### Shutdown
 
@@ -234,6 +271,47 @@ With default settings and 4 workers, the shared memory footprint is roughly:
 `4 workers x (2 mailboxes + 2 x 4 MiB payload buffers) ~ 32 MiB initial`
 
 Payload buffers grow on demand up to `payloadMaxByteLength` if the runtime supports growable `SharedArrayBuffer`.
+
+## Safety layers
+
+Workers run code the host may or may not trust, so isolation is a dial, not a switch. Knitting stacks four independent layers -- cheapest and softest first, costliest and hardest last. They compose: trusted local tasks can stop at Layer 1, while an untrusted plugin can be pushed all the way to a sandboxed process. This is defence in depth; no single layer is assumed sufficient on its own.
+
+<svg role="img" aria-label="The four safety layers, from in-process guards to a full OS sandbox" viewBox="0 0 1000 124" width="100%" style="max-width: 920px; height: auto; display: block; margin: 1.25rem auto;" font-family="var(--sl-font, system-ui, sans-serif)" fill="currentColor">
+  <defs>
+    <marker id="safety-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" stroke="none" />
+    </marker>
+  </defs>
+  <rect x="8" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.04" stroke="currentColor" stroke-width="1.5" />
+  <text x="96" y="65" text-anchor="middle" font-size="14" font-weight="600">Task code</text>
+  <rect x="206" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="1.5" />
+  <text x="294" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 1</text>
+  <text x="294" y="65" text-anchor="middle" font-size="11">in-process guards</text>
+  <text x="294" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">always on</text>
+  <rect x="404" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5" />
+  <text x="492" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 2</text>
+  <text x="492" y="65" text-anchor="middle" font-size="11">bootstrap hook</text>
+  <text x="492" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">pre-import setup</text>
+  <rect x="602" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.11" stroke="currentColor" stroke-width="1.5" />
+  <text x="690" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 3</text>
+  <text x="690" y="65" text-anchor="middle" font-size="11">runtime permissions</text>
+  <text x="690" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">strict by default</text>
+  <rect x="800" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="1.5" />
+  <text x="888" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 4</text>
+  <text x="888" y="65" text-anchor="middle" font-size="11">process + sandbox</text>
+  <text x="888" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">OS boundary</text>
+  <line x1="184" y1="60" x2="206" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
+  <line x1="382" y1="60" x2="404" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
+  <line x1="580" y1="60" x2="602" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
+  <line x1="778" y1="60" x2="800" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
+</svg>
+
+- **Layer 1 -- in-process guards (always on).** Before any task module loads, the worker neutralizes the most dangerous calls: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are redefined to throw, and the raw shared-memory handles are scrubbed from the data object visible to task code. Cheap, but a guardrail against accidental misuse -- not a wall against a hostile co-resident.
+- **Layer 2 -- bootstrap hook.** `worker.bootstrap` runs a privileged module once per worker, *before* task imports -- the right place to strip env vars, install your own guards, or freeze globals.
+- **Layer 3 -- runtime permissions (strict by default).** The policy is translated into each runtime's native enforcement (Deno's permission flags, Node's permission model, Bun's equivalents), so the boundary is the runtime's, not a library check task code could bypass.
+- **Layer 4 -- process + real sandbox.** The only OS-enforced boundary: `worker.runtime: "process"`, optionally launched through `bwrap`, Docker, or `systemd-run` via `processCommandPrefix`. Pair it with `importTask` so the isolated code never loads in the host at all.
+
+See [Permissions](/guides/permissions/) and [Process workers](/guides/process-workers/) for the full configuration.
 
 ## What Knitting does NOT do
 

@@ -2,7 +2,7 @@
 title: Performance
 description: Tips about performance and good practices.
 sidebar:
-  order: 7
+  order: 9
 ---
 
 import { Badge } from '@astrojs/starlight/components';
@@ -17,23 +17,15 @@ Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be 
 - <Badge text="Fair" variant="caution" />: watch frequency
 - <Badge text="Slow" variant="danger" />: avoid in hot loops, consider alternatives
 
-### Rating thresholds (easy to tweak later)
+### Rating thresholds (per call, easy to tweak later)
 
 These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runtime, edit these numbers and re-label rows as needed.
 
-**For a single call (1 value):**
 - Best: < 1 us
 - Fast: < 2 us
 - Good: < 4 us
 - Fair: < 9 us
 - Slow: > 9 us
-
-**For a batch (100 values):**
-- Best: < 50 us
-- Fast: < 100 us
-- Good: < 200 us
-- Fair: < 450 us
-- Slow: > 450 us
 
 ---
 
@@ -43,7 +35,6 @@ These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runt
 - cpu: Apple M3 Ultra
 - runtime: node 24.12.0 (arm64-darwin)
 
-
 ---
 
 ## Mental model (what makes things fast)
@@ -52,156 +43,36 @@ These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runt
 Values fit into the call header: tiny encode/decode cost.
 
 **2) Static payload**
-Reuses part of the Header plus a small buffer, only for small playloads.
+Reuses part of the header plus a small buffer, only for small payloads.
 
 **3) Dynamic payload (allocator path)**
 Needs allocation, copying, and bookkeeping. Still fast, but you'll feel it in hot loops.
 
-
+**4) Pointer teleportation (zero-copy)**
+`SharedArrayBuffer` and `ProcessSharedBuffer` are never copied — only a
+pointer/handle crosses the boundary and both sides map the same bytes. Size
+stops mattering: a 1 KiB and a 64 MiB `SharedArrayBuffer` cost the same to pass.
+`BufferReference` (`knitting/unsafe`) is the thread-only *move* variant: it
+detaches the source and hands the bytes over without a copy.
 
 ---
 
 ## Single call categories (1 value)
 
-<table>
-  <thead>
-    <tr>
-      <th>Case</th>
-      <th>Batch</th>
-      <th>Tier</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Primitives: <code>boolean</code>, <code>undefined</code>, <code>null</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Numbers: <code>number</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Time/IDs: <code>Date</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Strings: small <code>string</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Symbols: <code>Symbol.for</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Fast" variant="success" /></td>
-    </tr>
-    <tr>
-      <td>BigInt: small <code>bigint</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>BigInt: large <code>bigint</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Fast" variant="success" /></td>
-    </tr>
-    <tr>
-      <td>Binary: Typed Arrays</td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Views: <code>DataView</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Good" variant="tip" /></td>
-    </tr>
-    <tr>
-      <td>Structured: <code>JSON object</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Good" variant="tip" /></td>
-    </tr>
-    <tr>
-      <td>Structured: <code>JSON array</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Good" variant="tip" /></td>
-    </tr>
-    <tr>
-      <td>Errors: <code>Error</code></td>
-      <td><code>(1)</code></td>
-      <td><Badge text="Slow" variant="danger" /></td>
-    </tr>
-  </tbody>
-</table>
-
----
-
-## Batch categories (100 values)
-
-Batching amortizes overhead or if you are doing repeated calls.
-
-<table>
-  <thead>
-    <tr>
-      <th>Case</th>
-      <th>Batch</th>
-      <th>Tier</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Primitives: <code>boolean</code>, <code>undefined</code>, <code>null</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Numbers: <code>number</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Strings: small <code>string</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>BigInt: small <code>bigint</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>BigInt: large <code>bigint</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Fast" variant="success" /></td>
-    </tr>
-    <tr>
-      <td>Binary: Typed Arrays </td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Structured: <code>JSON object</code>, <code>JSON array</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Good" variant="tip" /></td>
-    </tr>
-    <tr>
-      <td>Errors: <code>Error</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Slow" variant="danger" /></td>
-    </tr>
-    <tr>
-      <td>Time/IDs: <code>Date</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-    <tr>
-      <td>Symbols: <code>Symbol.for</code></td>
-      <td><code>(100)</code></td>
-      <td><Badge text="Best" variant="note" /></td>
-    </tr>
-  </tbody>
-</table>
+| Case | Tier |
+| --- | --- |
+| Primitives: `boolean`, `undefined`, `null` | <Badge text="Best" variant="note" /> |
+| Numbers: `number` | <Badge text="Best" variant="note" /> |
+| Time/IDs: `Date` | <Badge text="Best" variant="note" /> |
+| Strings: small `string` | <Badge text="Best" variant="note" /> |
+| Symbols: `Symbol.for` | <Badge text="Fast" variant="success" /> |
+| BigInt: small `bigint` | <Badge text="Best" variant="note" /> |
+| BigInt: large `bigint` | <Badge text="Fast" variant="success" /> |
+| Binary: typed arrays | <Badge text="Best" variant="note" /> |
+| Views: `DataView` | <Badge text="Good" variant="tip" /> |
+| Structured: JSON object | <Badge text="Good" variant="tip" /> |
+| Structured: JSON array | <Badge text="Good" variant="tip" /> |
+| Errors: `Error` | <Badge text="Slow" variant="danger" /> |
 
 ---
 
@@ -237,18 +108,52 @@ If your payloads are consistently small (primitives, short strings), the
 defaults (`4 MiB` initial, `64 MiB` max length, `8 MiB` hard dynamic cap) are
 usually enough.
 
-### Batching
+---
 
-Batching many calls amortizes header and dispatch overhead. Even types rated
-<Badge text="Slow" variant="danger" /> in the single-call table become
-acceptable when batched. If you're calling the same task in a loop, fire all
-calls concurrently with `Promise.all` rather than awaiting each one
-sequentially.
+## Threads vs processes
 
-### Promise inputs
+The two worker runtimes isolate memory differently, so they expose different
+zero-copy tools:
 
-`call.*()` can also accept `Promise<supported>` inputs, not just already
-resolved values. In HTTP handlers this lets you pass the body read directly:
+| Runtime | Isolation | Zero-copy tools |
+| --- | --- | --- |
+| `thread` (default) | shares the host address space | `SharedArrayBuffer`, `BufferReference` (move) |
+| `process` | separate memory and permissions | `ProcessSharedBuffer` (OS shared memory) |
+
+A `SharedArrayBuffer` or `BufferReference` cannot cross a process boundary —
+reach for `ProcessSharedBuffer` when the worker is a process. See
+[Shared memory](/guides/shared-memory/) and
+[Buffer reference](/guides/buffer-reference/).
+
+Because a process worker is just a child process, you can spawn it behind a
+command prefix (`worker.processCommandPrefix`) so another tool launches it — a
+sandbox like `bwrap` or a container like Docker:
+
+```ts
+worker: {
+  runtime: "process",
+  processCommandPrefix: ["bwrap", "--unshare-all", "--ro-bind", "/", "/"],
+}
+```
+
+See [Process workers](/guides/process-workers/) for the full wrapper recipes.
+
+:::caution
+For anything security-sensitive, define the task with
+[`importTask`](/guides/defining-tasks/#importing-worker-side-code-with-importtask).
+The host holds only a typed wrapper and **never imports or evaluates the
+module** — that code runs only inside the worker, under the worker's
+permissions, never at host scope.
+:::
+
+---
+
+## HTTP request handling
+
+`call.*()` accepts `Promise<supported>` inputs, not just already-resolved
+values. In an HTTP handler this lets you forward the request body promise
+straight into a task without stopping the request thread to materialize it
+first:
 
 ```ts
 app.post("/jwt", async (c) => {
@@ -260,21 +165,20 @@ app.post("/jwt", async (c) => {
 });
 ```
 
-This does **not** help because a `Promise` is somehow faster on its own. The
-win is that the main thread no longer needs to stop and materialize the payload
-before handing it to Knitting.
+The promise isn't faster on its own — the win is that the request thread never
+stops to materialize the body before handing it to Knitting:
 
-Why it helps in the Hono `arrayBuffer()` case:
+- `c.req.arrayBuffer()` already returns a promise, so forwarding it skips an
+  `await` in the handler.
+- UTF-8 decode / JSON parsing happens in the worker, not on the request thread.
+- `ArrayBuffer` stays on the binary fast path.
 
-- `c.req.arrayBuffer()` already returns a promise, so forwarding it directly
-  avoids one extra `await` step in the route handler.
-- If the worker task accepts `ArrayBuffer` and does UTF-8 decode / JSON parsing
-  inside the task, that decode/parse work moves off the request thread.
-- `ArrayBuffer` stays on the binary fast path, which is usually cheaper than
-  first converting to `string` or building a JSON object on the host.
+### Head + body with `Envelope`
 
-The same pattern also works when the task expects an `Envelope`. You can shape
-the value with `.then(...)` and still avoid awaiting the body first:
+When you need both the request metadata (the head) and the raw body, wrap them
+in an `Envelope`: the header carries the parsed metadata, the payload carries
+the body bytes. Shape it from the body promise with `.then(...)` so you still
+never await the body on the request thread:
 
 ```ts
 import { Envelope } from "knitting";
@@ -285,7 +189,6 @@ app.post("/upload", async (c) => {
       (body) =>
         new Envelope(
           { contentType: c.req.header("content-type") ?? "application/octet-stream" },
-          // or:  c.req.header("content-type") ?? "application/octet-stream" 
           body,
         ),
     ),
@@ -295,11 +198,38 @@ app.post("/upload", async (c) => {
 });
 ```
 
-Here the host does not await the request body up front. The envelope is created
-only when the promise resolves, and Knitting receives the resolved
-`Envelope<header, payload>` value.
+For a large binary body sent to a **thread** worker, make the body a
+`BufferReference` instead of an `ArrayBuffer` to move the bytes with no copy —
+only the body line changes:
+
+```ts
+import { BufferReference } from "knitting/unsafe";
+
+new Envelope(
+  { contentType: c.req.header("content-type") ?? "application/octet-stream" },
+  new BufferReference(body), // moves the body bytes, zero-copy (thread workers)
+);
+```
 
 This is most useful when the route is basically a transport layer and the
-worker is supposed to own parsing anyway, like SSR or JWT issuance. If you need
-to inspect the body on the main thread before dispatch, await it locally and
-validate there.
+worker owns parsing anyway, like SSR or JWT issuance. If you need to inspect the
+body on the main thread before dispatch, await it locally and validate there.
+
+### Choosing a return type
+
+The return path has the same costs as the input path, in reverse. There are
+many ways to return a result; pick by how big it is and what it already is:
+
+- **JSON object / array** — serialized on the worker and parsed again on the
+  host, so it pays a *double* pass over the data (stringify + parse). Fine for
+  small results, heavy for large ones.
+- **`SharedArrayBuffer` / `ProcessSharedBuffer`** — pointer teleportation; the
+  cheapest way to hand bytes back when you can back the result with shared
+  memory. `ProcessSharedBuffer` also works from process workers.
+- **`BufferReference`** — for big binaries you cannot easily cast into a
+  `SharedArrayBuffer` (for example a buffer produced by a library you don't
+  control). Zero-copy on Node; a single copy on Deno and Bun. Thread workers
+  only.
+
+See [Payloads](/guides/payloads/) and
+[Buffer reference](/guides/buffer-reference/) for the full type list.
