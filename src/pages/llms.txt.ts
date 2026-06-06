@@ -19,6 +19,10 @@ export const GET: APIRoute = async ({ site }) => {
     "",
     `> ${TAGLINE}`,
     "",
+    `**Building with Knitting? Fetch [llms-full.txt](${
+      fileUrl("llms-full.txt", site)
+    }) first** — it inlines every documentation page into one file. The essentials below cover the common path; the full text covers everything else.`,
+    "",
     ESSENTIALS,
     "",
   ];

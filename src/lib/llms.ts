@@ -17,6 +17,7 @@ export const ESSENTIALS = [
   "- A task is an exported function at module scope. Wrap it with `task({ f })` only when you want options like a timeout or an abort signal.",
   "- Tasks take ONE argument. Use a tuple or object for multiple values: `([a, b]) => a + b`.",
   "- Guard host-only code with `isMain` — workers re-import the module.",
+  "- Module loading: each worker re-imports the module that DEFINES your tasks, and its top-level `import`s run in every worker (they are hoisted — `isMain` does NOT gate them). Keep tasks in a lean module separate from your server/framework code. Tasks must be `export`ed or the loader can't find them and the call silently hangs. `importTask` targets must be plain functions, not `task()` wrappers.",
   "- Create a pool with `createPool(options)({ taskA, taskB })`, then call `await pool.call.taskA(args)`.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',

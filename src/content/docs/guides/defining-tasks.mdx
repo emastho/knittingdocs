@@ -17,6 +17,27 @@ workers can find them by name.
 - One argument in, one value out. Use a tuple or object for multiple values.
 - Keep tasks in their own file(s) so workers load only what they need.
 
+## Module loading
+
+Each worker **re-imports the module that defines your tasks** — the file that
+calls `task()` / `importTask()` and hands them to `createPool`. Two consequences
+are worth designing around:
+
+- **Top-level `import`s run in every worker.** `import` statements are hoisted,
+  so they execute *before* any `if (isMain)` guard — `isMain` gates your
+  executable code, not your imports. If you define tasks in the same file as a
+  web framework, every worker loads that framework too. Keep tasks in their own
+  lean module and import it from your server, so workers only load what they run.
+- **Tasks must be exported.** The worker discovers tasks by scanning the
+  module's exports. An unexported `const myTask = task(...)` (or `importTask`)
+  is invisible to the loader, so calling it just **hangs** — no handler is ever
+  registered. Always `export` your tasks and `importTask` wrappers.
+
+For full isolation — keeping a task's *own* code off the host entirely — use
+[`importTask`](#importing-worker-side-code-with-importtask): only the worker
+imports the target module, and that target must be a **plain exported function**,
+not a `task()` wrapper.
+
 ## A plain function
 
 When a task needs no options, a bare exported function is enough:
@@ -228,6 +249,13 @@ path, or a URL. `name` is the export to call and defaults to `"default"`. Worker
 permission policy applies to the import, so a strict pool can still load task
 modules but limit what they read, write, or reach. See
 [Permissions](/guides/permissions/).
+
+:::caution
+The target export must be a **plain function** — pointing `importTask` at a
+`task()` wrapper throws `TypeError: importTask expected export "…" to be a
+function`. Put task options on the host side instead: `importTask` accepts the
+same `timeout` and `abortSignal` options as `task()`.
+:::
 
 ### Importing from a URL
 

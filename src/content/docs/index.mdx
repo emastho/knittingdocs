@@ -425,6 +425,30 @@ deno add --npm knitting`;
   </p>
 </section>
 
+<section class="kh-shell" aria-labelledby="kh-agents-title">
+  <div class="kh-section-head">
+    <p class="kh-eyebrow">For AI agents</p>
+    <h2 id="kh-agents-title">Pointing an LLM at Knitting? Feed it the docs.</h2>
+    <p>
+      Knitting ships machine-readable docs. Hand your agent
+      <a href="/llms.txt">/llms.txt</a> for the essentials, or
+      <a href="/llms-full.txt">/llms-full.txt</a> for every page inlined into one
+      file &mdash; with those in context, generated Knitting code is far more
+      likely to be right the first time.
+    </p>
+    <p>
+      One model detail to know up front: each worker <em>re-imports the module
+      that defines your tasks</em>, so that module's top-level imports run in
+      every worker too (<code>isMain</code> guards your code, not your imports).
+      Good practice is to keep tasks in their own lean module &mdash; separate
+      from your server or framework code &mdash; make sure they are
+      <strong>exported</strong>, and reach for
+      <a href="/guides/defining-tasks/#module-loading"><code>importTask</code></a>
+      when you want a task's code fully isolated to the worker.
+    </p>
+  </div>
+</section>
+
 <section class="kh-shell kh-links" aria-labelledby="kh-links-title">
   <div class="kh-section-head kh-section-head--compact">
     <p class="kh-eyebrow">Read next</p>
