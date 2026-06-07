@@ -215,6 +215,11 @@ fact: **workers re-import the module that defines your tasks.**
   `importTask` call instead.
 - **Worker `console.*` is silent by default** in strict mode. Pass
   `permission: { console: true }` to surface worker logs.
+- **Can't tell what the pool is doing?** Pass `debug: true` to `createPool` (or
+  set the `KNITTING_DEBUG=*` env var) to stream setup, import, and lifecycle
+  diagnostics to **stderr** — each line tagged with the worker and a millisecond
+  timer. Narrow the noise with namespaces: `debug: { host: true, imports: true }`.
+  It costs nothing when off.
 - **Only supported payloads cross the boundary.** `Map`, `Set`, class instances,
   and functions are rejected — see [Payloads](/guides/payloads/).
 - **Dynamic payloads cap at ~8 MiB** by default; raise `payload.maxPayloadBytes`

@@ -95,11 +95,12 @@ createPool({
   workerExecArgv?: string[],
   permission?: "strict" | "unsafe" | PermissionProtocol,
   dispatcher?: DispatcherSettings, // deprecated alias of host
-  debug?: {
-    extras?: boolean,
-    logMain?: boolean,
-    logHref?: boolean,
-    logImportedUrl?: boolean,
+  debug?: boolean | {
+    host?: boolean,
+    globals?: boolean,
+    signals?: boolean,
+    imports?: boolean,
+    lifecycle?: boolean,
   },
   source?: string,
 })
@@ -328,10 +329,24 @@ Deprecated alias of `host`.
 
 ## debug
 
-- `extras`: extra warnings (for example, accidental `createPool` in a worker).
-- `logMain`: signal logging on the main thread (writes under `./log/`).
-- `logHref`: log worker entry module URL.
-- `logImportedUrl`: log module URLs imported by workers for task discovery.
+Streams diagnostics to **stderr**, each line tagged with the worker (`host`, or
+`w0`, `w1`, … for the thread/process workers), the runtime, and a millisecond
+timer relative to when that worker's debug initialised. Pass `true` to enable
+everything, or turn on individual namespaces:
+
+- `host`: host-side pool setup — cwd and caller, each registered task, runtime /
+  workers / lanes / inliner, the module list, permission mode, and worker bootstrap.
+- `imports`: how many tasks each worker loaded, and from which modules.
+- `lifecycle`: the worker "ready" line and process-worker lifecycle events.
+- `signals`: per-dispatch worker traffic (work / result / run / idle). Very chatty.
+- `globals`: `globalThis` changes across the worker's bootstrap and task phases,
+  so you can see which loader injected which global.
+
+Enable the same namespaces without touching code through the `KNITTING_DEBUG`
+environment variable — a comma-separated list (`KNITTING_DEBUG=host,imports`) or
+`*` for all. The option and the env var merge; either one can turn a namespace
+on. Debug is zero-cost when off: with no namespace active, the logger module is
+never even imported.
 
 ## source
 
