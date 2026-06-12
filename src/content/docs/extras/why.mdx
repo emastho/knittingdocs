@@ -1,6 +1,6 @@
 ---
 title: Why Knitting
-description: The positioning argument — why hot JavaScript functions deserve an execution boundary on the same host, not a microservice, and where Knitting is heading next.
+description: "Why Knitting exists: move hot JavaScript functions off the main thread without turning them into services."
 head:
   - tag: meta
     attrs:
@@ -18,72 +18,67 @@ sidebar:
   order: 1
 ---
 
-This page is about a very ordinary backend moment: the app is mostly fine, but
-one part of it got hot.
+Most apps do not need a new service the first time one function gets expensive.
+They need a better place for that function to run.
 
-A parser. A validator. A hash. A render. A compression step. The profiler points
-at a few functions, the event loop starts to feel sticky, and now the fix has to
-have a shape.
+A parser gets large. A validator gets complicated. A hash, render, or
+compression step starts taking more of the event loop than it should. The rest
+of the app is still fine. The problem is smaller than the architecture we often
+reach for.
 
-If you want the machinery, read [Architecture](/extras/architecture/). This page
-is about the feeling behind Knitting: the problem is often smaller than the
-infrastructure we reach for.
+Knitting is built for that middle place: keep the code local, but move the work
+off the main thread.
 
 ## The hot-function problem
 
-CPU pressure in a JavaScript app is rarely spread evenly. In real codebases, a
-small set of functions often creates most of the cost. It is not a law of
-nature, just a familiar shape: the app has thousands of functions, but the heat
-lives in five of them.
+CPU pressure in a JavaScript app rarely spreads evenly. Real codebases often
+have thousands of functions, but only a few of them create most of the cost.
 
 That matters because it changes the size of the fix. You may not have an
-application problem. You may have a function problem. The usual escape routes
-are all bigger than that: either change nothing structural, or restructure far
-more of the system than the hot path deserves.
+application problem. You may have a function problem. If the heat is local, the
+solution should be local too.
 
-## The three escape routes
+## The usual choices
 
 When the main thread starts paying for those functions, JavaScript developers
-usually pick one of three doors.
+usually reach for one of three options.
 
-**Door one: stay in-process and eat the cost.** This is the default, and for a
-while it works. But every millisecond a hot function spends on the main thread
-is a millisecond your server is less available for everything else. Cheap routes
-queue behind expensive ones. Timers drift. Scaling out with more processes or
-containers dilutes the pain, but it does not remove the hot path from the event
-loop.
+**Stay in-process.** It is simple, and for a while it works. But every
+millisecond a hot function spends on the main thread is a millisecond the server
+cannot spend on everything else. Cheap routes queue behind expensive ones.
+Scaling out dilutes the pain, but it does not remove the hot path from the
+event loop.
 
-**Door two: hand-roll workers.** This is closer to the right shape, and it is
-also why many people bounce off workers. The runtime gives you `postMessage`;
-the rest is yours: request IDs, routing, error marshalling, promise wiring,
-lifecycle management, payload choices. After all of that, the per-message cost
-can still make small tasks feel silly to offload. That plumbing is the original
-reason Knitting exists.
+**Hand-roll workers.** The shape is closer: move the work somewhere else on the
+same machine. The rough part is everything around it. The runtime gives you
+`postMessage`; the rest is yours: request IDs, routing, errors, promises,
+lifecycle, payload choices. That plumbing is the original reason Knitting
+exists.
 
-**Door three: promote the function into a microservice.** This door is
-well-paved, so teams take it. Sometimes they should. Separate ownership,
-separate deploy cadence, separate failure domain: those are real reasons to
-cross the network. But for one hot function owned by the same team in the same
-repo, the bill is strange: a network hop, JSON on both sides, service discovery,
-deployment, dashboards, an on-call surface. The function did not ask for a
-hostname. It asked for somewhere else to run.
+**Make it a service.** Sometimes that is the right call. Separate ownership,
+separate deploy cadence, and separate failure domains are real reasons to cross
+the network. But for one hot function owned by the same team in the same repo,
+the bill is strange: a network hop, serialization, deployment, monitoring, and
+another surface to operate. The function did not ask for a hostname. It asked
+for somewhere else to run.
 
 ## The fourth shape
 
-Knitting's position is that there is a missing option between "function call"
-and "service boundary":
+Knitting adds a smaller boundary:
 
 > Keep the code local. Move the execution boundary.
 
-The hot function stays in your repo, in your language, in your types, one
-`import` away from its caller. What changes is *where it executes* and *what it
-is allowed to do there*. Export it, hand it to a pool, and call it like the
-async function it already was. Underneath, it runs on a real thread or an
-isolated process behind the boundary you chose.
+The function stays in your repo, in your language, in your types, one `import`
+away from its caller. What changes is *where it runs* and *what it is allowed to
+touch*. Export it, hand it to a pool, and call it like the async function it
+already was. Underneath, it runs on a real thread or an isolated process behind
+the boundary you chose.
 
-That is the sense in which Knitting is a **function-level execution boundary**,
-not just a worker helper. Compare what each door costs for the same five hot
-functions:
+That makes Knitting a **function-level execution boundary**. It is not a new
+service, and it is not just a worker helper. It is a way to move the expensive
+part without moving the whole app.
+
+Compare what each option costs for the same few hot functions:
 
 | | In-process | Hand-rolled workers | Microservice | Knitting |
 |---|---|---|---|---|
@@ -94,30 +89,27 @@ functions:
 | Isolation available | none | thread only | full, always-on | a dial, per pool |
 | New deploy unit | no | no | yes | no |
 
-Two of those cells are the heart of the thing.
+Two details make the fourth shape useful.
 
-**Transport cost** is what historically made workers disappointing for small
-tasks: sometimes reaching the worker costs more than the work. Knitting uses
-shared-memory mailboxes instead of the runtime's message queue, which keeps
-small and medium calls economical. The [Architecture](/extras/architecture/)
-page explains the mechanism, and the [benchmarks](/benchmarks/introduction/)
-show the resulting shape honestly, including where it does not win.
+**Transport cost matters.** Workers can feel disappointing when reaching the
+worker costs more than the work. Knitting uses shared-memory mailboxes instead
+of the runtime's message queue, so small and medium calls stay practical. The
+[Architecture](/extras/architecture/) page explains the mechanism, and the
+[benchmarks](/benchmarks/introduction/) show where the shape wins and where it
+does not.
 
-**Isolation is a dial, not an always-on tax.** A microservice gives you process
-isolation whether or not you need it, and bills every call for the privilege.
-Knitting stacks [four independent safety layers](/extras/architecture/#safety-layers):
-in-process guards, a bootstrap hook, runtime-native permissions, and a real
-OS-sandboxed process. You pick the rung each pool deserves. Trusted math can
-stay on cheap threads; an untrusted plugin can run behind `bwrap`, with
+**Isolation should match the task.** A microservice gives you process isolation
+whether or not you need it. Knitting lets each pool choose its boundary:
+in-process guards, a bootstrap hook, runtime-native permissions, or a real
+OS-sandboxed process. Trusted math can stay on cheap threads; an untrusted
+plugin can run behind `bwrap`, with
 [`importTask`](/guides/defining-tasks/#module-loading) keeping its code off the
 host entirely.
 
-To be clear about what this argument is *not*: Knitting does not replace
-distributed systems. If you need cross-machine scale, separate failure domains,
-or team-level ownership boundaries, you need the network. Knitting is built to
-sit *inside* each node of that system, not instead of it. What it removes is the
-pressure to create a distributed system for the wrong reason: just to escape the
-main thread.
+Knitting does not replace distributed systems. If you need cross-machine scale,
+separate failure domains, or team-level ownership boundaries, you still need the
+network. Knitting is for the moment before that, when the code belongs in the
+app but the work no longer belongs on the main thread.
 
 > Not every hot path deserves a hostname.
 
@@ -127,32 +119,141 @@ main thread.
 Everything below is roadmap as of June 2026. None of it is shipped API, and the shape may change or be cut as the design matures. Build against what the [guides](/guides/defining-tasks/) document today.
 :::
 
-Knitting today is task-call oriented: one request in, one response out, over
-shared memory. The foundation underneath that -- mailboxes, payload buffers,
-named mappings that cross process boundaries -- is more general than the
-request/response API on top of it. Two extensions follow naturally from there.
+Knitting today is task-call oriented: one request in, one response out. The
+transport underneath it is more general than that. Mailboxes, payload buffers,
+and named mappings leave room for other shapes.
 
-**Channels (nearer term).** Some same-host communication is not a task call:
-progress streams, long-lived coordination between lanes, producer/consumer
-flows. Today the honest answer for those is `MessagePort`. A channel primitive
-on the shared-memory transport would cover the cases where a task call is the
-wrong shape but the transport's economics still matter.
+<div class="why-roadmap" aria-label="Tentative roadmap">
+  <article class="why-roadmap-item">
+    <div class="why-roadmap-meta">
+      <span class="why-roadmap-step">01</span>
+      <span class="why-roadmap-status">Nearer term</span>
+    </div>
+    <h3>Channels</h3>
+    <p>
+      Some same-host work is not a task call: progress, long-lived coordination,
+      producer/consumer flows. Today the honest answer is <code>MessagePort</code>.
+    </p>
+    <p>
+      A future channel API would keep that shape on the same shared-memory
+      transport, without pretending every conversation is request/response.
+    </p>
+  </article>
 
-**Cross-language, same-host (longer term).** The mailbox protocol and shared
-mappings are not JavaScript-specific. A process worker already reaches memory
-through a named mapping rather than anything runtime-magical. The longer-term
-prize is letting JavaScript hand bytes to another language's runtime on the same
-machine without re-marshalling the payload at every hop. Large payloads staying
-in place while ownership moves is the same idea Knitting is built on; extending
-it across language boundaries is the natural end of that road.
+  <article class="why-roadmap-item">
+    <div class="why-roadmap-meta">
+      <span class="why-roadmap-step">02</span>
+      <span class="why-roadmap-status">Longer term</span>
+    </div>
+    <h3>Cross-language, same-host</h3>
+    <p>
+      The mailbox protocol is not tied to JavaScript. Process workers already
+      open named mappings, which makes the boundary more about memory than a
+      specific runtime.
+    </p>
+    <p>
+      A later version could let JavaScript hand large payloads to another
+      runtime on the same machine without copying through JSON or
+      re-marshalling at every hop.
+    </p>
+  </article>
+</div>
 
-Those ideas are part of why the transport layer is engineered more carefully
-than a worker pool strictly needs. Until they ship, though, judge Knitting on
-what it does now.
+That is why the transport is built with more care than a worker pool strictly
+needs. Until those APIs ship, though, judge Knitting on what it does now.
+
+<style is:global>{`
+  .sl-markdown-content .why-roadmap {
+    --why-roadmap-border: color-mix(in srgb, var(--sl-color-accent) 28%, var(--sl-color-gray-5));
+    --why-roadmap-panel: color-mix(in srgb, var(--sl-color-bg-nav) 82%, var(--sl-color-accent) 8%);
+    --why-roadmap-muted: color-mix(in srgb, var(--sl-color-gray-2) 78%, var(--sl-color-white) 8%);
+    display: grid;
+    gap: 1rem;
+    margin-block: 1.4rem 1.6rem;
+  }
+
+  .sl-markdown-content .why-roadmap-item {
+    position: relative;
+    overflow: hidden;
+    padding: 1.05rem 1.1rem 1.1rem 1.35rem;
+    border: 1px solid var(--why-roadmap-border);
+    border-radius: 8px;
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--sl-color-accent) 10%, transparent), transparent 42%),
+      var(--why-roadmap-panel);
+  }
+
+  .sl-markdown-content .why-roadmap-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0.24rem;
+    background: linear-gradient(
+      180deg,
+      var(--sl-color-accent),
+      color-mix(in srgb, var(--sl-color-accent) 38%, transparent)
+    );
+  }
+
+  .sl-markdown-content .why-roadmap-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .sl-markdown-content .why-roadmap-step,
+  .sl-markdown-content .why-roadmap-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .sl-markdown-content .why-roadmap-step {
+    padding-inline: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--sl-color-accent) 45%, transparent);
+    color: var(--sl-color-accent-high);
+  }
+
+  .sl-markdown-content .why-roadmap-status {
+    padding-inline: 0.55rem;
+    background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+    color: var(--why-roadmap-muted);
+    text-transform: uppercase;
+  }
+
+  .sl-markdown-content .why-roadmap-item h3 {
+    margin: 0 0 0.45rem;
+    padding-left: 0;
+    color: var(--sl-color-white);
+    font-size: 1.12rem;
+    letter-spacing: 0;
+  }
+
+  .sl-markdown-content .why-roadmap-item p {
+    margin: 0;
+    color: var(--why-roadmap-muted);
+  }
+
+  .sl-markdown-content .why-roadmap-item p + p {
+    margin-top: 0.62rem;
+  }
+
+  @media (min-width: 54rem) {
+    .sl-markdown-content .why-roadmap {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+`}</style>
 
 ## Read next
 
 - [Quick Start](/start/quick-start/) -- the ten-line version of everything argued above.
 - [Architecture](/extras/architecture/) -- the mailbox transport, lane model, and safety layers in detail.
 - [Process workers](/guides/process-workers/) -- the hard end of the isolation dial: sandboxes and containers.
-- [Examples](/examples/intro_examples/) -- the hot functions this page keeps gesturing at, as copyable code.
+- [Examples](/examples/intro_examples/) -- the hot functions behind this argument, as copyable code.
