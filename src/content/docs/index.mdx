@@ -1,6 +1,6 @@
 ---
 title: "Knitting"
-description: "Knitting is a zero-runtime-dependency worker pool and shared-memory IPC runtime for Node.js, Deno, and Bun."
+description: "Knitting moves CPU-heavy JavaScript functions onto threads or isolated processes while keeping them as ordinary async calls in Node.js, Deno, and Bun."
 template: splash
 tableOfContents: false
 prev: false
@@ -20,7 +20,7 @@ head:
       content: "index,follow,max-image-preview:large"
 hero:
   title: Knitting
-  tagline: A zero-runtime-dependency worker pool and shared-memory IPC runtime for JavaScript. Export functions once, run them on real threads or isolated processes, and call them like normal async functions in Node.js, Deno, and Bun.
+  tagline: Keep your app whole. Move the hot functions to worker lanes you control, then call them like normal async functions in Node.js, Deno, and Bun.
   image:
     html: |
       <img class="kh-hero-logo" src="/logo.webp" alt="" width="640" height="640" loading="eager" decoding="async" />
@@ -28,12 +28,9 @@ hero:
     - text: Quick Start
       link: /start/quick-start/
       variant: primary
-    - text: Install
-      link: /start/installation/
+    - text: Why Knitting
+      link: /extras/why/
       variant: secondary
-    - text: Benchmark Notes
-      link: "#benchmarks"
-      variant: minimal
 ---
 
 import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
@@ -184,8 +181,8 @@ deno add --npm knitting`;
     <span>worker modes: threads or processes</span>
   </div>
   <div class="kh-stat">
-    <strong>strict</strong>
-    <span>worker permissions by default</span>
+    <strong>4</strong>
+    <span>safety layers, from guards to OS sandbox</span>
   </div>
 </section>
 
@@ -194,10 +191,10 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">The shape of the API</p>
     <h2 id="kh-start-title">Export a function, create a pool, call it.</h2>
     <p>
-      Knitting keeps the worker boundary visible without making it noisy.
-      Export plain functions for the common path, add task metadata only when
-      you need timeouts or abort signals, then let <code>using</code> clean up
-      the pool when the scope exits.
+      You write the function where it belongs. Knitting gives it another place
+      to run. Start with plain exports, add task metadata only when you need
+      timeouts or abort signals, then let <code>using</code> close the pool
+      when the scope exits.
     </p>
     <div class="kh-install">
       <Code code={install} lang="bash" title={"install.sh"} />
@@ -242,45 +239,58 @@ deno add --npm knitting`;
 
 <section class="kh-shell" aria-labelledby="kh-why-title">
   <div class="kh-section-head">
-    <p class="kh-eyebrow">Why it exists</p>
-    <h2 id="kh-why-title">Workers should feel practical, not ceremonial.</h2>
+    <p class="kh-eyebrow">The missing middle</p>
+    <h2 id="kh-why-title">Not every hot path deserves a hostname.</h2>
     <p>
-      JavaScript has good worker primitives, but using them usually means custom
-      message protocols, request IDs, routing tables, serialization decisions,
-      and error plumbing. Knitting wraps that into a task runtime built around
-      shared memory, batching, and explicit pool control.
+      Most apps do not get hot everywhere at once. A parser, validator, hash,
+      compression step, or SSR render starts taking too much room on the main
+      thread, and suddenly the fix looks bigger than the problem. Knitting is
+      the missing middle: keep the function in your app, move where it runs,
+      and avoid inventing a service boundary just to protect the event loop.
     </p>
   </div>
 
   <div class="kh-grid kh-grid--three">
     <article class="kh-card">
       <span class="kh-token">01</span>
-      <h3>Function-call ergonomics</h3>
+      <h3>Move the heat</h3>
       <p>
-        Export typed functions, start a pool, then call <code>pool.call.name()</code>
-        like any other promise-returning function.
+        Export the expensive function once. Call
+        <code>pool.call.name()</code> from the host while a thread or process
+        does the work somewhere quieter.
       </p>
       <a href="/guides/defining-tasks/">Define work</a>
     </article>
     <article class="kh-card">
       <span class="kh-token">02</span>
-      <h3>Shared-memory transport</h3>
+      <h3>Control the worker</h3>
       <p>
-        Request and response mailboxes keep coordination cheap; payload buffers
-        handle larger values without routing every call through socket-style IPC.
+        A pool is more than a thread count. It is where you choose the runtime,
+        permissions, bootstrap hook, process wrapper, payload limits,
+        timeouts, and scheduling.
       </p>
-      <a href="/extras/architecture/">See the architecture</a>
+      <a href="/guides/creating-pools/">Creating pools</a>
     </article>
     <article class="kh-card">
       <span class="kh-token">03</span>
-      <h3>Runtime-aware isolation</h3>
+      <h3>Skip the message queue</h3>
       <p>
-        Use threads for the fast path, or process workers when permissions,
-        wrappers, containers, or stronger separation matter more.
+        Request and response mailboxes live in shared memory, so task calls do
+        not have to become little socket conversations just to reach another
+        core.
       </p>
-      <a href="/guides/process-workers/">Process workers</a>
+      <a href="/extras/architecture/">See the architecture</a>
     </article>
   </div>
+
+  <p class="kh-note">
+    Knitting is not trying to replace distributed systems. It is for the
+    moment before that, when one hot function needs a better place to run.
+    Today it is task-call oriented; the same shared-memory foundation points
+    toward <a href="/extras/why/#where-its-going">future channels and
+    cross-language same-host communication</a>. The fuller argument lives in
+    <a href="/extras/why/">Why Knitting</a>.
+  </p>
 </section>
 
 <section class="kh-shell" aria-labelledby="kh-box-title">
@@ -288,9 +298,9 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">What's in the box</p>
     <h2 id="kh-box-title">Batteries you'd otherwise wire up by hand.</h2>
     <p>
-      The function-call ergonomics are the headline. The useful part is
-      everything that rides along with them &mdash; payloads, deadlines,
-      isolation, and scheduling, all handled at the pool boundary.
+      The nice part is calling workers like functions. The useful part is what
+      comes with that boundary: payloads, deadlines, isolation, scheduling, and
+      cleanup in one place.
     </p>
   </div>
 
@@ -322,12 +332,13 @@ deno add --npm knitting`;
       <a href="/guides/process-workers/">Process workers</a>
     </article>
     <article class="kh-card">
-      <h3>Strict permissions</h3>
+      <h3>Real errors, real diagnostics</h3>
       <p>
-        Workers start locked down. Open only the paths, env, and network your
-        tasks actually need.
+        Thrown errors come back as <code>Error</code> objects with stack and
+        cause chain. Pass <code>debug: true</code> to stream per-worker
+        diagnostics to stderr &mdash; zero cost when off.
       </p>
-      <a href="/guides/permissions/">Permissions</a>
+      <a href="/guides/creating-pools/">Creating pools</a>
     </article>
     <article class="kh-card">
       <h3>Scheduling control</h3>
@@ -348,6 +359,57 @@ deno add --npm knitting`;
   </div>
 </section>
 
+<section class="kh-shell" aria-labelledby="kh-safety-title">
+  <div class="kh-section-head">
+    <p class="kh-eyebrow">Four safety layers</p>
+    <h2 id="kh-safety-title">Isolation is a dial, not a cliff.</h2>
+    <p>
+      Trusted code can stay on fast threads. Sensitive code can move behind
+      stronger boundaries. The safety layers stack from cheap guardrails to an
+      OS sandbox, so each pool only pays for the boundary it needs.
+    </p>
+  </div>
+
+  <div class="kh-grid kh-grid--four">
+    <article class="kh-card">
+      <h3>1. In-process guards</h3>
+      <p>
+        Always on. <code>process.exit</code>, <code>process.kill</code>,
+        <code>process.abort</code>, and <code>Deno.exit</code> are neutralized
+        before any task module loads, so task code can't take the host down.
+      </p>
+      <a href="/extras/architecture/#safety-layers">Architecture</a>
+    </article>
+    <article class="kh-card">
+      <h3>2. Bootstrap hook</h3>
+      <p>
+        <code>worker.bootstrap</code> runs privileged setup once per worker,
+        before task imports &mdash; strip env vars, freeze globals, or install
+        your own guards.
+      </p>
+      <a href="/guides/creating-pools/">Creating pools</a>
+    </article>
+    <article class="kh-card">
+      <h3>3. Runtime permissions</h3>
+      <p>
+        Strict by default and translated into each runtime's native
+        enforcement, so the boundary is the runtime's &mdash; not a library
+        check task code could bypass.
+      </p>
+      <a href="/guides/permissions/">Permissions</a>
+    </article>
+    <article class="kh-card">
+      <h3>4. Process + sandbox</h3>
+      <p>
+        The OS-enforced boundary: process workers behind <code>bwrap</code>,
+        Docker, or <code>systemd-run</code>, with <code>importTask</code>
+        keeping the code off the host entirely.
+      </p>
+      <a href="/guides/process-workers/">Process workers</a>
+    </article>
+  </div>
+</section>
+
 <section class="kh-shell kh-fit" aria-labelledby="kh-fit-title">
   <div class="kh-section-head kh-section-head--compact">
     <p class="kh-eyebrow">Where it helps</p>
@@ -359,7 +421,7 @@ deno add --npm knitting`;
       <h3>Good fits</h3>
       <ul class="kh-list">
         <li>CPU-heavy or bursty work: parsing, validation, crypto, compression, SSR.</li>
-        <li>Lots of small-to-medium calls where worker overhead would normally erase the win.</li>
+        <li>Small-to-medium calls where normal worker overhead would erase the win.</li>
         <li>Routes that need the main thread to stay responsive while expensive work runs elsewhere.</li>
         <li>Workloads that benefit from explicit batching, balancing, timeouts, and abort-aware tasks.</li>
       </ul>
@@ -450,9 +512,9 @@ deno add --npm knitting`;
   </div>
 
   <div class="kh-grid kh-grid--three">
-    <a class="kh-link-card" href="/start/welcome/">
-      <span>Start here</span>
-      <strong>Welcome</strong>
+    <a class="kh-link-card" href="/extras/why/">
+      <span>The argument</span>
+      <strong>Why Knitting</strong>
     </a>
     <a class="kh-link-card" href="/guides/creating-pools/">
       <span>Pool options</span>
