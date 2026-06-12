@@ -20,17 +20,52 @@ head:
       content: "index,follow,max-image-preview:large"
 hero:
   title: Knitting
-  tagline: Keep your app whole. Move the hot functions to worker lanes you control, then call them like normal async functions in Node.js, Deno, and Bun.
+  tagline: 'One hot function is eating your event loop. Export it, hand it to a pool, and <code>await pool.call.fn()</code> — it now runs on a <strong>worker thread</strong> or a <strong>sandboxed process</strong>, not your main thread. No <code>postMessage</code> plumbing, no microservice.'
   image:
     html: |
-      <img class="kh-hero-logo" src="/logo.webp" alt="" width="640" height="640" loading="eager" decoding="async" />
+      <div class="kh-hero-stage" aria-hidden="true">
+        <img class="kh-hero-logo" src="/logo.webp" alt="" width="640" height="640" loading="eager" decoding="async" />
+        <div class="kh-flow">
+          <div class="kh-flow-card">
+            <div class="kh-flow-head">
+              <span class="kh-flow-dot kh-flow-dot--ok"></span>
+              <strong>main thread</strong>
+              <em>stays responsive</em>
+            </div>
+            <div class="kh-flow-line">serve /upload</div>
+            <div class="kh-flow-line kh-flow-line--moved"><s>hash(file) · 240 ms</s><span>→ pool</span></div>
+            <div class="kh-flow-line">respond 200 · 2 ms</div>
+          </div>
+          <div class="kh-flow-hop">
+            <span class="kh-flow-pipe"><i></i></span>
+            <div class="kh-flow-call">
+              <code>await pool.call.hash(file)</code>
+              <span>shared memory · no postMessage · no HTTP</span>
+            </div>
+            <span class="kh-flow-pipe kh-flow-pipe--return"><i></i></span>
+          </div>
+          <div class="kh-flow-card">
+            <div class="kh-flow-head">
+              <span class="kh-flow-dot"></span>
+              <strong>worker pool</strong>
+              <em>threads or sandboxed processes</em>
+            </div>
+            <div class="kh-flow-worker"><span>thread 1</span><span class="kh-flow-bar"><i style="width:76%"></i></span><code>hash()</code></div>
+            <div class="kh-flow-worker"><span>thread 2</span><span class="kh-flow-bar"><i style="width:48%"></i></span><code>parse()</code></div>
+            <div class="kh-flow-worker"><span>process</span><span class="kh-flow-bar"><i style="width:62%"></i></span><code>plugin() · bwrap</code></div>
+          </div>
+        </div>
+      </div>
   actions:
     - text: Quick Start
       link: /start/quick-start/
       variant: primary
+    - text: Benchmarks
+      link: /#benchmarks
+      variant: secondary
     - text: Why Knitting
       link: /extras/why/
-      variant: secondary
+      variant: minimal
 ---
 
 import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
@@ -242,11 +277,10 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">The missing middle</p>
     <h2 id="kh-why-title">Not every hot path deserves a hostname.</h2>
     <p>
-      Most apps do not get hot everywhere at once. A parser, validator, hash,
-      compression step, or SSR render starts taking too much room on the main
-      thread, and suddenly the fix looks bigger than the problem. Knitting is
-      the missing middle: keep the function in your app, move where it runs,
-      and avoid inventing a service boundary just to protect the event loop.
+      Apps rarely get hot everywhere at once. One parser, hash, or SSR render
+      starts crowding the main thread &mdash; and suddenly the fix looks bigger
+      than the problem. Knitting is the missing middle: keep the function in
+      your app, move where it runs.
     </p>
   </div>
 
@@ -265,9 +299,8 @@ deno add --npm knitting`;
       <span class="kh-token">02</span>
       <h3>Control the worker</h3>
       <p>
-        A pool is more than a thread count. It is where you choose the runtime,
-        permissions, bootstrap hook, process wrapper, payload limits,
-        timeouts, and scheduling.
+        A pool is a launch policy, not a thread count: runtime, permissions,
+        bootstrap, process wrapper, timeouts, scheduling.
       </p>
       <a href="/guides/creating-pools/">Creating pools</a>
     </article>
@@ -284,11 +317,10 @@ deno add --npm knitting`;
   </div>
 
   <p class="kh-note">
-    Knitting is not trying to replace distributed systems. It is for the
-    moment before that, when one hot function needs a better place to run.
-    Today it is task-call oriented; the same shared-memory foundation points
-    toward <a href="/extras/why/#where-its-going">future channels and
-    cross-language same-host communication</a>. The fuller argument lives in
+    Knitting is not a replacement for distributed systems &mdash; it is for
+    the moment before one, when a hot function just needs a better place to
+    run. The full argument, and the
+    <a href="/extras/why/#where-its-going">roadmap</a>, live in
     <a href="/extras/why/">Why Knitting</a>.
   </p>
 </section>
@@ -317,8 +349,8 @@ deno add --npm knitting`;
     <article class="kh-card">
       <h3>Timeouts and aborts</h3>
       <p>
-        Give a task a deadline, or make it abort-aware and cancel it
-        cooperatively from the host or inside the worker.
+        Give a task a deadline, or cancel it cooperatively from either side
+        of the boundary.
       </p>
       <a href="/guides/defining-tasks/">Defining tasks</a>
     </article>
@@ -334,17 +366,17 @@ deno add --npm knitting`;
     <article class="kh-card">
       <h3>Real errors, real diagnostics</h3>
       <p>
-        Thrown errors come back as <code>Error</code> objects with stack and
-        cause chain. Pass <code>debug: true</code> to stream per-worker
-        diagnostics to stderr &mdash; zero cost when off.
+        Errors return as real <code>Error</code>s with stack and cause chain;
+        <code>debug: true</code> streams per-worker diagnostics &mdash; zero
+        cost when off.
       </p>
       <a href="/guides/creating-pools/">Creating pools</a>
     </article>
     <article class="kh-card">
       <h3>Scheduling control</h3>
       <p>
-        Balance calls across lanes with pluggable strategies, and optionally
-        add the host itself as an inline lane for tiny compute.
+        Balance lanes with pluggable strategies, or add the host itself as an
+        inline lane for tiny compute.
       </p>
       <a href="/guides/inliner/">Inliner</a>
     </article>
@@ -364,9 +396,8 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">Four safety layers</p>
     <h2 id="kh-safety-title">Isolation is a dial, not a cliff.</h2>
     <p>
-      Trusted code can stay on fast threads. Sensitive code can move behind
-      stronger boundaries. The safety layers stack from cheap guardrails to an
-      OS sandbox, so each pool only pays for the boundary it needs.
+      Four layers stack from cheap guardrails to an OS sandbox. Trusted code
+      stays on fast threads; each pool pays only for the boundary it needs.
     </p>
   </div>
 
@@ -374,27 +405,25 @@ deno add --npm knitting`;
     <article class="kh-card">
       <h3>1. In-process guards</h3>
       <p>
-        Always on. <code>process.exit</code>, <code>process.kill</code>,
-        <code>process.abort</code>, and <code>Deno.exit</code> are neutralized
-        before any task module loads, so task code can't take the host down.
+        Termination APIs &mdash; <code>process.exit</code>,
+        <code>Deno.exit</code>, and friends &mdash; are neutralized before any
+        task code loads. Workers can't take the host down.
       </p>
       <a href="/extras/architecture/#safety-layers">Architecture</a>
     </article>
     <article class="kh-card">
       <h3>2. Bootstrap hook</h3>
       <p>
-        <code>worker.bootstrap</code> runs privileged setup once per worker,
-        before task imports &mdash; strip env vars, freeze globals, or install
-        your own guards.
+        <code>worker.bootstrap</code> runs privileged setup before task
+        imports: strip env vars, freeze globals, add your own guards.
       </p>
       <a href="/guides/creating-pools/">Creating pools</a>
     </article>
     <article class="kh-card">
       <h3>3. Runtime permissions</h3>
       <p>
-        Strict by default and translated into each runtime's native
-        enforcement, so the boundary is the runtime's &mdash; not a library
-        check task code could bypass.
+        Strict by default and enforced by the runtime itself &mdash; not a
+        library check task code could bypass.
       </p>
       <a href="/guides/permissions/">Permissions</a>
     </article>
@@ -429,10 +458,10 @@ deno add --npm knitting`;
     <div>
       <h3>Boundaries</h3>
       <ul class="kh-list">
-        <li>Built for same-host multicore &mdash; threads or processes &mdash; not a distributed scheduler. Pair it with a network layer to scale across machines.</li>
-        <li>It replaces <code>postMessage</code> for task calls, not for pub/sub or streaming &mdash; reach for <code>MessagePort</code> when you need those.</li>
-        <li>Tasks aren't preempted mid-run, but <code>abortSignal</code> cancels cooperatively and <code>worker.hardTimeoutMs</code> is a hard wall-clock timeout that stops runaway CPU.</li>
-        <li>Real isolation when you need it: strict permissions by default, plus process workers in a <code>bwrap</code> or container sandbox for an OS-enforced boundary &mdash; with <code>importTask</code> keeping untrusted code off the host entirely.</li>
+        <li>Same-host multicore, not a distributed scheduler &mdash; add a network layer to scale across machines.</li>
+        <li>It replaces <code>postMessage</code> for task calls, not for pub/sub or streaming &mdash; reach for <code>MessagePort</code> there.</li>
+        <li>Tasks aren't preempted mid-run: <code>abortSignal</code> cancels cooperatively, <code>worker.hardTimeoutMs</code> hard-stops runaway CPU.</li>
+        <li>For a harder boundary, run process workers in a <code>bwrap</code> or container sandbox, with <code>importTask</code> keeping untrusted code off the host.</li>
       </ul>
     </div>
   </div>
@@ -443,11 +472,29 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">Benchmarks, carefully</p>
     <h2 id="kh-bench-title">Close enough to be interesting. Honest enough to be useful.</h2>
     <p>
-      The updated Tokio comparison measures whole-batch echo latency across
-      <code>f64</code>, copied <code>Uint8Array</code>, and zero-copy handle
-      paths. Treat the numbers as one-machine guidance: the shape matters more
-      than any single run.
+      The Tokio comparison reports <code>n=100</code> whole-batch echo latency
+      across <code>f64</code>, copied bytes, and zero-copy handles. The cards
+      divide those batch totals by 100 to show nanoseconds per roundtrip; the
+      table keeps the original batch totals beside the divided values.
     </p>
+  </div>
+
+  <div class="kh-bench-kpis" aria-label="Benchmark highlights">
+    <div class="kh-bench-kpi">
+      <span>Scheduling roundtrip</span>
+      <strong>538 ns</strong>
+      <small>Node, 53.8 us batch / 100</small>
+    </div>
+    <div class="kh-bench-kpi">
+      <span>Copied 1 MiB roundtrip</span>
+      <strong>313,000 ns</strong>
+      <small>Bun, 31.3 ms batch / 100</small>
+    </div>
+    <div class="kh-bench-kpi">
+      <span>Zero-copy roundtrip</span>
+      <strong>816 ns</strong>
+      <small>Node, 81.6 us batch / 100</small>
+    </div>
   </div>
 
   <div class="kh-bench-table-wrap">
@@ -463,28 +510,50 @@ deno add --npm knitting`;
         <tr>
           <th scope="row">Scheduling only</th>
           <td data-label="What the run suggests">Knitting is in the same order of magnitude as Tokio for tiny tasks.</td>
-          <td data-label="Representative numbers"><code>n=100</code>: Tokio <code>51.2 us</code>, Node <code>53.7 us</code>, Deno <code>69.3 us</code>, Bun <code>78.1 us</code>.</td>
+          <td data-label="Representative numbers">
+            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
+              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
+              <span><b>Tokio</b><code>52.8 us</code><em>528 ns roundtrip</em></span>
+              <span><b>Node</b><code>53.8 us</code><em>538 ns roundtrip</em></span>
+              <span><b>Deno</b><code>57.1 us</code><em>571 ns roundtrip</em></span>
+              <span><b>Bun</b><code>69.6 us</code><em>696 ns roundtrip</em></span>
+            </div>
+          </td>
         </tr>
         <tr>
           <th scope="row">1 MiB copied bytes</th>
           <td data-label="What the run suggests">Shared-buffer copies can amortize well under batch pressure.</td>
-          <td data-label="Representative numbers"><code>n=100</code>: Bun <code>31.2 ms</code> vs Tokio <code>39.4 ms</code> for the copied <code>Uint8Array</code> path.</td>
+          <td data-label="Representative numbers">
+            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
+              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
+              <span><b>Bun</b><code>31.3 ms</code><em>313,000 ns roundtrip</em></span>
+              <span><b>Tokio</b><code>37.7 ms</code><em>377,000 ns roundtrip</em></span>
+            </div>
+          </td>
         </tr>
         <tr>
           <th scope="row">1 MiB zero-copy handles</th>
           <td data-label="What the run suggests">Tokio's <code>Arc</code> handoff is still the cheaper pure handle transfer.</td>
-          <td data-label="Representative numbers"><code>n=100</code>: Tokio <code>52.2 us</code>; Knitting ranges from Node <code>156 us</code> to Bun <code>247 us</code>.</td>
+          <td data-label="Representative numbers">
+            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
+              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
+              <span><b>Tokio</b><code>68.9 us</code><em>689 ns roundtrip</em></span>
+              <span><b>Node</b><code>81.6 us</code><em>816 ns roundtrip</em></span>
+              <span><b>Bun</b><code>130 us</code><em>1,300 ns roundtrip</em></span>
+            </div>
+          </td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <p class="kh-note">
+  <div class="kh-note">
     Source:
     <a href="https://github.com/mimiMonads/knitting-vs-tokio-bench">mimiMonads/knitting-vs-tokio-bench</a>.
-    The benchmark aligns dispatch shape and thread count, then leaves memory
-    management in-bounds because that trade-off is part of the system design.
-  </p>
+    The benchmark aligns dispatch shape and thread count; per-roundtrip values
+    here are the published <code>n=100</code> batch averages divided by 100
+    and shown in nanoseconds.
+  </div>
 </section>
 
 <section hidden aria-label="Notes for AI agents">
@@ -651,6 +720,21 @@ html:has([data-knit-home-marker]) .hero .tagline {
   color: color-mix(in srgb, var(--kh-muted) 90%, var(--kh-accent) 10%);
   font-size: 1.2rem;
   line-height: 1.7;
+}
+
+html:has([data-knit-home-marker]) .hero .tagline strong {
+  color: var(--kh-text);
+  font-weight: 660;
+}
+
+html:has([data-knit-home-marker]) .hero .tagline code {
+  padding: 0.1em 0.42em;
+  border: 1px solid color-mix(in srgb, var(--kh-accent) 42%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--kh-accent) 10%, transparent);
+  color: var(--kh-accent);
+  font-size: 0.88em;
+  white-space: nowrap;
 }
 
 html:has([data-knit-home-marker]) .hero .actions {
@@ -1284,6 +1368,1149 @@ html:has([data-knit-home-marker]) .kh-link-card strong {
     min-height: 2.1rem;
     padding: 0 0.45rem;
     font-size: 0.76rem;
+  }
+}
+
+/* Startup homepage experiment */
+@keyframes kh-packet-down {
+  0% {
+    top: -0.3rem;
+    opacity: 0;
+  }
+
+  12%,
+  88% {
+    opacity: 1;
+  }
+
+  100% {
+    top: calc(100% - 0.15rem);
+    opacity: 0;
+  }
+}
+
+@keyframes kh-packet-up {
+  0% {
+    bottom: -0.3rem;
+    opacity: 0;
+  }
+
+  12%,
+  88% {
+    opacity: 1;
+  }
+
+  100% {
+    bottom: calc(100% - 0.15rem);
+    opacity: 0;
+  }
+}
+
+html:has([data-knit-home-marker]) {
+  --kh-border: color-mix(in srgb, #7dd3fc 20%, #243047);
+  --kh-border-strong: color-mix(in srgb, #f0abfc 26%, #34415f);
+  --kh-panel: color-mix(in srgb, #0c1222 88%, #22d3ee 12%);
+  --kh-panel-soft: color-mix(in srgb, #0f172a 84%, #fb7185 8%);
+  --kh-text: #f8fafc;
+  --kh-muted: #cbd5e1;
+  --kh-accent: #22d3ee;
+  --kh-accent-2: #a78bfa;
+  --kh-accent-3: #fb7185;
+  --kh-accent-4: #facc15;
+  --kh-accent-5: #34d399;
+  background: #070a16;
+}
+
+html:has([data-knit-home-marker]) body {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #0f172a 92%, #22d3ee 8%), #070a16 34rem),
+    repeating-linear-gradient(90deg, color-mix(in srgb, #ffffff 5%, transparent) 0 1px, transparent 1px 4rem),
+    #070a16;
+}
+
+html:has([data-knit-home-marker]) .content-panel {
+  background: transparent;
+}
+
+html:has([data-knit-home-marker]) .hero {
+  isolation: isolate;
+  min-height: 36.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 35rem) minmax(22rem, 24.75rem);
+  justify-content: center;
+  align-items: center;
+  gap: clamp(2rem, 4vw, 4rem);
+  padding: 4rem 1.25rem 4.35rem;
+  border-bottom: 0;
+  background:
+    linear-gradient(118deg, color-mix(in srgb, #050816 92%, #22d3ee 8%) 0%, color-mix(in srgb, #10172b 82%, #a78bfa 18%) 52%, color-mix(in srgb, #111827 78%, #fb7185 22%) 100%),
+    repeating-linear-gradient(135deg, color-mix(in srgb, #ffffff 7%, transparent) 0 1px, transparent 1px 2.4rem);
+}
+
+html:has([data-knit-home-marker]) .hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--kh-accent) 14%, transparent) 46%, transparent 72%),
+    repeating-linear-gradient(0deg, color-mix(in srgb, #ffffff 8%, transparent) 0 1px, transparent 1px 5.4rem);
+  opacity: 0.58;
+}
+
+html:has([data-knit-home-marker]) .hero::after {
+  height: 0.42rem;
+  background: linear-gradient(90deg, var(--kh-accent), var(--kh-accent-2), var(--kh-accent-3), var(--kh-accent-4), var(--kh-accent-5));
+  opacity: 1;
+}
+
+html:has([data-knit-home-marker]) .hero > .stack {
+  order: 1;
+  width: 100%;
+  max-width: 35rem;
+  margin: 0;
+  padding-right: 0;
+  gap: 1.8rem;
+}
+
+html:has([data-knit-home-marker]) .hero .copy {
+  gap: 1rem;
+}
+
+html:has([data-knit-home-marker]) .hero .copy::before {
+  content: "Not every hot path deserves a hostname";
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.42rem 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--kh-accent) 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #030712 46%, transparent);
+  color: color-mix(in srgb, var(--kh-accent) 82%, white 18%);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.25;
+  box-shadow: 0 0 32px color-mix(in srgb, var(--kh-accent) 18%, transparent);
+}
+
+html:has([data-knit-home-marker]) .hero .copy > * {
+  max-width: 35rem;
+}
+
+html:has([data-knit-home-marker]) .hero h1 {
+  max-width: 8ch;
+  color: transparent;
+  background: linear-gradient(92deg, #ffffff 0%, #67e8f9 42%, #f0abfc 72%, #fde047 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  font-size: 5.8rem;
+  line-height: 0.9;
+  text-wrap: balance;
+  text-shadow: 0 22px 70px color-mix(in srgb, var(--kh-accent-2) 36%, transparent);
+}
+
+html:has([data-knit-home-marker]) .hero .tagline {
+  max-width: 35rem;
+  color: #e2e8f0;
+  font-size: 1.26rem;
+  line-height: 1.66;
+}
+
+html:has([data-knit-home-marker]) .hero .actions {
+  gap: 0.75rem;
+}
+
+html:has([data-knit-home-marker]) .hero .actions .sl-link-button {
+  min-height: 2.9rem;
+  padding-inline: 1rem;
+  border-radius: 8px;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+html:has([data-knit-home-marker]) .hero .actions .sl-link-button:hover {
+  transform: translateY(-3px);
+}
+
+html:has([data-knit-home-marker]) .hero .actions .sl-link-button.primary {
+  background: linear-gradient(135deg, var(--kh-accent), var(--kh-accent-5));
+  border-color: color-mix(in srgb, var(--kh-accent) 70%, white 30%);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--kh-accent) 25%, transparent);
+  color: #03141a;
+}
+
+html:has([data-knit-home-marker]) .hero .actions .sl-link-button.secondary {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  border-color: color-mix(in srgb, var(--kh-accent-2) 62%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--kh-accent-2) 16%, transparent);
+}
+
+html:has([data-knit-home-marker]) .hero .actions .sl-link-button.minimal {
+  color: color-mix(in srgb, #ffffff 86%, var(--kh-accent-4) 14%);
+}
+
+html:has([data-knit-home-marker]) .kh-hero-stage {
+  position: relative;
+  width: 100%;
+  min-height: 24rem;
+  display: grid;
+  align-items: center;
+  pointer-events: none;
+}
+
+html:has([data-knit-home-marker]) .hero > .hero-html {
+  position: relative;
+  inset: auto;
+  order: 2;
+  width: 100%;
+  height: auto;
+  min-height: 24rem;
+  margin: 0;
+  pointer-events: none;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-logo {
+  top: 50%;
+  right: 50%;
+  width: 28rem;
+  height: 28rem;
+  transform: translate(50%, -50%);
+  opacity: 0.08;
+}
+
+html:has([data-knit-home-marker]) .kh-flow {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: grid;
+  transform: none;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, #ffffff 18%, var(--kh-border));
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 12%, transparent), transparent),
+    color-mix(in srgb, #08111f 78%, transparent);
+  box-shadow:
+    0 22px 48px color-mix(in srgb, #000000 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 14%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-head strong {
+  color: var(--kh-text);
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-head em {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--kh-muted) 80%, white 20%);
+  font-size: 0.72rem;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-dot {
+  flex: 0 0 auto;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--kh-accent-2);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--kh-accent-2) 60%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-dot--ok {
+  background: var(--kh-accent-5);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--kh-accent-5) 62%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.34rem 0.55rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, #ffffff 7%, transparent);
+  color: color-mix(in srgb, var(--kh-muted) 88%, white 12%);
+  font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-line--moved s {
+  color: color-mix(in srgb, var(--kh-muted) 64%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--kh-accent-3) 75%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-line--moved span {
+  flex: 0 0 auto;
+  color: var(--kh-accent);
+  font-weight: 700;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-hop {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 1.3rem;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe {
+  position: relative;
+  width: 2px;
+  height: 3.6rem;
+  background: color-mix(in srgb, var(--kh-accent) 45%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe::after {
+  content: "";
+  position: absolute;
+  bottom: -0.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 0.3rem solid transparent;
+  border-top-color: var(--kh-accent);
+  border-bottom: 0;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe i {
+  position: absolute;
+  top: -0.3rem;
+  left: 50%;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: var(--kh-accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--kh-accent) 70%, transparent);
+  animation: kh-packet-down 1.8s ease-in-out infinite;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe--return {
+  background: color-mix(in srgb, var(--kh-accent-5) 45%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe--return::after {
+  top: -0.15rem;
+  bottom: auto;
+  border: 0.3rem solid transparent;
+  border-top: 0;
+  border-bottom-color: var(--kh-accent-5);
+}
+
+html:has([data-knit-home-marker]) .kh-flow-pipe--return i {
+  top: auto;
+  bottom: -0.3rem;
+  background: var(--kh-accent-5);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--kh-accent-5) 70%, transparent);
+  animation: kh-packet-up 1.8s ease-in-out infinite;
+  animation-delay: -0.9s;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-call {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  text-align: center;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-call code {
+  padding: 0.32rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--kh-accent) 42%, var(--kh-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, #030712 62%, transparent);
+  color: var(--kh-text);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-call > span {
+  color: color-mix(in srgb, var(--kh-muted) 82%, white 18%);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-worker {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-worker > span:first-child {
+  color: color-mix(in srgb, var(--kh-muted) 80%, white 20%);
+  white-space: nowrap;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-worker > code {
+  color: var(--kh-text);
+  white-space: nowrap;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-bar {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffffff 9%, transparent);
+  overflow: hidden;
+}
+
+html:has([data-knit-home-marker]) .kh-flow-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--kh-accent), var(--kh-accent-2));
+}
+
+html:has([data-knit-home-marker]) .kh-flow-worker:last-child .kh-flow-bar i {
+  background: linear-gradient(90deg, var(--kh-accent-3), var(--kh-accent-4));
+}
+
+html:has([data-knit-home-marker]) .kh-shell,
+html:has([data-knit-home-marker]) .kh-strip {
+  width: min(100% - 2rem, 76rem);
+}
+
+html:has([data-knit-home-marker]) .kh-strip {
+  position: relative;
+  z-index: 2;
+  margin-top: -2.1rem;
+  border-color: color-mix(in srgb, var(--kh-accent) 32%, var(--kh-border));
+  background: color-mix(in srgb, var(--kh-border) 80%, #ffffff 20%);
+  box-shadow:
+    0 22px 60px color-mix(in srgb, #000000 32%, transparent),
+    0 0 0 1px color-mix(in srgb, #ffffff 7%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-stat {
+  position: relative;
+  min-height: 8.2rem;
+  align-content: end;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, #ffffff 10%, transparent), transparent 48%),
+    color-mix(in srgb, #0b1020 88%, var(--kh-accent) 12%);
+}
+
+html:has([data-knit-home-marker]) .kh-stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.28rem;
+  background: var(--kh-accent);
+}
+
+html:has([data-knit-home-marker]) .kh-stat:nth-child(2)::before {
+  background: var(--kh-accent-2);
+}
+
+html:has([data-knit-home-marker]) .kh-stat:nth-child(3)::before {
+  background: var(--kh-accent-3);
+}
+
+html:has([data-knit-home-marker]) .kh-stat:nth-child(4)::before {
+  background: var(--kh-accent-4);
+}
+
+html:has([data-knit-home-marker]) .kh-stat strong {
+  font-size: 2.3rem;
+  line-height: 0.95;
+}
+
+html:has([data-knit-home-marker]) .kh-stat span {
+  color: color-mix(in srgb, var(--kh-muted) 88%, white 12%);
+}
+
+html:has([data-knit-home-marker]) .kh-shell {
+  padding-block: 5.2rem;
+}
+
+html:has([data-knit-home-marker]) .kh-start {
+  grid-template-columns: minmax(17rem, 0.78fr) minmax(0, 1.22fr);
+  gap: 2.4rem;
+  align-items: center;
+}
+
+html:has([data-knit-home-marker]) .kh-section-head {
+  max-width: 55rem;
+  margin-bottom: 1.75rem;
+}
+
+html:has([data-knit-home-marker]) .kh-eyebrow {
+  width: fit-content;
+  padding: 0.2rem 0.48rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--kh-accent) 12%, transparent);
+  color: color-mix(in srgb, var(--kh-accent) 86%, white 14%);
+}
+
+html:has([data-knit-home-marker]) .kh-shell h2 {
+  max-width: 15ch;
+  font-size: 3.25rem;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+html:has([data-knit-home-marker]) .kh-section-head > p:not(.kh-eyebrow),
+html:has([data-knit-home-marker]) .kh-copy > p:not(.kh-eyebrow) {
+  max-width: 46rem;
+  font-size: 1.06rem;
+}
+
+html:has([data-knit-home-marker]) .kh-grid {
+  gap: 1.1rem;
+}
+
+html:has([data-knit-home-marker]) .kh-card,
+html:has([data-knit-home-marker]) .kh-link-card,
+html:has([data-knit-home-marker]) .kh-fit-grid,
+html:has([data-knit-home-marker]) .kh-bench-table-wrap {
+  border-color: color-mix(in srgb, var(--kh-border) 78%, #ffffff 22%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 8%, transparent), transparent 42%),
+    color-mix(in srgb, #0d1324 88%, var(--kh-accent-2) 12%);
+  box-shadow: 0 20px 44px color-mix(in srgb, #000000 22%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-card,
+html:has([data-knit-home-marker]) .kh-link-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+html:has([data-knit-home-marker]) .kh-card::before,
+html:has([data-knit-home-marker]) .kh-link-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.26rem;
+  background: var(--kh-card-accent, var(--kh-accent));
+}
+
+html:has([data-knit-home-marker]) .kh-card:nth-child(2n),
+html:has([data-knit-home-marker]) .kh-link-card:nth-child(2n) {
+  --kh-card-accent: var(--kh-accent-2);
+}
+
+html:has([data-knit-home-marker]) .kh-card:nth-child(3n),
+html:has([data-knit-home-marker]) .kh-link-card:nth-child(3n) {
+  --kh-card-accent: var(--kh-accent-3);
+}
+
+html:has([data-knit-home-marker]) .kh-card:nth-child(4n),
+html:has([data-knit-home-marker]) .kh-link-card:nth-child(4n) {
+  --kh-card-accent: var(--kh-accent-4);
+}
+
+html:has([data-knit-home-marker]) .kh-card:hover,
+html:has([data-knit-home-marker]) .kh-link-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--kh-card-accent, var(--kh-accent)) 58%, #ffffff 12%);
+  box-shadow:
+    0 28px 64px color-mix(in srgb, #000000 30%, transparent),
+    0 0 36px color-mix(in srgb, var(--kh-card-accent, var(--kh-accent)) 18%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-card {
+  min-height: 13.2rem;
+  align-content: start;
+  padding: 1.15rem;
+}
+
+html:has([data-knit-home-marker]) .kh-card h3,
+html:has([data-knit-home-marker]) .kh-link-card strong {
+  color: var(--kh-text);
+}
+
+html:has([data-knit-home-marker]) .kh-token {
+  background: color-mix(in srgb, var(--kh-card-accent, var(--kh-accent)) 13%, transparent);
+  border-color: color-mix(in srgb, var(--kh-card-accent, var(--kh-accent)) 62%, transparent);
+  color: color-mix(in srgb, var(--kh-card-accent, var(--kh-accent)) 88%, white 12%);
+}
+
+html:has([data-knit-home-marker]) .kh-card a,
+html:has([data-knit-home-marker]) .kh-note a {
+  color: color-mix(in srgb, var(--kh-accent) 74%, white 26%);
+  font-weight: 650;
+}
+
+html:has([data-knit-home-marker]) .kh-code--feature {
+  border-color: color-mix(in srgb, var(--kh-accent) 44%, var(--kh-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--kh-accent) 22%, transparent), transparent 36%),
+    linear-gradient(315deg, color-mix(in srgb, var(--kh-accent-3) 20%, transparent), transparent 38%),
+    #070b15;
+  box-shadow:
+    0 26px 70px color-mix(in srgb, #000000 36%, transparent),
+    0 0 52px color-mix(in srgb, var(--kh-accent-2) 14%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-code-top {
+  background: linear-gradient(90deg, color-mix(in srgb, #0f172a 78%, var(--kh-accent) 22%), color-mix(in srgb, #111827 74%, var(--kh-accent-3) 26%));
+}
+
+html:has([data-knit-home-marker]) .kh-fit {
+  width: 100%;
+  max-width: none;
+  border-block-color: color-mix(in srgb, var(--kh-accent-2) 28%, var(--kh-border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--kh-accent) 9%, transparent), transparent 36%, color-mix(in srgb, var(--kh-accent-3) 8%, transparent)),
+    #090d18;
+}
+
+html:has([data-knit-home-marker]) .kh-fit > * {
+  width: min(100% - 2rem, 76rem);
+  margin-inline: auto;
+}
+
+html:has([data-knit-home-marker]) .kh-fit .kh-section-head {
+  margin-inline: auto;
+}
+
+html:has([data-knit-home-marker]) .kh-fit-grid {
+  overflow: hidden;
+}
+
+html:has([data-knit-home-marker]) .kh-fit-grid > div {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 8%, transparent), transparent 44%),
+    color-mix(in srgb, #0f172a 88%, var(--kh-accent-5) 8%);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table thead th {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--kh-accent) 18%, #101827), color-mix(in srgb, var(--kh-accent-2) 18%, #101827));
+}
+
+html:has([data-knit-home-marker]) .kh-links {
+  padding-bottom: 5rem;
+}
+
+@media (max-width: 84rem) {
+  html:has([data-knit-home-marker]) .hero {
+    display: flex;
+  }
+
+  html:has([data-knit-home-marker]) .hero > .hero-html {
+    position: absolute;
+    inset: 0;
+    order: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+  }
+
+  html:has([data-knit-home-marker]) .hero > .stack {
+    width: min(100%, 76rem);
+    max-width: none;
+    margin: 0 auto;
+    padding-right: 0;
+  }
+
+  html:has([data-knit-home-marker]) .kh-flow {
+    display: none;
+  }
+
+  html:has([data-knit-home-marker]) .kh-hero-stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-height: 0;
+    display: block;
+  }
+
+  html:has([data-knit-home-marker]) .kh-hero-logo {
+    top: auto;
+    right: -5rem;
+    bottom: -5rem;
+    width: 24rem;
+    height: 24rem;
+    transform: none;
+    opacity: 0.07;
+  }
+
+  html:has([data-knit-home-marker]) .hero .copy > *,
+  html:has([data-knit-home-marker]) .hero .tagline {
+    max-width: 45rem;
+  }
+}
+
+@media (max-width: 70rem) {
+  html:has([data-knit-home-marker]) .hero {
+    min-height: 34rem;
+  }
+
+  html:has([data-knit-home-marker]) .hero > .stack {
+    padding-right: 0;
+  }
+
+  html:has([data-knit-home-marker]) .hero h1 {
+    font-size: 4.45rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-start,
+  html:has([data-knit-home-marker]) .kh-grid--three,
+  html:has([data-knit-home-marker]) .kh-grid--four {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  html:has([data-knit-home-marker]) .kh-start .kh-copy {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 61.99rem) {
+  html:has([data-knit-home-marker]) .hero > .stack {
+    padding-right: 0;
+  }
+
+  html:has([data-knit-home-marker]) .kh-flow {
+    display: none;
+  }
+
+  html:has([data-knit-home-marker]) .kh-hero-logo {
+    top: auto;
+    right: -5rem;
+    bottom: -5rem;
+    width: 24rem;
+    height: 24rem;
+    transform: none;
+    opacity: 0.07;
+  }
+}
+
+@media (max-width: 52rem) {
+  html:has([data-knit-home-marker]) .hero {
+    min-height: 32rem;
+    padding: 3.5rem 1rem 4.25rem;
+  }
+
+  html:has([data-knit-home-marker]) .hero h1 {
+    font-size: 3.35rem;
+  }
+
+  html:has([data-knit-home-marker]) .hero .tagline {
+    font-size: 1.08rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-strip {
+    margin-top: -1.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat {
+    min-height: 6.8rem;
+    padding: 0.9rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat strong {
+    font-size: 2rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-shell {
+    padding-block: 3.6rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-shell h2 {
+    font-size: 2.35rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-start,
+  html:has([data-knit-home-marker]) .kh-grid--three,
+  html:has([data-knit-home-marker]) .kh-grid--four,
+  html:has([data-knit-home-marker]) .kh-fit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 36rem) and (max-width: 61.99rem) {
+  html:has([data-knit-home-marker]) .hero .actions {
+    width: auto;
+    display: flex;
+  }
+
+  html:has([data-knit-home-marker]) .hero .actions .sl-link-button {
+    width: auto;
+  }
+}
+
+@media (max-width: 34rem) {
+  html:has([data-knit-home-marker]) .hero {
+    min-height: 30rem;
+  }
+
+  html:has([data-knit-home-marker]) .hero h1 {
+    font-size: 2.72rem;
+  }
+
+  html:has([data-knit-home-marker]) .hero .copy::before {
+    font-size: 0.76rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-shell h2 {
+    max-width: none;
+    font-size: 2.05rem;
+    line-height: 1.04;
+  }
+
+  html:has([data-knit-home-marker]) .hero .actions {
+    width: min(100%, 12.5rem);
+  }
+
+  html:has([data-knit-home-marker]) .hero .actions .sl-link-button.minimal {
+    justify-content: center;
+    width: 100%;
+    border: 1px solid color-mix(in srgb, var(--kh-accent-4) 44%, var(--kh-border));
+    background: color-mix(in srgb, #ffffff 8%, transparent);
+  }
+}
+
+@media (max-width: 23rem) {
+  html:has([data-knit-home-marker]) .kh-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat {
+    min-height: 6.25rem;
+    padding: 0.72rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat span {
+    font-size: 0.84rem;
+    line-height: 1.32;
+  }
+}
+
+html:has([data-knit-home-marker]) .kh-stat {
+  display: grid;
+  grid-template-rows: 3rem auto;
+  align-content: start;
+  align-items: start;
+  gap: 0.45rem;
+  padding: 1.25rem 1rem 1rem;
+}
+
+html:has([data-knit-home-marker]) .kh-stat strong {
+  min-height: 3rem;
+  display: flex;
+  align-items: flex-end;
+  color: var(--kh-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+html:has([data-knit-home-marker]) .kh-stat span {
+  max-width: 14rem;
+}
+
+html:has([data-knit-home-marker]),
+html:has([data-knit-home-marker]) body {
+  overflow-x: clip;
+}
+
+html:has([data-knit-home-marker]) .kh-bench {
+  position: relative;
+  padding-top: 5.5rem;
+  padding-bottom: 5rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench::before {
+  content: "";
+  position: absolute;
+  inset: 2rem 50% auto;
+  width: 100vw;
+  height: calc(100% - 2rem);
+  transform: translateX(-50%);
+  z-index: -1;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--kh-accent) 8%, transparent), transparent 34%, color-mix(in srgb, var(--kh-accent-3) 7%, transparent)),
+    color-mix(in srgb, #070a16 94%, var(--kh-accent-2) 6%);
+}
+
+html:has([data-knit-home-marker]) .kh-bench .kh-section-head {
+  margin-bottom: 1.3rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench .kh-section-head h2 {
+  max-width: 19ch;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--kh-border) 72%, #ffffff 18%);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, #ffffff 10%, transparent), transparent 48%),
+    color-mix(in srgb, #0d1324 86%, var(--kh-accent) 10%);
+  box-shadow: 0 18px 42px color-mix(in srgb, #000000 24%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.24rem;
+  background: var(--kh-accent);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi:nth-child(2)::before {
+  background: var(--kh-accent-3);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi:nth-child(3)::before {
+  background: var(--kh-accent-4);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi span {
+  color: color-mix(in srgb, var(--kh-muted) 80%, white 20%);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi strong {
+  color: var(--kh-text);
+  font-size: 2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-kpi small {
+  color: var(--kh-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table-wrap {
+  padding: 0.35rem;
+  overflow-x: auto;
+  border-color: color-mix(in srgb, var(--kh-accent) 28%, var(--kh-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--kh-accent) 12%, transparent), transparent 42%),
+    linear-gradient(315deg, color-mix(in srgb, var(--kh-accent-3) 10%, transparent), transparent 44%),
+    color-mix(in srgb, #0d1324 90%, var(--kh-accent-2) 10%);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table {
+  min-width: 56rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table th,
+html:has([data-knit-home-marker]) .kh-bench-table td {
+  padding: 1.05rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--kh-border) 72%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table thead th {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--kh-accent) 18%, #101827), color-mix(in srgb, var(--kh-accent-2) 18%, #101827));
+  color: var(--kh-text);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table thead th:first-child {
+  border-top-left-radius: 6px;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table thead th:last-child {
+  border-top-right-radius: 6px;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table tbody tr {
+  transition: background 160ms ease;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table tbody tr:hover {
+  background: color-mix(in srgb, var(--kh-accent) 8%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table tbody th {
+  color: var(--kh-text);
+  font-size: 0.98rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-table code {
+  padding: 0.12rem 0.32rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--kh-accent-2) 18%, #ffffff 6%);
+  color: color-mix(in srgb, var(--kh-text) 88%, var(--kh-accent) 12%);
+  font-size: 0.86em;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values {
+  display: grid;
+  gap: 0.42rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values > span {
+  min-width: 0;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values > span:not(.kh-bench-values-note) {
+  display: grid;
+  grid-template-columns: 4.1rem max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.42rem;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values-note {
+  color: color-mix(in srgb, var(--kh-muted) 84%, white 16%);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values b {
+  color: var(--kh-text);
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+html:has([data-knit-home-marker]) .kh-bench-values em {
+  color: color-mix(in srgb, var(--kh-muted) 88%, var(--kh-accent) 12%);
+  font-size: 0.84rem;
+  font-style: normal;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+html:has([data-knit-home-marker]) .kh-bench .kh-note {
+  max-width: 58rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--kh-border) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #ffffff 5%, transparent);
+}
+
+@media (max-width: 52rem) {
+  html:has([data-knit-home-marker]) .kh-stat {
+    grid-template-rows: 2.45rem auto;
+    gap: 0.35rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat strong {
+    min-height: 2.45rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench {
+    padding-top: 3.8rem;
+    padding-bottom: 3.6rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-kpi {
+    padding: 0.95rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-kpi strong {
+    font-size: 1.75rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table-wrap {
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table {
+    min-width: 0;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table tbody {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table tbody tr {
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, var(--kh-border) 76%, #ffffff 14%);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, #ffffff 8%, transparent), transparent 42%),
+      color-mix(in srgb, #0d1324 88%, var(--kh-accent-2) 10%);
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table tbody th {
+    padding-bottom: 0.25rem;
+    font-size: 1rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table tbody td {
+    margin-top: 0.7rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-table tbody td::before {
+    margin-bottom: 0.35rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-values {
+    gap: 0.5rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-values > span:not(.kh-bench-values-note) {
+    grid-template-columns: 3.8rem max-content minmax(0, 1fr);
+    gap: 0.36rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench-values em {
+    font-size: 0.82rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-bench .kh-note {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has([data-knit-home-marker]) *,
+  html:has([data-knit-home-marker]) *::before,
+  html:has([data-knit-home-marker]) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }
 `}</style>
