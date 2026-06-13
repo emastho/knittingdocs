@@ -16,7 +16,7 @@ It lives on a subpath:
 import {
   getDefaultProcessSharedBufferPrimitives,
   ProcessSharedBuffer,
-} from "knitting/process-shared-buffer";
+} from "knitting/shared-memory";
 ```
 
 The `primitives` are the platform's shared-memory functions. Grab the defaults
@@ -32,7 +32,7 @@ import { createPool, isMain, task } from "knitting";
 import {
   getDefaultProcessSharedBufferPrimitives,
   ProcessSharedBuffer,
-} from "knitting/process-shared-buffer";
+} from "knitting/shared-memory";
 
 export const readFirstCell = task<ProcessSharedBuffer, number>({
   f: (buffer) => Atomics.load(buffer.view(Int32Array), 0),
