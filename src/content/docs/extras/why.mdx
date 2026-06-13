@@ -43,24 +43,24 @@ solution should be local too.
 When the main thread starts paying for those functions, JavaScript developers
 usually reach for one of three options.
 
-**Stay in-process.** It is simple, and for a while it works. But every
+**Do nothing.** It is simple, and for a while it works. But every
 millisecond a hot function spends on the main thread is a millisecond the server
 cannot spend on everything else. Cheap routes queue behind expensive ones.
 Scaling out dilutes the pain, but it does not remove the hot path from the
 event loop.
 
-**Hand-roll workers.** The shape is closer: move the work somewhere else on the
+**Workers.** The shape is closer: move the work somewhere else on the
 same machine. The rough part is everything around it. The runtime gives you
 `postMessage`; the rest is yours: request IDs, routing, errors, promises,
 lifecycle, payload choices. That plumbing is the original reason Knitting
 exists.
 
 **Make it a service.** Sometimes that is the right call. Separate ownership,
-separate deploy cadence, and separate failure domains are real reasons to cross
-the network. But for one hot function owned by the same team in the same repo,
-the bill is strange: a network hop, serialization, deployment, monitoring, and
-another surface to operate. The function did not ask for a hostname. It asked
-for somewhere else to run.
+deploy cadence, and failure domains are all real reasons to cross the network.
+But for one hot function, owned by the same team, in the same repo, the bill is
+strange: a network hop, serialization, deployment, monitoring, and one more
+thing to operate. The function did not ask for a hostname. It asked for
+somewhere else to run.
 
 ## The fourth shape
 
@@ -68,15 +68,27 @@ Knitting adds a smaller boundary:
 
 > Keep the code local. Move the execution boundary.
 
-The function stays in your repo, in your language, in your types, one `import`
-away from its caller. What changes is *where it runs* and *what it is allowed to
-touch*. Export it, hand it to a pool, and call it like the async function it
-already was. Underneath, it runs on a real thread or an isolated process behind
-the boundary you chose.
+The function stays in your repo, in your language, in your types &mdash; one
+`import` away from its caller. What changes is *where it runs* and *what it can
+touch*. You export it, hand it to a pool, and call it like the async function it
+already was. Underneath, it runs on a real thread or an isolated process.
 
-That makes Knitting a **function-level execution boundary**. It is not a new
-service, and it is not just a worker helper. It is a way to move the expensive
-part without moving the whole app.
+```ts
+import { createPool, isMain } from "knitting";
+
+export const hello = (name: string) => "Hello " + name;
+
+using pool = createPool({})({ hello });
+
+if (isMain) console.log(await pool.call.hello("World!"));
+```
+
+That is the whole boundary: one export, one pool, one call. `hello` still reads
+like a plain function, but it no longer runs on the main thread.
+
+So Knitting is a **function-level execution boundary**. Not a new service, and
+not just a worker helper &mdash; a way to move the expensive part without moving
+the whole app.
 
 Compare what each option costs for the same few hot functions:
 
@@ -99,11 +111,11 @@ of the runtime's message queue, so small and medium calls stay practical. The
 does not.
 
 **Isolation should match the task.** A microservice gives you process isolation
-whether or not you need it. Knitting lets each pool choose its boundary:
+whether or not you need it. Knitting lets each pool pick its own boundary:
 in-process guards, a bootstrap hook, runtime-native permissions, or a real
-OS-sandboxed process. Trusted math can stay on cheap threads; an untrusted
-plugin can run behind `bwrap`, with
-[`importTask`](/guides/defining-tasks/#module-loading) keeping its code off the
+OS-sandboxed process. Trusted math can stay on cheap threads. An untrusted
+plugin can run behind `bwrap`, and
+[`importTask`](/guides/defining-tasks/#module-loading) keeps its code off the
 host entirely.
 
 Knitting does not replace distributed systems. If you need cross-machine scale,

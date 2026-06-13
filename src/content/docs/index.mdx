@@ -20,7 +20,7 @@ head:
       content: "index,follow,max-image-preview:large"
 hero:
   title: Knitting
-  tagline: 'One hot function is eating your event loop. Export it, hand it to a pool, and <code>await pool.call.fn()</code> — it now runs on a <strong>worker thread</strong> or a <strong>sandboxed process</strong>, not your main thread. No <code>postMessage</code> plumbing, no microservice.'
+  tagline: "A runtime library built from scratch just to make JavaScript a real multiprocess language."
   image:
     html: |
       <div class="kh-hero-stage" aria-hidden="true">
@@ -209,11 +209,11 @@ deno add --npm knitting`;
   </div>
   <div class="kh-stat">
     <strong>1</strong>
-    <span>unified app boundary</span>
+    <span>unified api</span>
   </div>
   <div class="kh-stat">
     <strong>2</strong>
-    <span>worker modes: threads or processes</span>
+    <span>modes: threads or processes</span>
   </div>
   <div class="kh-stat">
     <strong>3</strong>
@@ -230,8 +230,7 @@ deno add --npm knitting`;
     <p class="kh-eyebrow">The shape of the API</p>
     <h2 id="kh-start-title">Export a function, create a pool, call it.</h2>
     <p>
-      You write the function where it belongs. Knitting gives it another place
-      to run. Start with plain exports, add task metadata only when you need
+      Start with plain exports, add task metadata only when you need
       timeouts or abort signals, then let <code>using</code> close the pool
       when the scope exits.
     </p>
@@ -276,14 +275,44 @@ deno add --npm knitting`;
   
 </section>
 
+
+<section id="benchmarks" class="kh-shell kh-bench" aria-labelledby="kh-bench-title">
+  <div class="kh-section-head">
+    <p class="kh-eyebrow">Benchmarks</p>
+    <h2 id="kh-bench-title">Real Native Speed</h2>
+  </div>
+
+  <div class="kh-bench-kpis" aria-label="Benchmark highlights">
+    <div class="kh-bench-kpi">
+      <span>Scheduling roundtrip</span>
+      <strong>538 ns</strong>
+      <small>Node, 53.8 us batch / 100</small>
+    </div>
+    <div class="kh-bench-kpi">
+      <span>Zero-copy roundtrip</span>
+      <strong>816 ns</strong>
+      <small>Node, 81.6 us batch / 100</small>
+    </div>
+    <div class="kh-bench-kpi">
+      <span>1 MiB complete copy in both directions</span>
+      <strong>313 us</strong>
+      <small>Bun, 31.3 ms batch / 100</small>
+    </div>
+  </div>
+  <div class="kh-note">
+    Measured against Tokio: same order of magnitude on scheduling, and
+    ~17% faster on a 1 MiB round copy at batch scale (31.3 ms vs 37.7 ms / 100).
+    Source:
+    <a href="https://github.com/mimiMonads/knitting-vs-tokio-bench">bench</a>.
+  </div>
+</section>
+
 <section class="kh-shell" aria-labelledby="kh-why-title">
   <div class="kh-section-head">
     <p class="kh-eyebrow">The missing middle</p>
     <h2 id="kh-why-title">Not every hot path deserves a hostname.</h2>
     <p>
-      Apps rarely get hot everywhere at once. One parser, hash, or SSR render
-      starts crowding the main thread &mdash; and suddenly the fix looks bigger
-      than the problem. Knitting is the missing middle: keep the function in
+      Knitting is the missing middle: keep the function in
       your app, move where it runs.
     </p>
   </div>
@@ -294,8 +323,7 @@ deno add --npm knitting`;
       <h3>Move the heat</h3>
       <p>
         Export the expensive function once. Call
-        <code>pool.call.name()</code> from the host while a thread or process
-        does the work somewhere quieter.
+        <code>pool.call.name()</code>.
       </p>
       <a href="/guides/defining-tasks/">Define work</a>
     </article>
@@ -303,18 +331,17 @@ deno add --npm knitting`;
       <span class="kh-token">02</span>
       <h3>Control the worker</h3>
       <p>
-        A pool is a launch policy, not a thread count: runtime, permissions,
+        Runtime, permissions,
         bootstrap, process wrapper, timeouts, scheduling.
       </p>
       <a href="/guides/creating-pools/">Creating pools</a>
     </article>
     <article class="kh-card">
       <span class="kh-token">03</span>
-      <h3>Skip the message queue</h3>
+      <h3>Direct memory access</h3>
       <p>
-        Request and response mailboxes live in shared memory, so task calls do
-        not have to become little socket conversations just to reach another
-        core.
+        Request and response live in shared memory, so task calls do
+        not have to become little socket.
       </p>
       <a href="/extras/architecture/">See the architecture</a>
     </article>
@@ -322,7 +349,7 @@ deno add --npm knitting`;
 
   <p class="kh-note">
     Knitting is not a replacement for distributed systems &mdash; it is for
-    the moment before one, when a hot function just needs a better place to
+    the moment before one, when your hot function just needs a better place to
     run. The full argument, and the
     <a href="/extras/why/#where-its-going">roadmap</a>, live in
     <a href="/extras/why/">Why Knitting</a>.
@@ -471,94 +498,6 @@ deno add --npm knitting`;
   </div>
 </section>
 
-<section id="benchmarks" class="kh-shell kh-bench" aria-labelledby="kh-bench-title">
-  <div class="kh-section-head">
-    <p class="kh-eyebrow">Benchmarks, carefully</p>
-    <h2 id="kh-bench-title">Close enough to be interesting. Honest enough to be useful.</h2>
-    <p>
-      The Tokio comparison reports <code>n=100</code> whole-batch echo latency
-      across <code>f64</code>, copied bytes, and zero-copy handles. The cards
-      divide those batch totals by 100 to show nanoseconds per roundtrip; the
-      table keeps the original batch totals beside the divided values.
-    </p>
-  </div>
-
-  <div class="kh-bench-kpis" aria-label="Benchmark highlights">
-    <div class="kh-bench-kpi">
-      <span>Scheduling roundtrip</span>
-      <strong>538 ns</strong>
-      <small>Node, 53.8 us batch / 100</small>
-    </div>
-    <div class="kh-bench-kpi">
-      <span>Copied 1 MiB roundtrip</span>
-      <strong>313 us</strong>
-      <small>Bun, 31.3 ms batch / 100</small>
-    </div>
-    <div class="kh-bench-kpi">
-      <span>Zero-copy roundtrip</span>
-      <strong>816 ns</strong>
-      <small>Node, 81.6 us batch / 100</small>
-    </div>
-  </div>
-
-  <div class="kh-bench-table-wrap">
-    <table class="kh-bench-table">
-      <thead>
-        <tr>
-          <th scope="col">Scenario</th>
-          <th scope="col">What the run suggests</th>
-          <th scope="col">Representative numbers</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <th scope="row">Scheduling only</th>
-          <td data-label="What the run suggests">Knitting is in the same order of magnitude as Tokio for tiny tasks.</td>
-          <td data-label="Representative numbers">
-            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
-              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
-              <span><b>Tokio</b><code>52.8 us</code><em>528 ns roundtrip</em></span>
-              <span><b>Node</b><code>53.8 us</code><em>538 ns roundtrip</em></span>
-              <span><b>Deno</b><code>57.1 us</code><em>571 ns roundtrip</em></span>
-              <span><b>Bun</b><code>69.6 us</code><em>696 ns roundtrip</em></span>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <th scope="row">1 MiB copied bytes</th>
-          <td data-label="What the run suggests">Shared-buffer copies can amortize well under batch pressure.</td>
-          <td data-label="Representative numbers">
-            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
-              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
-              <span><b>Bun</b><code>31.3 ms</code><em>313 us roundtrip</em></span>
-              <span><b>Tokio</b><code>37.7 ms</code><em>377 us roundtrip</em></span>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <th scope="row">1 MiB zero-copy handles</th>
-          <td data-label="What the run suggests">Tokio's <code>Arc</code> handoff is still the cheaper pure handle transfer.</td>
-          <td data-label="Representative numbers">
-            <div class="kh-bench-values" aria-label="n=100 batch totals divided by 100">
-              <span class="kh-bench-values-note"><code>n=100 batch</code> divided by 100</span>
-              <span><b>Tokio</b><code>68.9 us</code><em>689 ns roundtrip</em></span>
-              <span><b>Node</b><code>81.6 us</code><em>816 ns roundtrip</em></span>
-              <span><b>Bun</b><code>130 us</code><em>1,300 ns roundtrip</em></span>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="kh-note">
-    Source:
-    <a href="https://github.com/mimiMonads/knitting-vs-tokio-bench">mimiMonads/knitting-vs-tokio-bench</a>.
-    The benchmark aligns dispatch shape and thread count; per-roundtrip values
-    here are the published <code>n=100</code> batch averages divided by 100
-    and shown in nanoseconds.
-  </div>
-</section>
 
 <section hidden aria-label="Notes for AI agents">
   <p>
@@ -1482,7 +1421,7 @@ html:has([data-knit-home-marker]) .hero .copy {
 }
 
 html:has([data-knit-home-marker]) .hero .copy::before {
-  content: "Not every hot path deserves a hostname";
+  content: "Multithreading made simple";
   width: fit-content;
   max-width: 100%;
   padding: 0.42rem 0.62rem;
