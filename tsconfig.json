@@ -1,9 +1,12 @@
 {
-  "extends": "astro/tsconfigs/strict",
-  "include": [
-    ".astro/types.d.ts",
-    "**/*",
-    "src/assets/code/data_transforms/hono_server/.ts"
-  ],
-  "exclude": ["dist"]
+	"extends": "astro/tsconfigs/strict",
+	"include": [
+		".astro/types.d.ts",
+		"**/*",
+		"src/assets/code/data_transforms/hono_server/.ts",
+		"./worker-configuration.d.ts"
+	],
+	"exclude": [
+		"dist"
+	]
 }
