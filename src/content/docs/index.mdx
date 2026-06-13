@@ -208,12 +208,16 @@ deno add --npm knitting`;
     <span>runtime dependencies</span>
   </div>
   <div class="kh-stat">
-    <strong>3</strong>
-    <span>runtimes: Node.js, Deno, Bun</span>
+    <strong>1</strong>
+    <span>unified app boundary</span>
   </div>
   <div class="kh-stat">
     <strong>2</strong>
     <span>worker modes: threads or processes</span>
+  </div>
+  <div class="kh-stat">
+    <strong>3</strong>
+    <span>runtimes: Node.js, Deno, Bun</span>
   </div>
   <div class="kh-stat">
     <strong>4</strong>
@@ -771,7 +775,7 @@ html:has([data-knit-home-marker]) .kh-strip {
 
 html:has([data-knit-home-marker]) .kh-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1px;
   margin-top: 1rem;
   border: 1px solid var(--kh-border);
@@ -1792,7 +1796,7 @@ html:has([data-knit-home-marker]) .kh-strip {
 html:has([data-knit-home-marker]) .kh-strip {
   position: relative;
   z-index: 2;
-  margin-top: -2.1rem;
+  margin-top: 1.5rem;
   border-color: color-mix(in srgb, var(--kh-accent) 32%, var(--kh-border));
   background: color-mix(in srgb, var(--kh-border) 80%, #ffffff 20%);
   box-shadow:
@@ -1828,6 +1832,10 @@ html:has([data-knit-home-marker]) .kh-stat:nth-child(3)::before {
 
 html:has([data-knit-home-marker]) .kh-stat:nth-child(4)::before {
   background: var(--kh-accent-4);
+}
+
+html:has([data-knit-home-marker]) .kh-stat:nth-child(5)::before {
+  background: var(--kh-accent-5);
 }
 
 html:has([data-knit-home-marker]) .kh-stat strong {
@@ -2116,7 +2124,7 @@ html:has([data-knit-home-marker]) .kh-links {
   }
 
   html:has([data-knit-home-marker]) .kh-strip {
-    margin-top: -1.25rem;
+    margin-top: 1.25rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2127,6 +2135,10 @@ html:has([data-knit-home-marker]) .kh-links {
 
   html:has([data-knit-home-marker]) .kh-stat strong {
     font-size: 2rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-stat:last-child {
+    grid-column: 1 / -1;
   }
 
   html:has([data-knit-home-marker]) .kh-shell {
