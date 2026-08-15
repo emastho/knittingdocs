@@ -1,0 +1,862 @@
+---
+// PoolCycle.astro
+// One classic Mac window: syntax on the left, what it runs on the right.
+// The config rewrites itself through the isolation dial:
+// bun thread -> bun process -> node process -> + bwrap -> 3 sandboxes.
+const { caption = "" } = Astro.props as {
+  caption?: string;
+};
+
+// Server-rendered first frame (plain text). The client script takes over and
+// re-renders it with highlighting the moment it boots.
+const firstFrame = [
+  'import { createPool, isMain } from "knitting";',
+  "",
+  'export const hello = (name: string) => "hello " + name;',
+  "",
+  "if (isMain) {",
+  "  using pool = createPool({",
+  "    threads: 1,",
+  "  })({ hello });",
+  "",
+  '  console.log(await pool.call.hello("world"));',
+  "}",
+].join("\n");
+---
+
+<figure class="pc not-content" data-pool-cycle>
+  <div class="pc-win">
+    <div class="pc-bar">
+      <span class="pc-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="pc-name">pool.ts</span>
+      <button class="pc-toggle" type="button" data-play aria-label="Pause the animation">
+        <span data-play-icon>pause</span>
+      </button>
+    </div>
+
+    <div class="pc-body">
+      <div class="pc-pane pc-pane--code">
+        <pre class="pc-code"><code data-code>{firstFrame}</code></pre>
+        <div class="pc-out" data-out>
+          <div><span class="pc-prompt">❯</span> bun run pool.ts</div>
+          <div class="pc-out-res">hello world</div>
+        </div>
+      </div>
+
+      <div class="pc-pane pc-pane--view">
+        <div class="pc-row pc-row--host">
+          <span class="pc-k">host</span>
+          <span class="pc-v">bun · main thread</span>
+        </div>
+        <div class="pc-call"><code>await pool.call.hello("world")</code></div>
+        <div class="pc-link"><span data-bridge-label>shared memory</span></div>
+        <div class="pc-workers" data-workers></div>
+        <p class="pc-note" data-note>same process, shared memory</p>
+      </div>
+    </div>
+
+    <div class="pc-foot" aria-hidden="true">
+      <button class="pc-step" type="button" data-step="0">thread</button>
+      <button class="pc-step" type="button" data-step="1">process</button>
+      <button class="pc-step" type="button" data-step="2">node</button>
+      <button class="pc-step" type="button" data-step="3">bwrap</button>
+      <button class="pc-step" type="button" data-step="4">×3</button>
+    </div>
+  </div>
+
+  <figcaption>{caption}</figcaption>
+</figure>
+
+<script is:inline>
+  (() => {
+    const roots = document.querySelectorAll("[data-pool-cycle]");
+    if (!roots.length) return;
+
+    const BASE_HEAD = [
+      'import { createPool, isMain } from "knitting";',
+      "",
+      'export const hello = (name: string) => "hello " + name;',
+      "",
+      "if (isMain) {",
+      "  using pool = createPool({",
+    ];
+    const BASE_TAIL = [
+      "  })({ hello });",
+      "",
+      '  console.log(await pool.call.hello("world"));',
+      "}",
+    ];
+
+    const build = (middle) => BASE_HEAD.concat(middle, BASE_TAIL);
+
+    const WORKER_BUN = [
+      "    worker: {",
+      '      runtime: "process",',
+      '      processRuntime: "bun",',
+      "    },",
+    ];
+    const WORKER_NODE = [
+      "    worker: {",
+      '      runtime: "process",',
+      '      processRuntime: "node",',
+      "    },",
+    ];
+    const WORKER_BWRAP = [
+      "    worker: {",
+      '      runtime: "process",',
+      '      processRuntime: "node",',
+      "      processCommandPrefix: [",
+      '        "bwrap", "--unshare-all",',
+      '        "--ro-bind", "/", "/",',
+      '        "--proc", "/proc", "--tmpfs", "/tmp",',
+      '        "--die-with-parent",',
+      "      ],",
+      "    },",
+    ];
+
+    const STAGES = [
+      {
+        lines: build(["    threads: 1,"]),
+        kind: "thread",
+        runtime: "bun",
+        sandbox: false,
+        count: 1,
+        note: "one thread, same process, shared memory",
+        bridge: "shared memory",
+      },
+      {
+        lines: build(["    threads: 1,"].concat(WORKER_BUN)),
+        kind: "process",
+        runtime: "bun",
+        sandbox: false,
+        count: 1,
+        note: "own pid, own heap, still zero-copy",
+        bridge: "shared memory",
+      },
+      {
+        lines: build(["    threads: 1,"].concat(WORKER_NODE)),
+        kind: "process",
+        runtime: "node",
+        sandbox: false,
+        count: 1,
+        note: "the worker runs a different runtime than the host",
+        bridge: "shared memory · bun ⇄ node",
+      },
+      {
+        lines: build(["    threads: 1,"].concat(WORKER_BWRAP)),
+        kind: "process",
+        runtime: "node",
+        sandbox: true,
+        count: 1,
+        note: "no network, read-only filesystem, dies with the parent",
+        bridge: "shared memory · fd 0 kept open",
+      },
+      {
+        lines: build(["    threads: 3,"].concat(WORKER_BWRAP)),
+        kind: "process",
+        runtime: "node",
+        sandbox: true,
+        count: 3,
+        note: "three sandboxes, one call site",
+        bridge: "shared memory · 3 lanes",
+      },
+    ];
+
+    const TYPE_MS = 13;
+    const ERASE_MS = 9;
+    const ERASE_CHUNK = 4;
+    const LINE_PAUSE = 55;
+    const HOLD_MS = 2600;
+
+    const KEYWORDS = new Set([
+      "import",
+      "from",
+      "export",
+      "const",
+      "let",
+      "using",
+      "await",
+      "async",
+      "if",
+      "else",
+      "return",
+      "new",
+      "true",
+      "false",
+    ]);
+    const TOKEN =
+      /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|("[^"]*$)|(\b\d[\d_]*\b)|([A-Za-z_$][\w$]*)|([^\sA-Za-z0-9_$]+)/g;
+
+    const esc = (s) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const highlight = (line) => {
+      let out = "";
+      let last = 0;
+      TOKEN.lastIndex = 0;
+      let m;
+      while ((m = TOKEN.exec(line)) !== null) {
+        if (m.index > last) out += esc(line.slice(last, m.index));
+        last = m.index + m[0].length;
+        const raw = esc(m[0]);
+        if (m[1]) out += '<i class="t-com">' + raw + "</i>";
+        else if (m[2] || m[3]) out += '<i class="t-str">' + raw + "</i>";
+        else if (m[4]) out += '<i class="t-num">' + raw + "</i>";
+        else if (m[5]) {
+          const next = line.slice(last).match(/^\s*(.)/);
+          const after = next ? next[1] : "";
+          if (KEYWORDS.has(m[5])) out += '<i class="t-key">' + raw + "</i>";
+          else if (after === "(") out += '<i class="t-fn">' + raw + "</i>";
+          else if (after === ":") out += '<i class="t-prop">' + raw + "</i>";
+          else out += '<i class="t-id">' + raw + "</i>";
+        } else out += '<i class="t-pun">' + raw + "</i>";
+      }
+      if (last < line.length) out += esc(line.slice(last));
+      return out;
+    };
+
+    const commonPrefix = (a, b) => {
+      let i = 0;
+      while (i < a.length && i < b.length && a[i] === b[i]) i++;
+      return i;
+    };
+
+    const commonSuffix = (a, b, cap) => {
+      let i = 0;
+      while (i < cap && a[a.length - 1 - i] === b[b.length - 1 - i]) i++;
+      return i;
+    };
+
+    const init = (root) => {
+      const codeEl = root.querySelector("[data-code]");
+      const outEl = root.querySelector("[data-out]");
+      const workersEl = root.querySelector("[data-workers]");
+      const noteEl = root.querySelector("[data-note]");
+      const bridgeLabel = root.querySelector("[data-bridge-label]");
+      const steps = Array.from(root.querySelectorAll("[data-step]"));
+      const playBtn = root.querySelector("[data-play]");
+      const playIcon = root.querySelector("[data-play-icon]");
+
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      let lines = STAGES[0].lines.slice();
+      let active = -1;
+      let index = 0;
+      let timer = 0;
+      let visible = false;
+      let paused = false;
+
+      const stop = () => {
+        if (timer) clearTimeout(timer);
+        timer = 0;
+      };
+
+      const later = (fn, ms) => {
+        stop();
+        timer = setTimeout(fn, ms);
+      };
+
+      const render = () => {
+        let html = "";
+        for (let i = 0; i < lines.length; i++) {
+          const cursor = i === active ? '<b class="pc-caret"></b>' : "";
+          html +=
+            '<span class="pc-line">' + highlight(lines[i]) + cursor + "</span>";
+        }
+        codeEl.innerHTML = html;
+      };
+
+      const paintView = (stage) => {
+        noteEl.textContent = stage.note;
+        bridgeLabel.textContent = stage.bridge;
+
+        let html = "";
+        for (let i = 0; i < stage.count; i++) {
+          html +=
+            '<div class="pc-w" data-sandbox="' +
+            stage.sandbox +
+            '" style="--pc-i:' +
+            i +
+            '">' +
+            '<span class="pc-k">' +
+            stage.kind +
+            " " +
+            (i + 1) +
+            "</span>" +
+            '<span class="pc-v">' +
+            stage.runtime +
+            "</span>" +
+            (stage.sandbox ? '<span class="pc-tag">bwrap</span>' : "") +
+            "</div>";
+        }
+        workersEl.dataset.count = String(stage.count);
+        workersEl.innerHTML = html;
+
+        steps.forEach((step, i) => {
+          step.classList.toggle("is-on", i === index);
+        });
+      };
+
+      // The printed result is the same in every stage -- that is the point --
+      // so it only dims while the config is being rewritten.
+      const showOut = (on) => {
+        outEl.dataset.on = String(on);
+      };
+
+      const settle = (stage) => {
+        active = -1;
+        render();
+        showOut(true);
+        if (paused || reduced.matches) return;
+        later(() => {
+          index = (index + 1) % STAGES.length;
+          transition(STAGES[index]);
+        }, HOLD_MS);
+      };
+
+      const typeIn = (stage, target, at, queue) => {
+        if (!queue.length) {
+          settle(stage);
+          return;
+        }
+        const text = queue[0];
+        const cur = lines[at] ?? "";
+        if (cur.length >= text.length) {
+          queue.shift();
+          typeIn(stage, target, at + 1, queue);
+          return;
+        }
+        lines[at] = text.slice(0, cur.length + 1);
+        active = at;
+        render();
+        const done = lines[at].length === text.length;
+        later(
+          () => typeIn(stage, target, at, queue),
+          done ? LINE_PAUSE : TYPE_MS,
+        );
+      };
+
+      const erase = (stage, pre, suf, insert) => {
+        if (lines.length <= pre + suf) {
+          const queue = insert.slice();
+          for (let i = 0; i < queue.length; i++) lines.splice(pre + i, 0, "");
+          typeIn(stage, insert, pre, queue);
+          return;
+        }
+        const at = lines.length - suf - 1;
+        if (lines[at].length === 0) {
+          lines.splice(at, 1);
+          active = Math.max(pre, at - 1);
+          render();
+          later(() => erase(stage, pre, suf, insert), ERASE_MS);
+          return;
+        }
+        lines[at] = lines[at].slice(
+          0,
+          Math.max(0, lines[at].length - ERASE_CHUNK),
+        );
+        active = at;
+        render();
+        later(() => erase(stage, pre, suf, insert), ERASE_MS);
+      };
+
+      const transition = (stage) => {
+        stop();
+        showOut(false);
+        paintView(stage);
+
+        if (reduced.matches) {
+          lines = stage.lines.slice();
+          active = -1;
+          render();
+          showOut(true);
+          return;
+        }
+
+        const next = stage.lines;
+        const pre = commonPrefix(lines, next);
+        const cap = Math.min(lines.length, next.length) - pre;
+        const suf = commonSuffix(lines, next, Math.max(0, cap));
+        const insert = next.slice(pre, next.length - suf);
+        erase(stage, pre, suf, insert);
+      };
+
+      const setPaused = (value) => {
+        paused = value;
+        playIcon.textContent = paused ? "play" : "pause";
+        playBtn.setAttribute(
+          "aria-label",
+          paused ? "Play the animation" : "Pause the animation",
+        );
+      };
+
+      steps.forEach((step, i) => {
+        step.addEventListener("click", () => {
+          index = i;
+          setPaused(true);
+          transition(STAGES[index]);
+        });
+      });
+
+      playBtn.addEventListener("click", () => {
+        setPaused(!paused);
+        if (!paused && visible) settle(STAGES[index]);
+        else stop();
+      });
+
+      // Boot: paint stage 0 without the typing pass, then start when on screen.
+      lines = STAGES[0].lines.slice();
+      render();
+      paintView(STAGES[0]);
+      showOut(true);
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            visible = entry.isIntersecting;
+            if (visible && !paused && !reduced.matches) settle(STAGES[index]);
+            else if (!visible) stop();
+          }
+        },
+        { threshold: 0.2 },
+      );
+      observer.observe(root);
+    };
+
+    roots.forEach(init);
+  })();
+</script>
+
+<!-- Global on purpose: the code lines, tokens and worker rows are built by the
+     script above, so scoped attributes would never reach them. Every selector
+     is namespaced under .pc / .t- to stay out of the page's way. -->
+<style is:global>
+  .pc {
+    --pc-ink: #e8eef6;
+    --pc-dim: #8c9aae;
+    --pc-line: color-mix(in srgb, #ffffff 11%, transparent);
+    --pc-bg: #0b1018;
+    --pc-chrome: #1b2130;
+    --pc-accent: var(--kh-accent, #22d3ee);
+    --pc-key: #b3b9ff;
+    --pc-str: #7fdbb6;
+    --pc-mono: var(
+      --sl-font-mono,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      monospace
+    );
+    --pc-lines: 21;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .pc-win {
+    border: 1px solid var(--pc-line);
+    border-radius: 10px;
+    background: var(--pc-bg);
+    box-shadow:
+      0 1px 0 color-mix(in srgb, #ffffff 8%, transparent) inset,
+      0 24px 60px color-mix(in srgb, #000000 45%, transparent);
+    overflow: hidden;
+  }
+
+  .pc-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.2rem;
+    padding-inline: 0.7rem;
+    border-bottom: 1px solid var(--pc-line);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pc-chrome) 92%, #ffffff 8%),
+      var(--pc-chrome)
+    );
+  }
+
+  .pc-lights {
+    display: inline-flex;
+    gap: 0.42rem;
+  }
+
+  .pc-lights i {
+    width: 0.68rem;
+    height: 0.68rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #000000 22%, transparent);
+  }
+
+  .pc-lights i:nth-child(1) {
+    background: #ff5f57;
+  }
+  .pc-lights i:nth-child(2) {
+    background: #febc2e;
+  }
+  .pc-lights i:nth-child(3) {
+    background: #28c840;
+  }
+
+  .pc-name {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    color: color-mix(in srgb, var(--pc-ink) 78%, transparent);
+    font-family: var(--pc-mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .pc-toggle {
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--pc-dim) 90%, transparent);
+    font-family: var(--pc-mono);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+
+  .pc-toggle:hover {
+    color: var(--pc-ink);
+  }
+
+  .pc-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.62fr);
+  }
+
+  .pc-pane {
+    min-width: 0;
+  }
+
+  .pc-pane--code {
+    display: grid;
+    align-content: start;
+    border-right: 1px solid var(--pc-line);
+  }
+
+  .pc-code {
+    margin: 0;
+    padding: 1rem 1.1rem 0.5rem;
+    min-height: calc(var(--pc-lines) * 1.6em);
+    border: 0;
+    background: transparent;
+    overflow-x: auto;
+  }
+
+  .pc-code code {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--pc-ink);
+    font-family: var(--pc-mono);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  .pc-line {
+    display: block;
+    min-height: 1.6em;
+  }
+
+  .pc-caret {
+    display: inline-block;
+    width: 0.5em;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: color-mix(in srgb, var(--pc-accent) 85%, #ffffff 15%);
+    animation: pc-blink 1s steps(1, end) infinite;
+  }
+
+  .pc .t-key,
+  .pc .t-str,
+  .pc .t-num,
+  .pc .t-fn,
+  .pc .t-prop,
+  .pc .t-id,
+  .pc .t-pun,
+  .pc .t-com {
+    font-style: normal;
+  }
+
+  .pc .t-key {
+    color: var(--pc-key);
+  }
+  .pc .t-str,
+  .pc .t-num {
+    color: var(--pc-str);
+  }
+  .pc .t-fn,
+  .pc .t-id {
+    color: var(--pc-ink);
+  }
+  .pc .t-prop {
+    color: color-mix(in srgb, var(--pc-ink) 82%, transparent);
+  }
+  .pc .t-pun {
+    color: var(--pc-dim);
+  }
+  .pc .t-com {
+    color: color-mix(in srgb, var(--pc-dim) 70%, transparent);
+  }
+
+  .pc-out {
+    display: grid;
+    padding: 0.55rem 1.1rem 0.9rem;
+    color: var(--pc-dim);
+    font-family: var(--pc-mono);
+    font-size: 0.74rem;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+
+  .pc-prompt {
+    color: var(--pc-accent);
+  }
+
+  .pc-out-res {
+    color: var(--pc-ink);
+  }
+
+  .pc-out[data-on="false"] .pc-out-res {
+    opacity: 0.3;
+  }
+
+  .pc-pane--view {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 1rem 1.1rem;
+  }
+
+
+  .pc-row,
+  .pc-w {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--pc-line);
+    border-radius: 7px;
+  }
+
+  .pc-w {
+    animation: pc-fade 260ms ease both;
+    animation-delay: calc(var(--pc-i, 0) * 70ms);
+  }
+
+  .pc-w[data-sandbox="true"] {
+    border-style: dashed;
+  }
+
+  .pc-k {
+    color: var(--pc-ink);
+    font-family: var(--pc-mono);
+    font-size: 0.74rem;
+  }
+
+  .pc-v {
+    margin-left: auto;
+    color: var(--pc-dim);
+    font-family: var(--pc-mono);
+    font-size: 0.72rem;
+  }
+
+  .pc-tag {
+    padding: 0.05rem 0.34rem;
+    border: 1px solid var(--pc-line);
+    border-radius: 4px;
+    color: color-mix(in srgb, var(--pc-accent) 80%, #ffffff 20%);
+    font-family: var(--pc-mono);
+    font-size: 0.66rem;
+  }
+
+  .pc-call {
+    padding-inline: 0.6rem;
+  }
+
+  .pc-call code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--pc-accent) 70%, #ffffff 30%);
+    font-family: var(--pc-mono);
+    font-size: 0.72rem;
+  }
+
+  .pc-link {
+    display: grid;
+    justify-items: center;
+    gap: 0.3rem;
+    padding-block: 0.15rem;
+  }
+
+  .pc-link::before {
+    content: "";
+    width: 1px;
+    height: 1.1rem;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in srgb, var(--pc-accent) 55%, transparent)
+    );
+  }
+
+  .pc-link span {
+    color: var(--pc-dim);
+    font-family: var(--pc-mono);
+    font-size: 0.68rem;
+  }
+
+  .pc-workers {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  /* auto top margin keeps the one-line explanation on the window's bottom
+     edge instead of leaving it floating in the middle of the pane */
+  .pc-note {
+    margin: auto 0 0;
+    padding-top: 0.6rem;
+    color: color-mix(in srgb, var(--pc-dim) 85%, transparent);
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+
+  .pc-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    padding: 0.55rem 1.1rem;
+    border-top: 1px solid var(--pc-line);
+    background: color-mix(in srgb, var(--pc-chrome) 45%, transparent);
+  }
+
+  .pc-step {
+    position: relative;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--pc-dim) 80%, transparent);
+    font-family: var(--pc-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .pc-step:hover {
+    color: var(--pc-ink);
+  }
+
+  .pc-step.is-on {
+    color: var(--pc-ink);
+  }
+
+  .pc-step.is-on::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -0.3rem;
+    height: 1px;
+    background: var(--pc-accent);
+  }
+
+  .pc figcaption:empty {
+    display: none;
+  }
+
+  .pc figcaption {
+    color: var(--pc-dim);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  @keyframes pc-blink {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes pc-fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (max-width: 60rem) {
+    .pc-body {
+      grid-template-columns: 1fr;
+    }
+
+    .pc-pane--code {
+      border-right: 0;
+      border-bottom: 1px solid var(--pc-line);
+    }
+
+    .pc-code {
+      min-height: 0;
+    }
+  }
+
+  /* Short viewports: keep the whole window inside one screen. */
+  @media (min-width: 60rem) and (max-height: 64rem) {
+    .pc-code {
+      padding: 0.7rem 0.9rem 0.4rem;
+      min-height: calc(var(--pc-lines) * 1.5em);
+    }
+
+    .pc-code code {
+      font-size: 0.72rem;
+      line-height: 1.5;
+    }
+
+    .pc-line {
+      min-height: 1.5em;
+    }
+
+    .pc-pane--view {
+      padding: 0.7rem 0.9rem;
+    }
+
+    .pc-out {
+      padding: 0.4rem 0.9rem 0.6rem;
+    }
+  }
+
+  @media (max-width: 34rem) {
+    .pc-code code,
+    .pc-out {
+      font-size: 0.7rem;
+    }
+
+    .pc-foot {
+      gap: 0.8rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pc-caret,
+    .pc-w {
+      animation: none;
+    }
+  }
+</style>
