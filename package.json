@@ -6,10 +6,13 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro"
+    "preview": "npm run build && wrangler dev",
+    "astro": "astro",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "12",
     "@astrojs/starlight": "^0.34.4",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/state": "^6.6.0",
@@ -34,6 +37,7 @@
     "@types/react-dom": "^19.2.3",
     "marked": "^17.0.2",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "wrangler": "^4.100.0"
   }
 }

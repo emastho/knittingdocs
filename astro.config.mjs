@@ -4,6 +4,8 @@ import starlight from "@astrojs/starlight";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 
+import cloudflare from "@astrojs/cloudflare";
+
 const githubOwner = process.env.GITHUB_REPOSITORY_OWNER;
 const githubRepo = process.env.GITHUB_REPOSITORY?.split("/")[1];
 const githubPagesUrl = githubOwner
@@ -76,18 +78,22 @@ const crossOriginIsolationHeaders = {
 export default defineConfig({
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
+
   server: {
     headers: crossOriginIsolationHeaders,
   },
+
   markdown: {
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
   },
+
   vite: {
     resolve: {
       alias: [{ find: /^knitting$/, replacement: "@vixeny/knitting" }],
     },
   },
+
   integrations: [
     starlight({
       title: "Knitting",
@@ -181,4 +187,6 @@ export default defineConfig({
       ],
     }),
   ],
+
+  adapter: cloudflare()
 });
