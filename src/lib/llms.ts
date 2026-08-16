@@ -5,7 +5,7 @@ type Doc = CollectionEntry<"docs">;
 export const TITLE = "Knitting";
 
 export const TAGLINE =
-  "Knitting is a zero-dependency worker pool over a shared-memory IPC runtime for Node.js, Deno, and Bun. Export a function, create a pool, and call it like a normal async function — on real threads or isolated processes.";
+  "Knitting is a zero-dependency multi-threading runtime and worker pool for Node.js, Deno, and Bun. Export a function, create a pool, and call it like a normal async function — on real threads or isolated processes.";
 
 // A small, hand-maintained cheat sheet of the things an AI most often gets
 // wrong about Knitting. The page listings below are generated from the docs,

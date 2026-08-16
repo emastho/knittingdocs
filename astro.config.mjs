@@ -100,7 +100,7 @@ export default defineConfig({
     starlight({
       title: "Knitting",
       description:
-        "Knitting is a shared-memory IPC library for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
+        "Knitting is a multi-threading runtime for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
       favicon: "/favicon.ico",
       head: [
         {
@@ -118,7 +118,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Knitting sheep mascot — shared-memory IPC for JavaScript",
+            content: "Knitting sheep mascot — multi-threading runtime for JavaScript",
           },
         },
         {
@@ -160,14 +160,14 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image:alt",
-            content: "Knitting sheep mascot — shared-memory IPC for JavaScript",
+            content: "Knitting sheep mascot — multi-threading runtime for JavaScript",
           },
         },
         {
           tag: "meta",
           attrs: {
             name: "theme-color",
-            content: "#2F1F12",
+            content: "#160C08",
           },
         },
         {

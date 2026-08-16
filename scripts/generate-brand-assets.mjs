@@ -300,7 +300,7 @@ async function makeLockup() {
   const typography = Buffer.from(`
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <text x="410" y="205" fill="${colors.ink}" font-family="Noto Sans, sans-serif" font-size="142" font-weight="800" letter-spacing="-5">Knitting</text>
-      <text x="418" y="282" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="37" font-weight="700" letter-spacing="2">SHARED-MEMORY IPC FOR JAVASCRIPT</text>
+      <text x="418" y="282" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="37" font-weight="700" letter-spacing="2">MULTI-THREADING RUNTIME FOR JAVASCRIPT</text>
     </svg>
   `);
 
@@ -341,7 +341,7 @@ async function makeOpenGraphImage() {
       <circle cx="275" cy="315" r="224" fill="${colors.white}" stroke="${colors.cream}" stroke-width="10"/>
       <circle cx="275" cy="315" r="246" fill="none" stroke="${colors.orange}" stroke-opacity=".28" stroke-width="2"/>
       <text x="555" y="265" fill="${colors.white}" font-family="Noto Sans, sans-serif" font-size="112" font-weight="800" letter-spacing="-4">Knitting</text>
-      <text x="563" y="334" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="34" font-weight="700">SHARED-MEMORY IPC</text>
+      <text x="563" y="334" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="32" font-weight="700">MULTI-THREADING RUNTIME</text>
       <text x="563" y="383" fill="${colors.peach}" font-family="Noto Sans, sans-serif" font-size="31">Move JavaScript off the main thread.</text>
       <text x="563" y="472" fill="${colors.cream}" font-family="Noto Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="4">NODE.JS  •  DENO  •  BUN</text>
     </svg>
@@ -372,7 +372,7 @@ async function makeSocialSquare() {
       <rect width="${size}" height="${size}" fill="url(#warm)"/>
       <circle cx="600" cy="470" r="390" fill="${colors.white}" stroke="${colors.orange}" stroke-width="16"/>
       <text x="600" y="1015" text-anchor="middle" fill="${colors.white}" font-family="Noto Sans, sans-serif" font-size="118" font-weight="800" letter-spacing="-3">Knitting</text>
-      <text x="600" y="1082" text-anchor="middle" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="29" font-weight="700" letter-spacing="3">SHARED-MEMORY IPC FOR JAVASCRIPT</text>
+      <text x="600" y="1082" text-anchor="middle" fill="${colors.orange}" font-family="Noto Sans, sans-serif" font-size="29" font-weight="700" letter-spacing="3">MULTI-THREADING RUNTIME</text>
     </svg>
   `);
 

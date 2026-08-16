@@ -83,15 +83,15 @@ Workers don't busy-wait by default. The idle cycle is a bounded spin, then a par
   <circle cx="665" cy="100" r="4.5" fill="currentColor" />
   <line x1="36" y1="100" x2="58" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
   <line x1="170" y1="100" x2="248" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
-  <text x="209" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">budget elapsed</text>
+  <text x="209" y="92" text-anchor="middle" font-size="12" fill-opacity="0.8">budget elapsed</text>
   <line x1="360" y1="100" x2="448" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
-  <text x="404" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">notify / timeout</text>
+  <text x="404" y="92" text-anchor="middle" font-size="12" fill-opacity="0.8">notify / timeout</text>
   <line x1="590" y1="100" x2="652" y2="100" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
-  <text x="621" y="92" text-anchor="middle" font-size="11" fill-opacity="0.8">shutdown</text>
+  <text x="621" y="92" text-anchor="middle" font-size="12" fill-opacity="0.8">shutdown</text>
   <path d="M115,78 C 115,34 520,34 520,78" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
-  <text x="317" y="30" text-anchor="middle" font-size="11" fill-opacity="0.8">signal changed</text>
+  <text x="317" y="30" text-anchor="middle" font-size="12" fill-opacity="0.8">signal changed</text>
   <path d="M520,122 C 520,166 115,166 115,122" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#wait-arrow)" />
-  <text x="317" y="184" text-anchor="middle" font-size="11" fill-opacity="0.8">more work?</text>
+  <text x="317" y="184" text-anchor="middle" font-size="12" fill-opacity="0.8">more work?</text>
 </svg>
 
 1. **Spin** -- check the mailbox in a tight loop for `spinMicroseconds` (default: scales with lane count). Uses `Atomics.pause` to reduce power draw.
@@ -179,35 +179,35 @@ Once the handler has picked a lane, that lane's **tx-queue** drives the round tr
     </marker>
   </defs>
   <rect x="5" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
-  <text x="70" y="30" text-anchor="middle" font-size="11" font-weight="600">User code (host)</text>
+  <text x="70" y="30" text-anchor="middle" font-size="12" font-weight="600">User code (host)</text>
   <rect x="215" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
-  <text x="280" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Host tx-queue</text>
+  <text x="280" y="30" text-anchor="middle" font-size="12" font-weight="600">Host tx-queue</text>
   <rect x="425" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
-  <text x="490" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Shared memory</text>
+  <text x="490" y="30" text-anchor="middle" font-size="12" font-weight="600">Shared memory</text>
   <rect x="590" y="10" width="130" height="30" rx="6" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2" />
-  <text x="655" y="30" text-anchor="middle" font-size="11.5" font-weight="600">Worker loop</text>
+  <text x="655" y="30" text-anchor="middle" font-size="12" font-weight="600">Worker loop</text>
   <line x1="70" y1="40" x2="70" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
   <line x1="280" y1="40" x2="280" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
   <line x1="490" y1="40" x2="490" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
   <line x1="655" y1="40" x2="655" y2="375" stroke="currentColor" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4" />
-  <text x="175" y="72" text-anchor="middle" font-size="10" fill-opacity="0.85">pool.call.fn(args) → Promise</text>
+  <text x="175" y="72" text-anchor="middle" font-size="12" fill-opacity="0.85">pool.call.fn(args) → Promise</text>
   <line x1="70" y1="78" x2="278" y2="78" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
-  <text x="385" y="106" text-anchor="middle" font-size="10" fill-opacity="0.85">encode header + payload into a free slot</text>
+  <text x="385" y="106" text-anchor="middle" font-size="12" fill-opacity="0.85">encode header + payload into a free slot</text>
   <line x1="280" y1="112" x2="488" y2="112" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
-  <text x="385" y="140" text-anchor="middle" font-size="10" fill-opacity="0.85">toggle hostBits (publish)</text>
+  <text x="385" y="140" text-anchor="middle" font-size="12" fill-opacity="0.85">toggle hostBits (publish)</text>
   <line x1="280" y1="146" x2="488" y2="146" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
   <rect x="585" y="164" width="140" height="38" rx="6" fill="currentColor" fill-opacity="0.09" stroke="currentColor" stroke-width="1.2" />
-  <text x="655" y="181" text-anchor="middle" font-size="10">spin → pause → park</text>
-  <text x="655" y="195" text-anchor="middle" font-size="10">on the signal word</text>
-  <text x="572" y="220" text-anchor="middle" font-size="10" fill-opacity="0.85">signal word changed → wake</text>
+  <text x="655" y="181" text-anchor="middle" font-size="12">spin → pause → park</text>
+  <text x="655" y="195" text-anchor="middle" font-size="12">on the signal word</text>
+  <text x="572" y="220" text-anchor="middle" font-size="12" fill-opacity="0.85">signal word changed → wake</text>
   <line x1="490" y1="226" x2="653" y2="226" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
-  <text x="572" y="254" text-anchor="middle" font-size="10" fill-opacity="0.85">decode args, run task fn</text>
+  <text x="572" y="254" text-anchor="middle" font-size="12" fill-opacity="0.85">decode args, run task fn</text>
   <line x1="655" y1="260" x2="492" y2="260" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
-  <text x="572" y="288" text-anchor="middle" font-size="10" fill-opacity="0.85">write result, toggle workerBits (publish)</text>
+  <text x="572" y="288" text-anchor="middle" font-size="12" fill-opacity="0.85">write result, toggle workerBits (publish)</text>
   <line x1="655" y1="294" x2="492" y2="294" stroke="currentColor" stroke-width="1.5" marker-end="url(#seq-arrow)" />
-  <text x="385" y="322" text-anchor="middle" font-size="10" fill-opacity="0.85">host drains result, toggles its bit</text>
+  <text x="385" y="322" text-anchor="middle" font-size="12" fill-opacity="0.85">host drains result, toggles its bit</text>
   <line x1="490" y1="328" x2="282" y2="328" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
-  <text x="175" y="356" text-anchor="middle" font-size="10" fill-opacity="0.85">resolve / reject the Promise</text>
+  <text x="175" y="356" text-anchor="middle" font-size="12" fill-opacity="0.85">resolve / reject the Promise</text>
   <line x1="280" y1="362" x2="72" y2="362" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
 </svg>
 
@@ -286,20 +286,20 @@ Workers run code the host may or may not trust, so isolation is a dial, not a sw
   <text x="96" y="65" text-anchor="middle" font-size="14" font-weight="600">Task code</text>
   <rect x="206" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="1.5" />
   <text x="294" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 1</text>
-  <text x="294" y="65" text-anchor="middle" font-size="11">in-process guards</text>
-  <text x="294" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">always on</text>
+  <text x="294" y="65" text-anchor="middle" font-size="12">in-process guards</text>
+  <text x="294" y="82" text-anchor="middle" font-size="12" fill-opacity="0.7">always on</text>
   <rect x="404" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5" />
   <text x="492" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 2</text>
-  <text x="492" y="65" text-anchor="middle" font-size="11">bootstrap hook</text>
-  <text x="492" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">pre-import setup</text>
+  <text x="492" y="65" text-anchor="middle" font-size="12">bootstrap hook</text>
+  <text x="492" y="82" text-anchor="middle" font-size="12" fill-opacity="0.7">pre-import setup</text>
   <rect x="602" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.11" stroke="currentColor" stroke-width="1.5" />
   <text x="690" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 3</text>
-  <text x="690" y="65" text-anchor="middle" font-size="11">runtime permissions</text>
-  <text x="690" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">strict by default</text>
+  <text x="690" y="65" text-anchor="middle" font-size="12">runtime permissions</text>
+  <text x="690" y="82" text-anchor="middle" font-size="12" fill-opacity="0.7">strict by default</text>
   <rect x="800" y="14" width="176" height="92" rx="10" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="1.5" />
   <text x="888" y="46" text-anchor="middle" font-size="14" font-weight="600">Layer 4</text>
-  <text x="888" y="65" text-anchor="middle" font-size="11">process + sandbox</text>
-  <text x="888" y="82" text-anchor="middle" font-size="11" fill-opacity="0.7">OS boundary</text>
+  <text x="888" y="65" text-anchor="middle" font-size="12">process + sandbox</text>
+  <text x="888" y="82" text-anchor="middle" font-size="12" fill-opacity="0.7">OS boundary</text>
   <line x1="184" y1="60" x2="206" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
   <line x1="382" y1="60" x2="404" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
   <line x1="580" y1="60" x2="602" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />

@@ -9,7 +9,7 @@ head:
   - tag: meta
     attrs:
       name: keywords
-      content: "Knitting, shared-memory IPC, worker pools, worker threads, Node.js, Deno, Bun, parallel JavaScript"
+      content: "Knitting, multi-threading runtime, worker pools, worker threads, Node.js, Deno, Bun, parallel JavaScript"
   - tag: meta
     attrs:
       property: og:type
@@ -194,14 +194,19 @@ deno add --npm knitting`;
         <p class="kh-feature-label">Fast by construction</p>
         <h3>Move the call, not all the bytes.</h3>
         <p>
-          Pass ordinary typed payloads, forward promise inputs directly, or use
-          shared-memory handles when copying large buffers would dominate the work.
+          Pass typed payloads and promises, move large buffers through zero-copy
+          handles, set task timeouts, cancel with abort signals, and receive useful
+          errors with their stacks and cause chains intact.
         </p>
-        <ul class="kh-chip-list" aria-label="Payload features">
+        <ul class="kh-chip-list" aria-label="Call and payload features">
           <li>Promise inputs</li>
           <li>SharedArrayBuffer</li>
           <li>ProcessSharedBuffer</li>
           <li>BufferReference</li>
+          <li>Task timeouts</li>
+          <li>Abort signals</li>
+          <li>Typed arrays</li>
+          <li>Error cause chains</li>
         </ul>
         <a href="/guides/payloads/">Explore payloads <span aria-hidden="true">→</span></a>
       </article>
@@ -349,12 +354,12 @@ deno add --npm knitting`;
 
 <style is:global>{`
 html:has([data-knit-home-marker]) {
-  /* Five-color system. Every tint below is one of these colors at lower opacity. */
+  /* Three-color system. Supporting tones are derived, never introduced ad hoc. */
   --kh-night: #160c08;
-  --kh-surface: #26140d;
   --kh-paper: #fff1d6;
-  --kh-muted: #c5a98e;
-  --kh-accent: #ff7a2f;
+  --kh-accent: #ff7a1f;
+  --kh-surface: color-mix(in srgb, var(--kh-night) 88%, var(--kh-paper));
+  --kh-muted: color-mix(in srgb, var(--kh-paper) 72%, var(--kh-night));
   --kh-ink: var(--kh-paper);
   --kh-card: var(--kh-surface);
   --kh-code: var(--kh-night);
@@ -523,7 +528,7 @@ html:has([data-knit-home-marker]) .kh-release span:first-child {
   background: var(--kh-accent);
   color: var(--kh-night);
   font-family: var(--sl-font-mono);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   letter-spacing: -0.02em;
 }
 
@@ -626,7 +631,7 @@ html:has([data-knit-home-marker]) .kh-install-line code {
 html:has([data-knit-home-marker]) .kh-install-line > span:last-child {
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 /* Reintroduced pool hero, reduced to the same five-color system. */
@@ -671,7 +676,7 @@ html:has([data-knit-home-marker]) .kh-hero-visual .pc-lights i:nth-child(3) {
 
 html:has([data-knit-home-marker]) .kh-hero-visual .pc figcaption {
   color: var(--kh-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-align: center;
 }
 
@@ -785,7 +790,7 @@ html:has([data-knit-home-marker]) .kh-feature-label {
   margin: 0;
   color: var(--kh-accent);
   font-family: var(--sl-font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 760;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -844,7 +849,7 @@ html:has([data-knit-home-marker]) .kh-code-panel-head {
   border-bottom: 1px solid var(--kh-line);
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 html:has([data-knit-home-marker]) .kh-highlighted-code {
@@ -913,7 +918,7 @@ html:has([data-knit-home-marker]) .kh-steps li {
 html:has([data-knit-home-marker]) .kh-steps li > span {
   color: var(--kh-accent);
   font-family: var(--sl-font-mono);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -939,7 +944,7 @@ html:has([data-knit-home-marker]) .kh-feature code {
   border-radius: 0.25rem;
   background: color-mix(in srgb, var(--kh-accent) 14%, transparent);
   color: inherit;
-  font-size: 0.88em;
+  font-size: max(0.75rem, 0.88em);
 }
 
 html:has([data-knit-home-marker]) .kh-install-box {
@@ -961,7 +966,7 @@ html:has([data-knit-home-marker]) .kh-install-box > div:first-child {
 
 html:has([data-knit-home-marker]) .kh-install-box > div:first-child span {
   color: var(--kh-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
 }
 
@@ -978,7 +983,7 @@ html:has([data-knit-home-marker]) .kh-install-code {
   border-radius: 0.55rem;
   background: var(--kh-night);
   color: var(--kh-paper);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.65;
 }
 
@@ -1082,7 +1087,7 @@ html:has([data-knit-home-marker]) .kh-chip-list li {
   background: color-mix(in srgb, var(--kh-card) 82%, transparent);
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
 }
 
 html:has([data-knit-home-marker]) .kh-boundary-dial {
@@ -1094,7 +1099,7 @@ html:has([data-knit-home-marker]) .kh-boundary-dial {
   margin-block: 0.5rem;
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
-  font-size: 0.62rem;
+  font-size: 0.75rem;
 }
 
 html:has([data-knit-home-marker]) .kh-boundary-dial i {
@@ -1165,7 +1170,7 @@ html:has([data-knit-home-marker]) .kh-metric-grid article:last-child {
 html:has([data-knit-home-marker]) .kh-metric-grid article > span {
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1182,7 +1187,7 @@ html:has([data-knit-home-marker]) .kh-metric-grid strong {
 html:has([data-knit-home-marker]) .kh-metric-grid small {
   margin-left: 0.25rem;
   color: var(--kh-paper);
-  font-size: 0.34em;
+  font-size: max(0.75rem, 0.34em);
   letter-spacing: 0;
 }
 
@@ -1231,7 +1236,7 @@ html:has([data-knit-home-marker]) .kh-use-grid > a:hover {
 html:has([data-knit-home-marker]) .kh-use-grid span {
   color: var(--kh-accent);
   font-family: var(--sl-font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 750;
   text-transform: uppercase;
 }

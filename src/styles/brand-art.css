@@ -1,32 +1,73 @@
 :root {
+  /* Core UI palette: all interface tones below are derived from these three. */
+  --knit-night: #160c08;
   --knit-orange: #ff7a1f;
-  --knit-ink: #2f1f12;
-  --knit-paper: #fff8e9;
-  --knit-cream: #eed9b7;
-  --knit-peach: #fcead5;
-  --sl-color-accent-low: #4a1f0d;
+  --knit-paper: #fff1d6;
+  --knit-ink: var(--knit-night);
+  --knit-cream: color-mix(in srgb, var(--knit-paper) 88%, var(--knit-orange));
+  --knit-peach: color-mix(in srgb, var(--knit-paper) 78%, var(--knit-orange));
+  --sl-color-white: var(--knit-paper);
+  --sl-color-gray-1: color-mix(in srgb, var(--knit-paper) 94%, var(--knit-night));
+  --sl-color-gray-2: color-mix(in srgb, var(--knit-paper) 78%, var(--knit-night));
+  --sl-color-gray-3: color-mix(in srgb, var(--knit-paper) 56%, var(--knit-night));
+  --sl-color-gray-4: color-mix(in srgb, var(--knit-paper) 36%, var(--knit-night));
+  --sl-color-gray-5: color-mix(in srgb, var(--knit-paper) 20%, var(--knit-night));
+  --sl-color-gray-6: color-mix(in srgb, var(--knit-paper) 10%, var(--knit-night));
+  --sl-color-black: var(--knit-night);
+  --sl-color-blue-low: color-mix(in srgb, var(--knit-orange) 12%, var(--knit-night));
+  --sl-color-blue: var(--knit-orange);
+  --sl-color-blue-high: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
+  --sl-color-purple-low: var(--sl-color-blue-low);
+  --sl-color-purple: var(--sl-color-blue);
+  --sl-color-purple-high: var(--sl-color-blue-high);
+  --sl-color-green-low: var(--sl-color-blue-low);
+  --sl-color-green: var(--sl-color-blue);
+  --sl-color-green-high: var(--sl-color-blue-high);
+  --sl-color-orange-low: var(--sl-color-blue-low);
+  --sl-color-orange: var(--sl-color-blue);
+  --sl-color-orange-high: var(--sl-color-blue-high);
+  --sl-color-red-low: var(--sl-color-blue-low);
+  --sl-color-red: var(--sl-color-blue);
+  --sl-color-red-high: var(--sl-color-blue-high);
+  --sl-color-accent-low: color-mix(in srgb, var(--knit-orange) 22%, var(--knit-night));
   --sl-color-accent: #ff7a1f;
-  --sl-color-accent-high: #ffd7b8;
-  --sl-color-bg: #160c08;
-  --sl-color-bg-nav: #26140d;
-  --sl-color-bg-sidebar: #1d100b;
+  --sl-color-accent-high: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
+  --sl-color-bg: var(--knit-night);
+  --sl-color-bg-nav: color-mix(in srgb, var(--knit-night) 88%, var(--knit-paper));
+  --sl-color-bg-sidebar: color-mix(in srgb, var(--knit-night) 94%, var(--knit-paper));
   --sl-color-hairline-light: color-mix(in srgb, var(--knit-cream) 18%, transparent);
   --sl-color-hairline: color-mix(in srgb, var(--knit-cream) 26%, transparent);
-  --sl-color-text: #fff1d6;
-  --sl-color-text-accent: #ff9b5c;
+  --sl-color-text: var(--knit-paper);
+  --sl-color-text-accent: color-mix(in srgb, var(--knit-orange) 76%, var(--knit-paper));
 }
 
 :root[data-theme="light"] {
-  --sl-color-accent-low: #ffe0ca;
-  --sl-color-accent: #d94e00;
-  --sl-color-accent-high: #642200;
-  --sl-color-bg: #fffaf1;
-  --sl-color-bg-nav: #fff3df;
-  --sl-color-bg-sidebar: #fff8e9;
+  --sl-color-white: var(--knit-night);
+  --sl-color-gray-1: color-mix(in srgb, var(--knit-night) 92%, var(--knit-paper));
+  --sl-color-gray-2: color-mix(in srgb, var(--knit-night) 78%, var(--knit-paper));
+  --sl-color-gray-3: color-mix(in srgb, var(--knit-night) 58%, var(--knit-paper));
+  --sl-color-gray-4: color-mix(in srgb, var(--knit-night) 36%, var(--knit-paper));
+  --sl-color-gray-5: color-mix(in srgb, var(--knit-night) 18%, var(--knit-paper));
+  --sl-color-gray-6: color-mix(in srgb, var(--knit-night) 8%, var(--knit-paper));
+  --sl-color-black: var(--knit-paper);
+  --sl-color-blue-low: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
+  --sl-color-blue: color-mix(in srgb, var(--knit-orange) 78%, var(--knit-night));
+  --sl-color-blue-high: color-mix(in srgb, var(--knit-night) 72%, var(--knit-orange));
+  --sl-color-accent-low: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
+  --sl-color-accent: color-mix(in srgb, var(--knit-orange) 78%, var(--knit-night));
+  --sl-color-accent-high: color-mix(in srgb, var(--knit-night) 72%, var(--knit-orange));
+  --sl-color-bg: color-mix(in srgb, var(--knit-paper) 96%, var(--knit-orange));
+  --sl-color-bg-nav: var(--knit-paper);
+  --sl-color-bg-sidebar: color-mix(in srgb, var(--knit-paper) 97%, var(--knit-orange));
   --sl-color-hairline-light: color-mix(in srgb, var(--knit-ink) 10%, transparent);
   --sl-color-hairline: color-mix(in srgb, var(--knit-ink) 18%, transparent);
-  --sl-color-text: #39261a;
-  --sl-color-text-accent: #b83f00;
+  --sl-color-text: color-mix(in srgb, var(--knit-night) 88%, var(--knit-paper));
+  --sl-color-text-accent: color-mix(in srgb, var(--knit-orange) 70%, var(--knit-night));
+}
+
+body {
+  /* Keep normal reading text at the browser-default 16px baseline. */
+  font-size: 1rem;
 }
 
 .site-title {
