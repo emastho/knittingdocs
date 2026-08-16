@@ -1,0 +1,35 @@
+{
+  "name": "Knitting",
+  "short_name": "Knitting",
+  "description": "Shared-memory IPC and worker pools for Node.js, Deno, and Bun.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FFF8E9",
+  "theme_color": "#2F1F12",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

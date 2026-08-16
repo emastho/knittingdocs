@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
+    "brand:generate": "node scripts/generate-brand-assets.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

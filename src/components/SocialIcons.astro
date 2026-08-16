@@ -1,0 +1,49 @@
+---
+import DefaultSocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+
+const base = import.meta.env.BASE_URL;
+const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+const isHome = Astro.url.pathname === normalizedBase;
+const docsHref = `${normalizedBase}start/installation/`;
+---
+
+<DefaultSocialIcons />
+{
+  isHome && (
+    <a class="docs-shortcut" href={docsHref} aria-label="Open the Knitting documentation">
+      Docs
+      <span aria-hidden="true">→</span>
+    </a>
+  )
+}
+
+<style>
+  @layer starlight.core {
+    .docs-shortcut {
+      min-height: 2rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid color-mix(in srgb, var(--sl-color-text-accent) 42%, transparent);
+      border-radius: 999px;
+      color: var(--sl-color-text-accent);
+      font-size: 0.78rem;
+      font-weight: 750;
+      line-height: 1;
+      text-decoration: none;
+      transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .docs-shortcut:hover {
+      border-color: var(--sl-color-text-accent);
+      background: color-mix(in srgb, var(--sl-color-text-accent) 10%, transparent);
+      transform: translateY(-1px);
+    }
+
+    .docs-shortcut:focus-visible {
+      outline: 3px solid var(--sl-color-accent);
+      outline-offset: 3px;
+    }
+  }
+</style>

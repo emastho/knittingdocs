@@ -63,10 +63,18 @@ const inferredGithubBase = !hasExplicitSite &&
 const base = normalizeBase(
   process.env.SITE_BASE || process.env.BASE_PATH || inferredGithubBase,
 );
-const socialImagePath = base ? `${base}/logo.png` : "/logo.png";
+const assetPath = (asset) => {
+  const normalized = String(asset).replace(/^\/+/, "");
+  return base ? `${base}/${normalized}` : `/${normalized}`;
+};
+const socialImagePath = assetPath("brand/og-image.png");
 const socialImage = site
   ? new URL(socialImagePath, site).toString()
   : socialImagePath;
+const brandArtVariables = `:root {
+  --knitting-art-avatar: url("${assetPath("brand/knitting-avatar.png")}");
+  --knitting-art-sleeping: url("${assetPath("brand/art/sleeping-lamb.webp")}");
+}`;
 const crossOriginIsolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -93,8 +101,12 @@ export default defineConfig({
       title: "Knitting",
       description:
         "Knitting is a shared-memory IPC library for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
-      favicon: "/light_logo.svg",
+      favicon: "/favicon.ico",
       head: [
+        {
+          tag: "style",
+          content: brandArtVariables,
+        },
         {
           tag: "meta",
           attrs: {
@@ -106,7 +118,35 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Knitting logo",
+            content: "Knitting sheep mascot — shared-memory IPC for JavaScript",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:type",
+            content: "image/png",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:width",
+            content: "1200",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:height",
+            content: "630",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:card",
+            content: "summary_large_image",
           },
         },
         {
@@ -120,25 +160,61 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image:alt",
-            content: "Knitting logo",
+            content: "Knitting sheep mascot — shared-memory IPC for JavaScript",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "theme-color",
+            content: "#2F1F12",
           },
         },
         {
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/logo.svg",
-            type: "image/svg+xml",
-            media: "(prefers-color-scheme: dark)",
+            href: assetPath("favicon-32x32.png"),
+            type: "image/png",
+            sizes: "32x32",
           },
         },
         {
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/light_logo.svg",
-            type: "image/svg+xml",
-            media: "(prefers-color-scheme: light)",
+            href: assetPath("favicon-16x16.png"),
+            type: "image/png",
+            sizes: "16x16",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "apple-touch-icon",
+            href: assetPath("apple-touch-icon.png"),
+            sizes: "180x180",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "manifest",
+            href: assetPath("site.webmanifest"),
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "msapplication-TileColor",
+            content: "#FF7A1F",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "msapplication-TileImage",
+            content: assetPath("mstile-150x150.png"),
           },
         },
       ],
@@ -146,12 +222,16 @@ export default defineConfig({
         "./src/styles/katex.css",
         "./src/styles/headings.css",
         "./src/styles/home-cards.css",
+        "./src/styles/brand-art.css",
       ],
       social: [{
         icon: "github",
         label: "GitHub",
         href: "https://github.com/mimiMonads/knitting",
       }],
+      components: {
+        SocialIcons: "./src/components/SocialIcons.astro",
+      },
       sidebar: [
         {
           label: "Getting Started",

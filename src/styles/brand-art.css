@@ -1,0 +1,161 @@
+:root {
+  --knit-orange: #ff7a1f;
+  --knit-ink: #2f1f12;
+  --knit-paper: #fff8e9;
+  --knit-cream: #eed9b7;
+  --knit-peach: #fcead5;
+  --sl-color-accent-low: #4a1f0d;
+  --sl-color-accent: #ff7a1f;
+  --sl-color-accent-high: #ffd7b8;
+  --sl-color-bg: #160c08;
+  --sl-color-bg-nav: #26140d;
+  --sl-color-bg-sidebar: #1d100b;
+  --sl-color-hairline-light: color-mix(in srgb, var(--knit-cream) 18%, transparent);
+  --sl-color-hairline: color-mix(in srgb, var(--knit-cream) 26%, transparent);
+  --sl-color-text: #fff1d6;
+  --sl-color-text-accent: #ff9b5c;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #ffe0ca;
+  --sl-color-accent: #d94e00;
+  --sl-color-accent-high: #642200;
+  --sl-color-bg: #fffaf1;
+  --sl-color-bg-nav: #fff3df;
+  --sl-color-bg-sidebar: #fff8e9;
+  --sl-color-hairline-light: color-mix(in srgb, var(--knit-ink) 10%, transparent);
+  --sl-color-hairline: color-mix(in srgb, var(--knit-ink) 18%, transparent);
+  --sl-color-text: #39261a;
+  --sl-color-text-accent: #b83f00;
+}
+
+.site-title {
+  gap: 0.55rem;
+}
+
+.site-title::before {
+  content: "";
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--knitting-art-avatar) center / contain no-repeat;
+  filter: drop-shadow(0 0.2rem 0.35rem color-mix(in srgb, var(--knit-ink) 30%, transparent));
+  transition: transform 180ms ease;
+}
+
+.site-title:hover::before {
+  transform: rotate(-6deg) scale(1.06);
+}
+
+html:not(:has([data-knit-home-marker])) .main-frame {
+  background-image:
+    radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--knit-orange) 5%, transparent), transparent 24rem),
+    radial-gradient(color-mix(in srgb, var(--knit-cream) 8%, transparent) 0.65px, transparent 0.65px);
+  background-size: auto, 5px 5px;
+  background-attachment: local;
+}
+
+.sl-markdown-content blockquote {
+  position: relative;
+  overflow: hidden;
+  border-inline-start-color: var(--knit-orange);
+  border-radius: 0 0.85rem 0.85rem 0;
+  background: color-mix(in srgb, var(--knit-orange) 5%, transparent);
+}
+
+.sl-markdown-content blockquote::after {
+  content: "";
+  position: absolute;
+  width: 4rem;
+  height: 4rem;
+  right: -1.5rem;
+  bottom: -1.7rem;
+  border: 1px solid color-mix(in srgb, var(--knit-orange) 28%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 0.42rem color-mix(in srgb, var(--knit-orange) 8%, transparent),
+    0 0 0 0.9rem color-mix(in srgb, var(--knit-orange) 6%, transparent);
+}
+
+.pagination-links a {
+  border-radius: 1rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--knit-orange) 6%, transparent), transparent 55%),
+    var(--sl-color-bg-nav);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.pagination-links a:hover {
+  border-color: color-mix(in srgb, var(--knit-orange) 60%, var(--sl-color-hairline));
+  transform: translateY(-2px);
+  box-shadow: 0 0.7rem 1.5rem color-mix(in srgb, var(--knit-ink) 12%, transparent);
+}
+
+html:not(:has([data-knit-home-marker])) main footer {
+  position: relative;
+  min-height: 10rem;
+  padding-bottom: 7.5rem;
+}
+
+html:not(:has([data-knit-home-marker])) main footer::after {
+  content: "";
+  position: absolute;
+  width: min(14rem, 48vw);
+  aspect-ratio: 1.47;
+  right: 0;
+  bottom: 0;
+  background: var(--knitting-art-sleeping) center bottom / contain no-repeat;
+  opacity: 0.82;
+  filter: drop-shadow(0 0.8rem 1rem color-mix(in srgb, var(--knit-ink) 20%, transparent));
+  pointer-events: none;
+}
+
+html:has([data-knit-home-marker]) .kh-final {
+  position: relative;
+  isolation: isolate;
+}
+
+html:has([data-knit-home-marker]) .kh-final::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: clamp(12rem, 20vw, 17rem);
+  aspect-ratio: 1.47;
+  right: clamp(-3.5rem, -2vw, -1rem);
+  bottom: -1.5rem;
+  background: var(--knitting-art-sleeping) center bottom / contain no-repeat;
+  opacity: 0.18;
+  transform: rotate(-3deg);
+  pointer-events: none;
+}
+
+@media (max-width: 50rem) {
+  .site-title::before {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  html:not(:has([data-knit-home-marker])) main footer {
+    padding-bottom: 6rem;
+  }
+
+  html:not(:has([data-knit-home-marker])) main footer::after {
+    width: 11rem;
+    opacity: 0.68;
+  }
+
+  html:has([data-knit-home-marker]) .kh-final::after {
+    width: 12rem;
+    right: -4.5rem;
+    opacity: 0.11;
+  }
+}
+
+@media print {
+  .site-title::before,
+  main footer::after,
+  .kh-final::after {
+    display: none !important;
+  }
+}
