@@ -45,34 +45,19 @@ deno add --npm knitting`;
 <div data-knit-home-marker hidden></div>
 
 <section class="kh-hero" aria-labelledby="kh-hero-title">
-  <img
-    class="kh-hero-lamby"
-    src={`${import.meta.env.BASE_URL}brand/knitting-mascot.png`}
-    alt=""
-    aria-hidden="true"
-    decoding="async"
-    width="1024"
-    height="1024"
-  />
   <div class="kh-hero-grid">
     <div class="kh-hero-copy" data-reveal>
-
-
       <h1 id="kh-hero-title">
         Move JavaScript<br />
         <span>off the main thread.</span>
       </h1>
-
     </div>
 
     <div class="kh-hero-visual" data-reveal>
       <PoolCycle caption="One call site, from a local thread to isolated processes." />
     </div>
 
-    
-
     <div class="kh-hero-bottom" data-reveal>
-
       <div class="kh-actions">
         <a class="kh-button kh-button--primary" href="/start/quick-start/">
           Get started <span aria-hidden="true">→</span>
@@ -375,8 +360,8 @@ html:has([data-knit-home-marker]) main {
 }
 
 html:has([data-knit-home-marker]) .header {
-  border-color: var(--kh-line);
-  background: var(--kh-surface);
+  border-color: transparent;
+  background: var(--kh-night);
   color: var(--kh-paper);
 }
 
@@ -390,6 +375,36 @@ html:has([data-knit-home-marker]) .header site-search > button {
   border-color: var(--kh-line);
   background: var(--kh-night);
   color: var(--kh-muted);
+}
+
+@media (min-width: 50rem) {
+  html:has([data-knit-home-marker]) {
+    --sl-nav-height: 5rem;
+  }
+
+  html:has([data-knit-home-marker]) body > .page > header.header {
+    padding-inline: 0;
+  }
+
+  html:has([data-knit-home-marker]) body > .page > header.header > .header {
+    position: relative;
+    width: min(100% - 3rem, 66rem);
+    display: flex;
+    justify-content: space-between;
+    margin-inline: auto;
+  }
+
+  html:has([data-knit-home-marker]) body > .page > header.header > .header > div:nth-child(2) {
+    position: absolute;
+    left: 50%;
+    width: min(25vw, 19rem);
+    transform: translateX(-50%);
+  }
+
+  html:has([data-knit-home-marker]) .header site-search > button {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 html:has([data-knit-home-marker]) main {
@@ -424,54 +439,16 @@ html:has([data-knit-home-marker]) .kh-hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--kh-accent) 10%, transparent), transparent 25rem),
-    var(--kh-night);
+  background: var(--kh-night);
   color: var(--kh-paper);
 }
 
 html:has([data-knit-home-marker]) .kh-hero::before {
-  content: "";
-  position: absolute;
-  z-index: -2;
-  width: 90rem;
-  height: 20rem;
-  top: 13%;
-  left: 35%;
-  transform: rotate(-8deg);
-  background:
-    linear-gradient(180deg, transparent 8%, color-mix(in srgb, var(--kh-accent) 40%, transparent) 27%, transparent 42%),
-    linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--kh-paper) 22%, transparent) 58%, transparent 72%),
-    linear-gradient(180deg, transparent 65%, color-mix(in srgb, var(--kh-accent) 24%, transparent) 78%, transparent 90%);
-  filter: blur(34px);
-  opacity: 0.55;
+  content: none;
 }
 
 html:has([data-knit-home-marker]) .kh-hero::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  opacity: 0.16;
-  background-image: radial-gradient(var(--kh-paper) 0.55px, transparent 0.55px);
-  background-size: 4px 4px;
-  mask-image: linear-gradient(to right, transparent, black 55%, black);
-}
-
-html:has([data-knit-home-marker]) .kh-hero-lamby {
-  position: absolute;
-  z-index: 0;
-  width: clamp(28rem, 40vw, 38rem);
-  height: auto;
-  top: clamp(-3rem, -1vw, -0.5rem);
-  right: clamp(-7rem, -4vw, -2rem);
-  margin: 0;
-  opacity: 0.15;
-  transform: rotate(6deg) scale(1.04);
-  filter: blur(8px) saturate(0.78);
-  mask-image: radial-gradient(ellipse at center, black 48%, transparent 82%);
-  pointer-events: none;
-  user-select: none;
+  content: none;
 }
 
 html:has([data-knit-home-marker]) .kh-hero-grid,
@@ -486,16 +463,17 @@ html:has([data-knit-home-marker]) .kh-final {
 html:has([data-knit-home-marker]) .kh-hero-grid {
   position: relative;
   z-index: 1;
+  width: min(100% - 3rem, 66rem);
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: clamp(2rem, 3vw, 2.5rem);
-  padding-block: clamp(3rem, 5vw, 4.5rem);
+  gap: clamp(3.25rem, 5vw, 4rem);
+  padding-block: clamp(2.5rem, 4vw, 3rem) clamp(3rem, 5vw, 4.5rem);
 }
 
 html:has([data-knit-home-marker]) .kh-hero-copy {
-  max-width: 46rem;
+  max-width: 64rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -537,7 +515,7 @@ html:has([data-knit-home-marker]) .kh-hero h1 {
   color: var(--kh-paper);
   font-size: clamp(3.25rem, 6vw, 5.65rem);
   font-weight: 720;
-  line-height: 0.96;
+  line-height: 1.2;
   letter-spacing: -0.06em;
   text-wrap: balance;
 }
@@ -656,10 +634,43 @@ html:has([data-knit-home-marker]) .kh-hero-visual .pc {
 }
 
 html:has([data-knit-home-marker]) .kh-hero-visual .pc-win {
-  border-radius: 1rem;
-  box-shadow:
-    0 2rem 5rem color-mix(in srgb, var(--kh-night) 72%, transparent),
-    0 0 5rem color-mix(in srgb, var(--kh-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--kh-paper) 68%, transparent);
+  border-radius: 0.9rem;
+  box-shadow: none;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-bar {
+  position: relative;
+  z-index: 2;
+  height: 0;
+  border: 0;
+  background: none;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-lights,
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-name {
+  display: none;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-toggle {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.9rem;
+  opacity: 0;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc:hover .pc-toggle,
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-toggle:focus-visible {
+  opacity: 0.7;
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-pane--code {
+  border-right-color: color-mix(in srgb, var(--kh-paper) 68%, transparent);
+}
+
+html:has([data-knit-home-marker]) .kh-hero-visual .pc-foot,
+html:has([data-knit-home-marker]) .kh-hero-visual .pc figcaption {
+  display: none;
 }
 
 html:has([data-knit-home-marker]) .kh-hero-visual .pc-lights i:nth-child(1) {
@@ -674,13 +685,8 @@ html:has([data-knit-home-marker]) .kh-hero-visual .pc-lights i:nth-child(3) {
   background: var(--kh-accent);
 }
 
-html:has([data-knit-home-marker]) .kh-hero-visual .pc figcaption {
-  color: var(--kh-muted);
-  font-size: 0.75rem;
-  text-align: center;
-}
-
 html:has([data-knit-home-marker]) .kh-proof {
+  width: min(100% - 3rem, 66rem);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-inline: 1px solid var(--kh-line);
@@ -712,6 +718,10 @@ html:has([data-knit-home-marker]) .kh-proof span {
 
 html:has([data-knit-home-marker]) .kh-main {
   color: var(--kh-ink);
+}
+
+html:has([data-knit-home-marker]) .kh-start {
+  width: min(100% - 3rem, 66rem);
 }
 
 html:has([data-knit-home-marker]) .kh-section {
@@ -1362,14 +1372,6 @@ html:has([data-knit-home-marker]) button:focus-visible {
     padding-block: 3rem;
   }
 
-  html:has([data-knit-home-marker]) .kh-hero-lamby {
-    width: 27rem;
-    top: -3rem;
-    right: -12rem;
-    opacity: 0.09;
-    filter: blur(11px) saturate(0.72);
-  }
-
   html:has([data-knit-home-marker]) .kh-section {
     padding-block: 4rem;
   }
@@ -1428,6 +1430,7 @@ html:has([data-knit-home-marker]) button:focus-visible {
 
   html:has([data-knit-home-marker]) .kh-hero h1 {
     font-size: clamp(2.65rem, 13vw, 3.5rem);
+    line-height: 1.05;
   }
 
   html:has([data-knit-home-marker]) .kh-release {
