@@ -73,6 +73,9 @@ const socialImage = site
   : socialImagePath;
 const brandArtVariables = `:root {
   --knitting-art-avatar: url("${assetPath("brand/knitting-avatar.png")}");
+  --knitting-art-knitting: url("${assetPath("brand/art/knitting-lamb.webp")}");
+  --knitting-art-laptop: url("${assetPath("brand/art/laptop-lamb.webp")}");
+  --knitting-art-mascot: url("${assetPath("brand/knitting-mascot.png")}");
   --knitting-art-sleeping: url("${assetPath("brand/art/sleeping-lamb.webp")}");
 }`;
 const crossOriginIsolationHeaders = {
