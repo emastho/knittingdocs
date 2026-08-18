@@ -1,6 +1,6 @@
 ---
-title: "Knitting"
-description: "Move CPU-heavy JavaScript off the main thread with a zero-dependency worker pool for Node.js, Deno, and Bun."
+title: "JavaScript worker pools"
+description: "A zero-dependency worker pool for running CPU-heavy JavaScript off the main thread in Node.js, Deno, and Bun."
 template: splash
 tableOfContents: false
 prev: false
@@ -8,12 +8,24 @@ next: false
 head:
   - tag: meta
     attrs:
-      name: keywords
-      content: "Knitting, multi-threading runtime, worker pools, worker threads, Node.js, Deno, Bun, parallel JavaScript"
-  - tag: meta
-    attrs:
       property: og:type
       content: website
+  - tag: meta
+    attrs:
+      property: og:title
+      content: "Knitting — Run CPU-heavy JavaScript off the main thread"
+  - tag: meta
+    attrs:
+      property: og:description
+      content: "A zero-dependency worker pool for running CPU-heavy JavaScript off the main thread in Node.js, Deno, and Bun."
+  - tag: meta
+    attrs:
+      name: twitter:title
+      content: "Knitting — Run CPU-heavy JavaScript off the main thread"
+  - tag: meta
+    attrs:
+      name: twitter:description
+      content: "A zero-dependency worker pool for running CPU-heavy JavaScript off the main thread in Node.js, Deno, and Bun."
   - tag: meta
     attrs:
       name: robots
@@ -54,7 +66,7 @@ deno add --npm knitting`;
     </div>
 
     <div class="kh-hero-visual" data-reveal>
-      <PoolCycle caption="One call site, from a local thread to isolated processes." />
+      <PoolCycle caption="One call site, whether work runs in a thread or an isolated process." />
     </div>
 
     <div class="kh-hero-bottom" data-reveal>
@@ -92,7 +104,7 @@ deno add --npm knitting`;
   </div>
   <div>
     <strong>1</strong>
-    <span>typed call surface</span>
+    <span>typed API</span>
   </div>
   <div>
     <strong>2</strong>
@@ -107,11 +119,11 @@ deno add --npm knitting`;
 <div class="kh-main">
   <section class="kh-section kh-start" data-reveal aria-labelledby="kh-start-title">
     <div class="kh-section-intro kh-section-intro--center">
-      <p class="kh-kicker">A smaller worker API</p>
-      <h2 id="kh-start-title">From exported function to worker call.</h2>
+      <p class="kh-kicker">A simpler worker API</p>
+      <h2 id="kh-start-title">From an exported function to a worker call.</h2>
       <p>
-        No worker entrypoint, message router, or response bookkeeping. Define
-        work at module scope, hand it to a pool, and keep the call site typed.
+        No worker entry point, message router, or response plumbing. Define tasks
+        at the module level, pass them to a pool, and keep the call site typed.
       </p>
     </div>
 
@@ -130,7 +142,7 @@ deno add --npm knitting`;
         <li>
           <span>01</span>
           <div>
-            <strong>Export the work</strong>
+            <strong>Export the task</strong>
             <p>Plain functions are tasks. Add <code>task()</code> only when you need options.</p>
           </div>
         </li>
@@ -138,14 +150,14 @@ deno add --npm knitting`;
           <span>02</span>
           <div>
             <strong>Create the pool</strong>
-            <p>Choose threads for speed or processes for a stronger boundary.</p>
+            <p>Choose threads for speed or processes for stronger isolation.</p>
           </div>
         </li>
         <li>
           <span>03</span>
           <div>
-            <strong>Call it normally</strong>
-            <p>The result is a promise. Errors return as real <code>Error</code> objects.</p>
+            <strong>Call it like any function</strong>
+            <p>The result is a promise. Errors come back as standard <code>Error</code> objects.</p>
           </div>
         </li>
       </ol>
@@ -173,11 +185,12 @@ deno add --npm knitting`;
       height="1024"
     />
     <div class="kh-section-intro">
-      <p class="kh-kicker">Everything around the call</p>
-      <h2 id="kh-features-title">The boundary is the product.</h2>
+      <p class="kh-kicker">The mechanics around the call</p>
+      <h2 id="kh-features-title">The boundary is part of the API.</h2>
       <p>
         Knitting handles the mechanics that make workers useful in production:
-        moving data, containing code, scheduling lanes, and bringing failures home.
+        moving data, isolating code, scheduling work, and preserving stack traces
+        and error causes.
       </p>
     </div>
 
@@ -185,11 +198,11 @@ deno add --npm knitting`;
       <article class="kh-feature kh-feature--wide">
         <div class="kh-feature-icon" aria-hidden="true">↔</div>
         <p class="kh-feature-label">Fast by construction</p>
-        <h3>Move the call, not all the bytes.</h3>
+        <h3>Move the work, not all the bytes.</h3>
         <p>
-          Pass typed payloads and promises, move large buffers through zero-copy
-          handles, set task timeouts, cancel with abort signals, and receive useful
-          errors with their stacks and cause chains intact.
+          Pass typed payloads and promises. Move large buffers through zero-copy
+          handles. Set timeouts, cancel with abort signals, and keep stack traces
+          and error causes intact.
         </p>
         <ul class="kh-chip-list" aria-label="Call and payload features">
           <li>Promise inputs</li>
@@ -206,11 +219,11 @@ deno add --npm knitting`;
 
       <article class="kh-feature kh-feature--dark">
         <div class="kh-feature-icon" aria-hidden="true">⌁</div>
-        <p class="kh-feature-label">Pick the boundary</p>
-        <h3>Threads when you trust it. Processes when you don't.</h3>
+        <p class="kh-feature-label">Choose your boundary</p>
+        <h3>Use threads for trusted work. Use processes for isolation.</h3>
         <p>
-          Switch the same task API from runtime threads to isolated processes.
-          Pair <code>importTask</code> with permissions, bubblewrap, or a container.
+          The same task API works with runtime threads or isolated processes.
+          Combine <code>importTask</code> with permissions, bubblewrap, or a container.
         </p>
         <div class="kh-boundary-dial" aria-label="Isolation options from thread to sandbox">
           <span>thread</span><i></i><span>process</span><i></i><span>sandbox</span>
@@ -221,36 +234,38 @@ deno add --npm knitting`;
       <article class="kh-feature">
         <div class="kh-feature-icon" aria-hidden="true">✓</div>
         <p class="kh-feature-label">Failure is part of the API</p>
-        <h3>Deadlines, cancellation, and useful errors.</h3>
+        <h3>Deadlines, cancellation, and clear errors.</h3>
         <p>
-          Bound cooperative work with task timeouts and abort signals, or use a
-          hard wall-clock kill for runaway CPU. Stack traces and cause chains return intact.
+          Limit cooperative work with timeouts and abort signals, or hard-kill
+          runaway CPU work after a deadline. Stack traces and error causes come back intact.
         </p>
         <a href="/guides/defining-tasks/">Define resilient tasks <span aria-hidden="true">→</span></a>
       </article>
 
       <article class="kh-feature">
         <div class="kh-feature-icon" aria-hidden="true">◎</div>
-        <p class="kh-feature-label">Observable when asked</p>
-        <h3>Quiet by default. Precise when debugging.</h3>
+        <p class="kh-feature-label">Observable on demand</p>
+        <h3>Quiet by default. Detailed when debugging.</h3>
         <p>
           Enable only the diagnostics you need: host setup, imports, lifecycle,
-          signals, or global pollution. The logger is not imported when it is off.
+          signals, or global state. When disabled, the logger is not imported.
         </p>
         <a href="/guides/creating-pools/">Configure a pool <span aria-hidden="true">→</span></a>
       </article>
     </div>
   </section>
 
+  <div class="kh-main-rule" aria-hidden="true"></div>
+
   <section id="benchmarks" class="kh-benchmark" data-reveal aria-labelledby="kh-benchmark-title">
     <div class="kh-benchmark-head">
       <div>
-        <p class="kh-kicker">Measured, not imagined</p>
-        <h2 id="kh-benchmark-title">Native-scale IPC.</h2>
+        <p class="kh-kicker">Measured in practice</p>
+        <h2 id="kh-benchmark-title">Low-latency IPC.</h2>
       </div>
       <p>
-        Batch measurements from the public benchmark suite. Read the methodology,
-        hardware notes, and raw results before comparing workloads.
+        These measurements come from the public benchmark suite. Review the
+        methodology, hardware, and raw results before comparing workloads.
       </p>
     </div>
 
@@ -266,7 +281,7 @@ deno add --npm knitting`;
         <p>Node · 81.6 μs per batch of 100</p>
       </article>
       <article>
-        <span>1 MiB copied both ways</span>
+        <span>1 MiB copied round-trip</span>
         <strong>313<small>μs</small></strong>
         <p>Bun · 31.3 ms per batch of 100</p>
       </article>
@@ -283,12 +298,13 @@ deno add --npm knitting`;
   <section class="kh-section" data-reveal aria-labelledby="kh-use-title">
     <div class="kh-section-intro kh-section-intro--split">
       <div>
-        <p class="kh-kicker">Keep the function. Move the heat.</p>
-        <h2 id="kh-use-title">Use it where the event loop feels the work.</h2>
+        <p class="kh-kicker">Keep the function. Move the heavy work.</p>
+        <h2 id="kh-use-title">Keep CPU-heavy work off the event loop.</h2>
       </div>
       <p>
-        Knitting fits the step before a distributed service: CPU-heavy work that
-        belongs with your application but should not run on its request thread.
+        Knitting is the middle ground between running CPU-heavy work on the
+        request thread and moving it to a separate service. Keep the work in your
+        application without blocking the event loop.
       </p>
     </div>
 
@@ -323,10 +339,10 @@ deno add --npm knitting`;
   <section class="kh-final" data-reveal aria-labelledby="kh-final-title">
     <p class="kh-kicker">Your hot path can stay a function.</p>
     <h2 id="kh-final-title">Give it a better place to run.</h2>
-    <p>Start with one exported task. Choose a stronger boundary only when you need it.</p>
+    <p>Start with one exported task. Add stronger isolation only when you need it.</p>
     <div class="kh-actions">
       <a class="kh-button kh-button--primary" href="/start/quick-start/">
-        Build your first pool <span aria-hidden="true">→</span>
+        Create your first pool <span aria-hidden="true">→</span>
       </a>
       <a class="kh-button kh-button--secondary" href="/extras/why/">Why Knitting?</a>
     </div>
@@ -356,10 +372,31 @@ html:has([data-knit-home-marker]) {
   --kh-ink: var(--kh-paper);
   --kh-card: var(--kh-surface);
   --kh-code: var(--kh-night);
+  --kh-code-ink: var(--kh-paper);
+  --kh-code-muted: var(--kh-muted);
+  --kh-button-ink: var(--kh-night);
+  --kh-cloud-ink: var(--kh-night);
   --kh-line: color-mix(in srgb, var(--kh-muted) 24%, transparent);
   --kh-night-line: var(--kh-line);
   overflow-x: clip;
   background: var(--kh-night);
+}
+
+html[data-theme="light"]:has([data-knit-home-marker]) {
+  --kh-night: #fff8ee;
+  --kh-paper: #2b1d14;
+  --kh-accent: #b45216;
+  --kh-surface: #f5e3cf;
+  --kh-muted: #705343;
+  --kh-ink: var(--kh-paper);
+  --kh-card: #fffaf3;
+  --kh-code: #f5e3cf;
+  --kh-code-ink: var(--kh-paper);
+  --kh-code-muted: #8a6852;
+  --kh-button-ink: #fff1d6;
+  --kh-cloud-ink: var(--kh-paper);
+  --kh-line: color-mix(in srgb, var(--kh-ink) 18%, transparent);
+  --kh-night-line: var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) body,
@@ -512,7 +549,7 @@ html:has([data-knit-home-marker]) .kh-release span:first-child {
   padding: 0.28rem 0.55rem;
   border-radius: 999px;
   background: var(--kh-accent);
-  color: var(--kh-night);
+  color: var(--kh-button-ink);
   font-family: var(--sl-font-mono);
   font-size: 0.75rem;
   letter-spacing: -0.02em;
@@ -579,13 +616,13 @@ html:has([data-knit-home-marker]) .kh-button:hover {
 
 html:has([data-knit-home-marker]) .kh-button--primary {
   border-color: var(--kh-accent);
-  background: linear-gradient(100deg, var(--kh-paper), var(--kh-accent));
-  color: var(--kh-night);
+  background: var(--kh-accent);
+  color: var(--kh-button-ink);
   box-shadow: 0 0 2.5rem color-mix(in srgb, var(--kh-accent) 13%, transparent);
 }
 
 html:has([data-knit-home-marker]) .kh-button--primary:hover {
-  background: linear-gradient(100deg, var(--kh-accent), var(--kh-paper));
+  background: color-mix(in srgb, var(--kh-accent) 82%, var(--kh-paper));
 }
 
 html:has([data-knit-home-marker]) .kh-hero .kh-button--cloud {
@@ -599,7 +636,7 @@ html:has([data-knit-home-marker]) .kh-hero .kh-button--cloud {
   overflow: visible;
   background: none;
   box-shadow: none;
-  color: var(--kh-night);
+  color: var(--kh-cloud-ink);
 }
 
 html:has([data-knit-home-marker]) .kh-button--cloud .kh-cloud {
@@ -735,9 +772,8 @@ html:has([data-knit-home-marker]) .kh-proof {
   width: min(100% - 3rem, 66rem);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-inline: 1px solid var(--kh-line);
-  background: var(--kh-line);
-  gap: 1px;
+  border-top: 1px solid var(--kh-line);
+  border-left: 1px solid var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-proof > div {
@@ -745,7 +781,10 @@ html:has([data-knit-home-marker]) .kh-proof > div {
   display: flex;
   align-items: baseline;
   gap: 0.7rem;
+  margin-top: 0;
   padding: 1.3rem 1.4rem;
+  border-right: 1px solid var(--kh-line);
+  border-bottom: 1px solid var(--kh-line);
   background: var(--kh-night);
 }
 
@@ -766,6 +805,24 @@ html:has([data-knit-home-marker]) .kh-main {
   color: var(--kh-ink);
 }
 
+/* Starlight adds a one-rem rhythm to generic markdown siblings. Reset it
+   where the homepage owns the grid rhythm so separators stay one pixel wide. */
+html:has([data-knit-home-marker]) .kh-main > .kh-section,
+html:has([data-knit-home-marker]) .kh-main > .kh-benchmark,
+html:has([data-knit-home-marker]) .kh-main > .kh-final,
+html:has([data-knit-home-marker]) .kh-features > .kh-section-intro,
+html:has([data-knit-home-marker]) .kh-start-grid,
+html:has([data-knit-home-marker]) .kh-feature-grid,
+html:has([data-knit-home-marker]) .kh-metric-grid,
+html:has([data-knit-home-marker]) .kh-use-grid {
+  margin-top: 0;
+}
+
+html:has([data-knit-home-marker]) .kh-feature-grid > .kh-feature,
+html:has([data-knit-home-marker]) .kh-metric-grid > article {
+  margin-top: 0;
+}
+
 html:has([data-knit-home-marker]) .kh-start {
   width: min(100% - 3rem, 66rem);
 }
@@ -774,9 +831,32 @@ html:has([data-knit-home-marker]) .kh-section {
   padding-block: clamp(4.5rem, 8vw, 7rem);
 }
 
+/* A contained Bun-style rule gives the main page a deliberate landmark without
+   letting a decorative layer bleed into either neighboring section. */
+html:has([data-knit-home-marker]) .kh-main-rule {
+  width: min(100% - 3rem, 66rem);
+  height: 9px;
+  margin: 0 auto;
+  background:
+    linear-gradient(var(--kh-line) 0 0) left bottom / 100% 1px no-repeat,
+    repeating-linear-gradient(
+      to right,
+      var(--kh-line) 0 1px,
+      transparent 1px 5rem
+    ) left bottom / 100% 9px no-repeat,
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--kh-line) 58%, transparent) 0 1px,
+      transparent 1px 0.5rem
+    ) left bottom / 100% 4px no-repeat;
+  pointer-events: none;
+}
+
 html:has([data-knit-home-marker]) .kh-features {
   position: relative;
   isolation: isolate;
+  --kh-mascot-size: clamp(18rem, 35vw, 30rem);
+  --kh-mascot-right: clamp(0rem, 2vw, 2rem);
 }
 
 html:has([data-knit-home-marker]) .kh-features::before {
@@ -785,8 +865,8 @@ html:has([data-knit-home-marker]) .kh-features::before {
   z-index: -1;
   width: min(44rem, 72vw);
   height: min(44rem, 72vw);
-  top: 0;
-  right: -12rem;
+  top: -8rem;
+  right: clamp(-10rem, -7vw, -3rem);
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -799,15 +879,15 @@ html:has([data-knit-home-marker]) .kh-features::before {
 html:has([data-knit-home-marker]) .kh-mascot-watermark {
   position: absolute;
   z-index: -1;
-  width: clamp(20rem, 38vw, 33rem);
+  width: var(--kh-mascot-size);
   height: auto;
   top: clamp(1.5rem, 4vw, 3.5rem);
-  right: clamp(-8rem, -7vw, -3rem);
+  right: var(--kh-mascot-right);
   margin: 0;
   opacity: 0.12;
   transform: rotate(4deg);
   filter: saturate(0.82) contrast(1.04);
-  mask-image: linear-gradient(to bottom, black 58%, transparent 96%);
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
   pointer-events: none;
   user-select: none;
 }
@@ -903,7 +983,7 @@ html:has([data-knit-home-marker]) .kh-code-panel-head {
   justify-content: space-between;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--kh-line);
-  color: var(--kh-muted);
+  color: var(--kh-code-muted);
   font-family: var(--sl-font-mono);
   font-size: 0.75rem;
 }
@@ -911,8 +991,8 @@ html:has([data-knit-home-marker]) .kh-code-panel-head {
 html:has([data-knit-home-marker]) .kh-highlighted-code {
   margin: 0;
   overflow-x: auto;
-  background: var(--kh-night);
-  color: var(--kh-paper);
+  background: var(--kh-code);
+  color: var(--kh-code-ink);
   font-size: 0.82rem;
   line-height: 1.78;
   tab-size: 2;
@@ -929,15 +1009,15 @@ html:has([data-knit-home-marker]) .kh-highlighted-code pre {
 
 html:has([data-knit-home-marker]) .kh-highlighted-code pre {
   padding-block: 1.4rem;
-  background: var(--kh-night);
+  background: var(--kh-code);
 }
 
-html:has([data-knit-home-marker]) .kh-highlighted-code span[style] {
-  /* The homepage code surface is always dark, even when the docs theme is light. */
+html:not([data-theme="light"]):has([data-knit-home-marker]) .kh-highlighted-code span[style] {
+  /* Keep the dark palette's token colors while the homepage is in dark mode. */
   --1: var(--0) !important;
 }
 
-html:has([data-knit-home-marker]) .kh-highlighted-code span[style*="D9F5DD"] {
+html:not([data-theme="light"]):has([data-knit-home-marker]) .kh-highlighted-code span[style*="D9F5DD"] {
   /* Shiki emits double-quote delimiters separately from the string body. */
   --0: #ecc48d !important;
   --1: #ecc48d !important;
@@ -952,13 +1032,13 @@ html:has([data-knit-home-marker]) .kh-install-code code {
 html:has([data-knit-home-marker]) .kh-steps {
   display: grid;
   grid-template-rows: repeat(3, 1fr);
-  gap: 1px;
+  gap: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--kh-line);
+  border-top: 1px solid var(--kh-line);
+  border-left: 1px solid var(--kh-line);
   border-radius: 0.85rem;
   overflow: hidden;
-  background: var(--kh-line);
   list-style: none;
 }
 
@@ -968,6 +1048,8 @@ html:has([data-knit-home-marker]) .kh-steps li {
   gap: 1rem;
   align-content: center;
   padding: 1.35rem;
+  border-right: 1px solid var(--kh-line);
+  border-bottom: 1px solid var(--kh-line);
   background: var(--kh-card);
 }
 
@@ -1037,8 +1119,8 @@ html:has([data-knit-home-marker]) .kh-install-code {
   overflow-x: auto;
   border: 1px solid var(--kh-line);
   border-radius: 0.55rem;
-  background: var(--kh-night);
-  color: var(--kh-paper);
+  background: var(--kh-code);
+  color: var(--kh-code-ink);
   font-size: 0.75rem;
   line-height: 1.65;
 }
@@ -1059,45 +1141,55 @@ html:has([data-knit-home-marker]) .kh-benchmark-links > a:not(.kh-button):hover 
 }
 
 html:has([data-knit-home-marker]) .kh-feature-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(2.5rem, 7vw, 7rem);
+}
+
+/* Leave a clean opening wherever Lamby sits so the divider cannot read as a
+   seam between the head and body through the transparent artwork. */
+html:has([data-knit-home-marker]) .kh-feature-grid::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--kh-line) 0
+      calc(100% - var(--kh-mascot-right) - var(--kh-mascot-size) - 0.75rem),
+    transparent calc(100% - var(--kh-mascot-right) - var(--kh-mascot-size) - 0.75rem)
+      100%
+  );
+  pointer-events: none;
 }
 
 html:has([data-knit-home-marker]) .kh-feature {
-  grid-column: span 2;
-  min-height: 25rem;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 1rem;
-  padding: clamp(1.5rem, 3vw, 2.2rem);
-  border: 1px solid var(--kh-line);
-  border-radius: 1rem;
-  overflow: hidden;
-  background: var(--kh-card);
+  padding: clamp(2rem, 4vw, 3.5rem) 0;
+  border-bottom: 1px solid var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-feature--wide {
   grid-column: 1 / -1;
-  min-height: 32rem;
-  justify-content: flex-end;
-  background:
-    radial-gradient(circle at 50% 22%, color-mix(in srgb, var(--kh-accent) 20%, transparent), transparent 16rem),
-    repeating-radial-gradient(circle at 50% 20%, transparent 0 2.5rem, color-mix(in srgb, var(--kh-line) 68%, transparent) 2.52rem 2.56rem),
-    var(--kh-card);
+  max-width: 54rem;
+  padding-top: clamp(2.5rem, 5vw, 4.5rem);
 }
 
 html:has([data-knit-home-marker]) .kh-feature--dark {
-  border-color: var(--kh-night-line);
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--kh-accent) 7%, transparent), transparent 55%),
-    var(--kh-surface);
+  border-color: var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-feature--dark h3,
 html:has([data-knit-home-marker]) .kh-feature--dark > a {
-  color: var(--kh-paper);
+  color: var(--kh-ink);
 }
 
 html:has([data-knit-home-marker]) .kh-feature--dark > p:not(.kh-feature-label) {
@@ -1105,16 +1197,10 @@ html:has([data-knit-home-marker]) .kh-feature--dark > p:not(.kh-feature-label) {
 }
 
 html:has([data-knit-home-marker]) .kh-feature-icon {
-  width: 2.6rem;
-  height: 2.6rem;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--kh-line);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--kh-accent) 13%, var(--kh-card));
   color: var(--kh-accent);
   font-family: var(--sl-font-mono);
-  font-size: 1rem;
+  font-size: 1.6rem;
+  line-height: 1;
 }
 
 html:has([data-knit-home-marker]) .kh-feature > p:not(.kh-feature-label) {
@@ -1137,13 +1223,16 @@ html:has([data-knit-home-marker]) .kh-chip-list {
 }
 
 html:has([data-knit-home-marker]) .kh-chip-list li {
-  padding: 0.45rem 0.65rem;
-  border: 1px solid var(--kh-line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--kh-card) 82%, transparent);
+  padding: 0;
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
   font-size: 0.75rem;
+}
+
+html:has([data-knit-home-marker]) .kh-chip-list li:not(:last-child)::after {
+  content: "·";
+  margin-left: 0.45rem;
+  color: var(--kh-accent);
 }
 
 html:has([data-knit-home-marker]) .kh-boundary-dial {
@@ -1208,7 +1297,8 @@ html:has([data-knit-home-marker]) .kh-benchmark-head > p {
 html:has([data-knit-home-marker]) .kh-metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-block: 1px solid var(--kh-line);
+  border-top: 1px solid var(--kh-line);
+  border-left: 1px solid var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-metric-grid article {
@@ -1217,10 +1307,7 @@ html:has([data-knit-home-marker]) .kh-metric-grid article {
   gap: 1rem;
   padding: 2rem;
   border-right: 1px solid var(--kh-line);
-}
-
-html:has([data-knit-home-marker]) .kh-metric-grid article:last-child {
-  border-right: 0;
+  border-bottom: 1px solid var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-metric-grid article > span {
@@ -1264,29 +1351,23 @@ html:has([data-knit-home-marker]) .kh-benchmark-links > a:not(.kh-button) {
 }
 
 html:has([data-knit-home-marker]) .kh-use-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--kh-line);
-  border-radius: 1rem;
-  overflow: hidden;
-  background: var(--kh-line);
+  border-top: 1px solid var(--kh-line);
 }
 
 html:has([data-knit-home-marker]) .kh-use-grid > a {
   position: relative;
-  min-height: 14rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding: 2rem;
-  background: var(--kh-card);
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.5fr) minmax(12rem, 0.9fr) minmax(15rem, 1.25fr) auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--kh-line);
   text-decoration: none;
-  transition: background 180ms ease;
+  transition: color 180ms ease;
 }
 
-html:has([data-knit-home-marker]) .kh-use-grid > a:hover {
-  background: color-mix(in srgb, var(--kh-card) 90%, var(--kh-accent) 10%);
+html:has([data-knit-home-marker]) .kh-use-grid > a:hover strong {
+  color: var(--kh-accent);
 }
 
 html:has([data-knit-home-marker]) .kh-use-grid span {
@@ -1310,9 +1391,6 @@ html:has([data-knit-home-marker]) .kh-use-grid p {
 }
 
 html:has([data-knit-home-marker]) .kh-use-grid i {
-  position: absolute;
-  right: 1.7rem;
-  bottom: 1.5rem;
   color: var(--kh-accent);
   font-size: 1.25rem;
   font-style: normal;
@@ -1401,6 +1479,10 @@ html:has([data-knit-home-marker]) button:focus-visible {
   html:has([data-knit-home-marker]) .kh-feature {
     grid-column: auto;
   }
+
+  html:has([data-knit-home-marker]) .kh-feature--wide {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 52rem) {
@@ -1422,10 +1504,13 @@ html:has([data-knit-home-marker]) button:focus-visible {
     padding-block: 4rem;
   }
 
+  html:has([data-knit-home-marker]) .kh-features {
+    --kh-mascot-size: clamp(15rem, 58vw, 21rem);
+    --kh-mascot-right: 0rem;
+  }
+
   html:has([data-knit-home-marker]) .kh-mascot-watermark {
-    width: 23rem;
     top: 2.5rem;
-    right: -9rem;
     opacity: 0.08;
   }
 
@@ -1449,23 +1534,41 @@ html:has([data-knit-home-marker]) button:focus-visible {
 
   html:has([data-knit-home-marker]) .kh-steps,
   html:has([data-knit-home-marker]) .kh-feature-grid,
-  html:has([data-knit-home-marker]) .kh-metric-grid,
-  html:has([data-knit-home-marker]) .kh-use-grid {
+  html:has([data-knit-home-marker]) .kh-metric-grid {
     grid-template-columns: 1fr;
   }
 
+  html:has([data-knit-home-marker]) .kh-use-grid > a {
+    grid-template-columns: 1fr auto;
+    gap: 0.45rem 1rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-use-grid span,
+  html:has([data-knit-home-marker]) .kh-use-grid strong {
+    grid-column: 1;
+  }
+
+  html:has([data-knit-home-marker]) .kh-use-grid p {
+    grid-column: 1;
+  }
+
+  html:has([data-knit-home-marker]) .kh-use-grid i {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
   html:has([data-knit-home-marker]) .kh-feature--wide {
-    min-height: 34rem;
+    min-height: 0;
   }
 
   html:has([data-knit-home-marker]) .kh-metric-grid article {
     padding: 1.5rem 0;
-    border-right: 0;
+    border-right: 1px solid var(--kh-line);
     border-bottom: 1px solid var(--kh-line);
   }
 
-  html:has([data-knit-home-marker]) .kh-metric-grid article:last-child {
-    border-bottom: 0;
+  html:has([data-knit-home-marker]) .kh-main-rule {
+    width: min(100% - 2rem, 76rem);
   }
 }
 

@@ -6,6 +6,14 @@
   --knit-ink: var(--knit-night);
   --knit-cream: color-mix(in srgb, var(--knit-paper) 88%, var(--knit-orange));
   --knit-peach: color-mix(in srgb, var(--knit-paper) 78%, var(--knit-orange));
+  --knit-callout-title: var(--knit-peach);
+  --knit-caution-border: color-mix(in srgb, var(--knit-paper) 70%, var(--knit-orange));
+  --knit-danger-border: var(--knit-orange);
+
+  color-scheme: dark;
+
+  /* Starlight's color names are semantic, not literal. Keep the complete
+     token set here so its components do not fall back to the default theme. */
   --sl-color-white: var(--knit-paper);
   --sl-color-gray-1: color-mix(in srgb, var(--knit-paper) 94%, var(--knit-night));
   --sl-color-gray-2: color-mix(in srgb, var(--knit-paper) 78%, var(--knit-night));
@@ -13,6 +21,7 @@
   --sl-color-gray-4: color-mix(in srgb, var(--knit-paper) 36%, var(--knit-night));
   --sl-color-gray-5: color-mix(in srgb, var(--knit-paper) 20%, var(--knit-night));
   --sl-color-gray-6: color-mix(in srgb, var(--knit-paper) 10%, var(--knit-night));
+  --sl-color-gray-7: color-mix(in srgb, var(--knit-paper) 5%, var(--knit-night));
   --sl-color-black: var(--knit-night);
   --sl-color-blue-low: color-mix(in srgb, var(--knit-orange) 12%, var(--knit-night));
   --sl-color-blue: var(--knit-orange);
@@ -35,13 +44,19 @@
   --sl-color-bg: var(--knit-night);
   --sl-color-bg-nav: color-mix(in srgb, var(--knit-night) 88%, var(--knit-paper));
   --sl-color-bg-sidebar: color-mix(in srgb, var(--knit-night) 94%, var(--knit-paper));
+  --sl-color-bg-inline-code: var(--sl-color-gray-5);
+  --sl-color-bg-accent: var(--sl-color-accent-high);
   --sl-color-hairline-light: color-mix(in srgb, var(--knit-cream) 18%, transparent);
   --sl-color-hairline: color-mix(in srgb, var(--knit-cream) 26%, transparent);
+  --sl-color-hairline-shade: var(--sl-color-black);
   --sl-color-text: var(--knit-paper);
   --sl-color-text-accent: color-mix(in srgb, var(--knit-orange) 76%, var(--knit-paper));
+  --sl-color-text-invert: var(--sl-color-accent-low);
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --sl-color-white: var(--knit-night);
   --sl-color-gray-1: color-mix(in srgb, var(--knit-night) 92%, var(--knit-paper));
   --sl-color-gray-2: color-mix(in srgb, var(--knit-night) 78%, var(--knit-paper));
@@ -49,20 +64,40 @@
   --sl-color-gray-4: color-mix(in srgb, var(--knit-night) 36%, var(--knit-paper));
   --sl-color-gray-5: color-mix(in srgb, var(--knit-night) 18%, var(--knit-paper));
   --sl-color-gray-6: color-mix(in srgb, var(--knit-night) 8%, var(--knit-paper));
+  --sl-color-gray-7: color-mix(in srgb, var(--knit-paper) 99%, var(--knit-orange));
   --sl-color-black: var(--knit-paper);
-  --sl-color-blue-low: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
-  --sl-color-blue: color-mix(in srgb, var(--knit-orange) 78%, var(--knit-night));
-  --sl-color-blue-high: color-mix(in srgb, var(--knit-night) 72%, var(--knit-orange));
-  --sl-color-accent-low: color-mix(in srgb, var(--knit-paper) 82%, var(--knit-orange));
-  --sl-color-accent: color-mix(in srgb, var(--knit-orange) 78%, var(--knit-night));
-  --sl-color-accent-high: color-mix(in srgb, var(--knit-night) 72%, var(--knit-orange));
+  --sl-color-blue-low: color-mix(in srgb, var(--knit-paper) 88%, var(--knit-orange));
+  --sl-color-blue: color-mix(in srgb, var(--knit-orange) 70%, var(--knit-night));
+  --sl-color-blue-high: color-mix(in srgb, var(--knit-orange) 78%, var(--knit-night));
+  --sl-color-purple-low: var(--sl-color-blue-low);
+  --sl-color-purple: var(--sl-color-blue);
+  --sl-color-purple-high: var(--sl-color-blue-high);
+  --sl-color-green-low: var(--sl-color-blue-low);
+  --sl-color-green: var(--sl-color-blue);
+  --sl-color-green-high: var(--sl-color-blue-high);
+  --sl-color-orange-low: var(--sl-color-blue-low);
+  --sl-color-orange: var(--sl-color-blue);
+  --sl-color-orange-high: var(--sl-color-blue-high);
+  --sl-color-red-low: var(--sl-color-blue-low);
+  --sl-color-red: var(--sl-color-blue);
+  --sl-color-red-high: var(--sl-color-blue-high);
+  --sl-color-accent-low: var(--sl-color-blue-low);
+  --sl-color-accent: var(--sl-color-blue);
+  --sl-color-accent-high: var(--sl-color-blue-high);
   --sl-color-bg: color-mix(in srgb, var(--knit-paper) 96%, var(--knit-orange));
   --sl-color-bg-nav: var(--knit-paper);
   --sl-color-bg-sidebar: color-mix(in srgb, var(--knit-paper) 97%, var(--knit-orange));
+  --sl-color-bg-inline-code: color-mix(in srgb, var(--knit-paper) 88%, var(--knit-orange));
+  --sl-color-bg-accent: var(--sl-color-accent);
   --sl-color-hairline-light: color-mix(in srgb, var(--knit-ink) 10%, transparent);
   --sl-color-hairline: color-mix(in srgb, var(--knit-ink) 18%, transparent);
+  --sl-color-hairline-shade: var(--sl-color-gray-6);
   --sl-color-text: color-mix(in srgb, var(--knit-night) 88%, var(--knit-paper));
   --sl-color-text-accent: color-mix(in srgb, var(--knit-orange) 70%, var(--knit-night));
+  --sl-color-text-invert: var(--sl-color-black);
+  --knit-callout-title: color-mix(in srgb, var(--knit-orange) 72%, var(--knit-night));
+  --knit-caution-border: color-mix(in srgb, var(--knit-orange) 72%, var(--knit-night));
+  --knit-danger-border: color-mix(in srgb, var(--knit-orange) 82%, var(--knit-night));
 }
 
 body {
@@ -158,7 +193,7 @@ html:not(:has([data-knit-home-marker])) .main-frame {
   position: relative;
   z-index: 1;
   gap: 0.45rem;
-  color: var(--knit-peach);
+  color: var(--knit-callout-title);
 }
 
 .sl-markdown-content .starlight-aside--note .starlight-aside__content {
@@ -180,7 +215,7 @@ html:not(:has([data-knit-home-marker])) .main-frame {
 
 .sl-markdown-content .starlight-aside--caution {
   border: 1px solid color-mix(in srgb, var(--knit-orange) 62%, var(--sl-color-hairline));
-  border-inline-start: 0.3rem solid color-mix(in srgb, var(--knit-paper) 70%, var(--knit-orange));
+  border-inline-start: 0.3rem solid var(--knit-caution-border);
   background:
     radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--knit-orange) 22%, transparent), transparent 8rem),
     color-mix(in srgb, var(--knit-orange) 11%, transparent);
@@ -202,7 +237,7 @@ html:not(:has([data-knit-home-marker])) .main-frame {
 
 .sl-markdown-content .starlight-aside--danger {
   border: 1px solid color-mix(in srgb, var(--knit-orange) 72%, var(--sl-color-hairline));
-  border-inline-start: 0.3rem solid var(--knit-orange);
+  border-inline-start: 0.3rem solid var(--knit-danger-border);
   background:
     radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--knit-orange) 30%, transparent), transparent 8rem),
     color-mix(in srgb, var(--knit-orange) 16%, transparent);
@@ -236,11 +271,11 @@ html:not(:has([data-knit-home-marker])) .main-frame {
 }
 
 .sl-markdown-content .starlight-aside--caution .starlight-aside__title {
-  color: color-mix(in srgb, var(--knit-paper) 74%, var(--knit-orange));
+  color: var(--knit-callout-title);
 }
 
 .sl-markdown-content .starlight-aside--danger .starlight-aside__title {
-  color: var(--knit-peach);
+  color: var(--knit-callout-title);
 }
 
 .pagination-links a {
@@ -294,8 +329,8 @@ html:has([data-knit-home-marker]) .kh-final::after {
   z-index: -1;
   width: clamp(12rem, 20vw, 17rem);
   aspect-ratio: 1.47;
-  right: clamp(-3.5rem, -2vw, -1rem);
-  bottom: -1.5rem;
+  right: clamp(1rem, 3vw, 3rem);
+  bottom: 0.75rem;
   background: var(--knitting-art-sleeping) center bottom / contain no-repeat;
   opacity: 0.18;
   transform: rotate(-3deg);
@@ -318,8 +353,9 @@ html:has([data-knit-home-marker]) .kh-final::after {
   }
 
   html:has([data-knit-home-marker]) .kh-final::after {
-    width: 12rem;
-    right: -4.5rem;
+    width: 10rem;
+    right: 0.75rem;
+    bottom: 0.5rem;
     opacity: 0.11;
   }
 

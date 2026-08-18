@@ -45,7 +45,7 @@ const firstFrame = [
           <span class="pc-k">host</span>
           <span class="pc-v">bun · main thread</span>
         </div>
-        <div class="pc-call"><code>await pool.call.hello("world")</code></div>
+        <div class="pc-call"><code>await <span class="pc-call-fn">pool.call.hello</span><span class="pc-call-punc">(</span>"world"<span class="pc-call-punc">)</span></code></div>
         <div class="pc-link"><span data-bridge-label>shared memory</span></div>
         <div class="pc-workers" data-workers></div>
         <p class="pc-note" data-note>same process, shared memory</p>
@@ -710,6 +710,11 @@ const firstFrame = [
     color: color-mix(in srgb, var(--pc-accent) 70%, #ffffff 30%);
     font-family: var(--pc-mono);
     font-size: 0.75rem;
+  }
+
+  .pc-call-fn,
+  .pc-call-punc {
+    color: var(--pc-ink);
   }
 
   .pc-link {

@@ -103,7 +103,7 @@ export default defineConfig({
     starlight({
       title: "Knitting",
       description:
-        "Knitting is a multi-threading runtime for Node.js, Deno, and Bun, designed for low-latency worker task execution and high-throughput parallel JavaScript.",
+        "A zero-dependency worker pool for running CPU-heavy JavaScript off the main thread in Node.js, Deno, and Bun.",
       favicon: "/favicon.ico",
       head: [
         {
@@ -121,7 +121,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Knitting sheep mascot — multi-threading runtime for JavaScript",
+            content: "Knitting's sheep mascot beside a JavaScript worker-pool illustration",
           },
         },
         {
@@ -163,7 +163,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image:alt",
-            content: "Knitting sheep mascot — multi-threading runtime for JavaScript",
+            content: "Knitting's sheep mascot beside a JavaScript worker-pool illustration",
           },
         },
         {
