@@ -1342,7 +1342,7 @@ z
      <use xlink:href="#DejaVuSans-73" transform="translate(4305.03125 0)"/>
     </g>
    </g>
-   <g id="text_13">
+   <g id="text_13" style="display: none">
     <!-- Arc Comparison Size Sweep (less is better) -->
     <g style="fill: #f0f0f0" transform="translate(58.278365 34.46201) scale(0.17 -0.17)">
      <defs>

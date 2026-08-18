@@ -67,7 +67,7 @@ const assetPath = (asset) => {
   const normalized = String(asset).replace(/^\/+/, "");
   return base ? `${base}/${normalized}` : `/${normalized}`;
 };
-const socialImagePath = assetPath("brand/og-image.png");
+const socialImagePath = assetPath("brand/og-image-worker-runtime-gradient.png");
 const socialImage = site
   ? new URL(socialImagePath, site).toString()
   : socialImagePath;
@@ -103,12 +103,19 @@ export default defineConfig({
     starlight({
       title: "Knitting",
       description:
-        "A zero-dependency worker pool for running CPU-heavy JavaScript off the main thread in Node.js, Deno, and Bun.",
+        "Knitting is a zero-dependency worker runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on worker threads or isolated processes without blocking the main thread.",
       favicon: "/favicon.ico",
       head: [
         {
           tag: "style",
           content: brandArtVariables,
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:site_name",
+            content: "Knitting",
+          },
         },
         {
           tag: "meta",
@@ -121,7 +128,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Knitting's sheep mascot beside a JavaScript worker-pool illustration",
+            content: "Knitting worker runtime diagram showing a typed task dispatched to threads or isolated processes",
           },
         },
         {
@@ -163,7 +170,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image:alt",
-            content: "Knitting's sheep mascot beside a JavaScript worker-pool illustration",
+            content: "Knitting worker runtime diagram showing a typed task dispatched to threads or isolated processes",
           },
         },
         {
@@ -222,6 +229,7 @@ export default defineConfig({
         },
       ],
       customCss: [
+        "./src/styles/layers.css",
         "./src/styles/katex.css",
         "./src/styles/headings.css",
         "./src/styles/home-cards.css",

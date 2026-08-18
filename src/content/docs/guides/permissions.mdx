@@ -1,14 +1,15 @@
 ---
 title: Permissions
-description: Runtime permission policy for worker processes.
+description: Control what worker tasks can read, write, import, and run.
 sidebar:
   order: 5
 ---
 
-Workers execute task code, so permission policy controls what those workers can
-access at runtime.
+Workers run your task code, and the `permission` option controls what that code
+can access at runtime. You can restrict file access, network connections,
+environment variables, imports, and subprocesses.
 
-Set `permission` in `createPool(...)`:
+Set the policy when you create the pool:
 
 ```ts
 import { createPool, isMain, task } from "knitting";
@@ -27,27 +28,34 @@ if (isMain) {
 }
 ```
 
-## Modes
+## Choose a mode
 
-- omit `permission`
-  strict defaults plus `allowImport: true` (web imports allowed).
-- `permission: {}` or `permission: { mode: "strict" }`
-  conservative defaults in explicit strict mode.
-- `permission: "unsafe"`
-  disables permission flags and strips inherited Node permission flags.
+There are three ways to configure permissions:
 
-`console` can be set in object mode for compatibility.
-Default is `false` in strict mode and `true` in unsafe mode.
+- **Leave `permission` out.** Knitting uses the strict defaults and allows
+  imports, including web imports.
+- **Use `permission: {}` or `permission: { mode: "strict" }`.** Knitting uses
+  the conservative strict defaults and lets you add only the access your tasks
+  need.
+- **Use `permission: "unsafe"`.** Knitting disables runtime permission flags
+  and removes inherited Node permission flags from the worker.
+
+For most applications, keep strict mode and add a small allow-list. Use
+`"unsafe"` only when a dependency needs access that the runtime cannot express
+with the strict policy.
+
+The `console` option controls whether worker `console.*` calls are forwarded to
+the host. It defaults to `false` in strict mode and `true` in unsafe mode.
 
 ```ts
 createPool({ permission: { mode: "strict", console: true } })({ work });
 createPool({ permission: "unsafe" })({ work });
 ```
 
-## Fine-grained policy
+## Grant only what the task needs
 
-In object mode you grant exactly what your tasks need — anything you don't list
-stays denied:
+Object mode lets you grant access one capability at a time. Anything you do not
+list stays denied:
 
 ```ts
 createPool({
@@ -64,46 +72,46 @@ createPool({
 })({ work });
 ```
 
-| Field | Meaning |
+| Field | Controls |
 | --- | --- |
-| `read` / `write` | Path allow-lists. `true` means unrestricted. |
-| `denyRead` / `denyWrite` | Explicit deny entries layered on top. |
-| `net` / `denyNet` | Network host allow / deny lists. |
-| `allowImport` | Modules the worker may import. `true` allows all. |
-| `env` | `{ allow, deny, files }` for environment-variable access. |
-| `run` / `denyRun` | Subprocess execution allow / deny lists. |
-| `console` | Let worker `console.*` reach the host. |
+| `read` / `write` | Filesystem allow-lists. `true` means unrestricted access. |
+| `denyRead` / `denyWrite` | Explicit denials applied after the allow-list. |
+| `net` / `denyNet` | Network host allow- and deny-lists. |
+| `allowImport` | Modules the worker may import. `true` allows all imports. |
+| `env` | Environment access through `{ allow, deny, files }`. |
+| `run` / `denyRun` | Subprocess execution allow- and deny-lists. |
+| `console` | Whether worker `console.*` output reaches the host. |
 
-Enforcement uses each runtime's native mechanism, so coverage varies (see
-[Runtime mapping](#runtime-mapping)). Treat permissions as a guardrail, not the
-only boundary for hostile code — for that, combine them with
-[process workers](/guides/process-workers/).
+Knitting uses each runtime's own permission mechanism, so the exact coverage
+varies by runtime (see [how each runtime enforces it](#how-the-runtimes-enforce-it)).
+Permissions are a guardrail, not a complete boundary for untrusted code. For
+stronger isolation, combine them with [process workers](/guides/process-workers/).
 
-## Strict defaults
+## What strict mode allows
 
-Strict mode computes a conservative profile:
+Strict mode starts with a conservative policy:
 
-- read/write rooted at current `cwd`
-- deny-write for `node_modules`
-- deny read/write for sensitive paths:
-  `.env`, `.git`, `.npmrc`, `.docker`, `.secrets`,
-  `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`,
-  `~/.config/gcloud`, `~/.kube`
-- deny read/write for POSIX-sensitive paths:
-  `/proc`, `/proc/self`, `/proc/self/environ`, `/proc/self/mem`,
-  `/sys`, `/dev`, `/etc`
-- read support for `deno.lock` and `bun.lock*`
+- reads and writes are limited to the current `cwd`;
+- writes to `node_modules` are denied;
+- sensitive files and directories are denied, including `.env`, `.git`,
+  `.npmrc`, `.docker`, `.secrets`, `~/.ssh`, `~/.gnupg`, `~/.aws`,
+  `~/.azure`, `~/.config/gcloud`, and `~/.kube`;
+- sensitive POSIX paths are denied, including `/proc`, `/sys`, `/dev`, and
+  `/etc`;
+- `deno.lock` and `bun.lock*` can still be read.
 
-`permission: "unsafe"` disables runtime permission flags and strips inherited
-Node permission flags from worker `execArgv`.
+`permission: "unsafe"` turns off runtime permission flags and removes inherited
+Node permission flags from the worker's `execArgv`.
 
-## Runtime mapping
+## How the runtimes enforce it
 
-Permission protocol values are mapped to each runtime differently.
+Knitting translates the same policy into each runtime's native permission
+system. The result is slightly different on Node.js, Deno, and Bun.
 
 ### Node.js workers
 
-Workers receive `--permission` / `--experimental-permission` plus:
+Node workers receive `--permission` or `--experimental-permission`, along with
+the relevant allow flags:
 
 - `--allow-fs-read`
 - `--allow-fs-write`
@@ -112,29 +120,32 @@ Workers receive `--permission` / `--experimental-permission` plus:
 - `--allow-addons`
 - `--allow-wasi`
 
-Node worker flags are allow-list based, so protocol deny lists are not
-expressible as Node worker flags.
+Node's worker flags are allow-list based. That means Knitting cannot represent
+every protocol-level deny-list rule as a native Node flag.
 
 ### Deno workers
 
-Workers receive `Worker.deno.permissions` when enabled.
+When enabled, Deno workers receive a `Worker.deno.permissions` policy.
 
-This is applied only when one of these is true:
+Knitting applies it only when one of these is true:
 
-- `--unstable-worker-options` is detected (Linux `/proc` probe), or
+- it detects `--unstable-worker-options` (using a Linux `/proc` check); or
 - `KNITTING_DENO_WORKER_PERMISSIONS=1` is set.
 
 ### Bun workers
 
-Bun currently has no worker permission flags.
-Protocol values are accepted for API compatibility but are not enforced by Bun
-runtime flags.
+Bun does not currently provide worker permission flags. Knitting accepts the
+permission values for API compatibility, but Bun cannot enforce them through
+runtime flags yet.
 
-## Process execution overrides
+## Controlling subprocesses
 
-Object mode supports runtime-specific process execution overrides:
+If a task needs to start another process, object mode also supports
+runtime-specific overrides:
 
 - `node.allowChildProcess?: boolean`
-- `deno.allowRun?: boolean` — legacy, superseded by the top-level `run` allow-list.
+- `deno.allowRun?: boolean` — a legacy option, superseded by the top-level
+  `run` allow-list.
 
-Both default to `false` in strict mode.
+Both default to `false` in strict mode. Prefer the top-level `run` allow-list
+when you need to permit specific commands.

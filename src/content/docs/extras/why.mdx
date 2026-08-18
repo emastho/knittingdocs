@@ -18,25 +18,24 @@ sidebar:
   order: 1
 ---
 
-Most apps do not need a new service the first time one function gets expensive.
-They need a better place for that function to run.
+The first time one function gets expensive, the usual advice is to pull it out
+into a service. That is a lot of machinery for one function.
 
-A parser gets large. A validator gets complicated. A hash, render, or
-compression step starts taking more of the event loop than it should. The rest
-of the app is still fine. The problem is smaller than the architecture we often
-reach for.
+A parser grows. A validator picks up rules. A hash, render, or compression step
+starts taking more of the event loop than it should. Nothing else about the app
+has changed: one function got heavy, and the fix on offer is new infrastructure.
 
-Knitting is built for that middle place: keep the code local, but move the work
-off the main thread.
+Knitting is for that gap. Keep the code where it is, move the work off the main
+thread.
 
 ## The hot-function problem
 
 CPU pressure in a JavaScript app rarely spreads evenly. Real codebases often
 have thousands of functions, but only a few of them create most of the cost.
 
-That matters because it changes the size of the fix. You may not have an
-application problem. You may have a function problem. If the heat is local, the
-solution should be local too.
+That changes the size of the fix. When the cost is concentrated in a handful of
+functions, the response can be concentrated too — moving the expensive part does
+not have to mean moving the application around it.
 
 ## The usual choices
 
@@ -49,11 +48,11 @@ cannot spend on everything else. Cheap routes queue behind expensive ones.
 Scaling out dilutes the pain, but it does not remove the hot path from the
 event loop.
 
-**Workers.** The shape is closer: move the work somewhere else on the
-same machine. The rough part is everything around it. The runtime gives you
-`postMessage`; the rest is yours: request IDs, routing, errors, promises,
-lifecycle, payload choices. That plumbing is the original reason Knitting
-exists.
+**Workers.** Closer to the mark: the work leaves the main thread and stays on
+the machine. What makes it painful is everything around it. The runtime hands
+you `postMessage` and leaves the rest to you — request IDs, routing, errors,
+promises, lifecycle, payload choices. That plumbing is the original reason
+Knitting exists.
 
 **Make it a service.** Sometimes that is the right call. Separate ownership,
 deploy cadence, and failure domains are all real reasons to cross the network.
@@ -64,11 +63,10 @@ somewhere else to run.
 
 ## The fourth shape
 
-Knitting adds a smaller boundary:
+Knitting adds a smaller boundary: the code stays where it is, and only the
+execution moves.
 
-> Keep the code local. Move the execution boundary.
-
-The function stays in your repo, in your language, in your types &mdash; one
+The function stays in your repo, in your language, in your types — one
 `import` away from its caller. What changes is *where it runs* and *what it can
 touch*. You export it, hand it to a pool, and call it like the async function it
 already was. Underneath, it runs on a real thread or an isolated process.
@@ -78,17 +76,17 @@ import { createPool, isMain } from "knitting";
 
 export const hello = (name: string) => "Hello " + name;
 
-using pool = createPool({})({ hello });
-
-if (isMain) console.log(await pool.call.hello("World!"));
+if (isMain) {
+  using pool = createPool({})({ hello });
+  console.log(await pool.call.hello("World!"));
+}
 ```
 
 That is the whole boundary: one export, one pool, one call. `hello` still reads
 like a plain function, but it no longer runs on the main thread.
 
-So Knitting is a **function-level execution boundary**. Not a new service, and
-not just a worker helper &mdash; a way to move the expensive part without moving
-the whole app.
+Call that a **function-level execution boundary**: a way to move the expensive
+part without moving the whole app.
 
 Compare what each option costs for the same few hot functions:
 
@@ -101,7 +99,7 @@ Compare what each option costs for the same few hot functions:
 | Isolation available | none | thread only | full, always-on | a dial, per pool |
 | New deploy unit | no | no | yes | no |
 
-Two details make the fourth shape useful.
+Two things make that boundary worth having.
 
 **Transport cost matters.** Workers can feel disappointing when reaching the
 worker costs more than the work. Knitting uses shared-memory mailboxes instead
@@ -122,8 +120,6 @@ Knitting does not replace distributed systems. If you need cross-machine scale,
 separate failure domains, or team-level ownership boundaries, you still need the
 network. Knitting is for the moment before that, when the code belongs in the
 app but the work no longer belongs on the main thread.
-
-> Not every hot path deserves a hostname.
 
 ## Where it's going
 

@@ -10,9 +10,9 @@ banner:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Ever wondered what actually happens between `call.myTask(args)` and the result landing back in your hands? This page walks that path. You don't need any of it to *use* Knitting -- the [Quick start](/start/quick-start/) and [Creating pools](/guides/creating-pools/) guides have you covered -- but it's here for when you're curious *why* things are fast, chasing a strange bug, or reaching for the advanced knobs.
+This page follows one `call.myTask(args)` from your code down to shared memory and back. You don't need any of it to *use* Knitting -- the [Quick start](/start/quick-start/) and [Creating pools](/guides/creating-pools/) guides have you covered -- but it helps when you are curious why things are fast, chasing a strange bug, or reaching for the advanced knobs.
 
-One caveat up front: this is a **simplified mental model**. The real implementation has many more moving parts -- fast paths, edge cases, platform quirks -- that are deliberately left out so the big picture stays readable. Treat the numbers and steps below as the shape of things, not the full contract.
+The real implementation has many more moving parts -- fast paths, edge cases, platform quirks -- left out here so the big picture stays readable. Take the numbers and steps below as the shape of things rather than a contract.
 
 ## High-level picture
 
@@ -98,7 +98,7 @@ Workers don't busy-wait by default. The idle cycle is a bounded spin, then a par
 2. **Park** -- call `Atomics.wait` with a timeout of `parkMs`. The thread sleeps until notified or the timeout expires.
 3. **Wake** -- `Atomics.notify` from the host breaks the park immediately.
 
-This means idle workers consume near-zero CPU while still waking up within microseconds when work arrives.
+So an idle worker costs almost no CPU and still wakes within microseconds of work arriving.
 
 ## Data path: payload buffers
 
@@ -132,7 +132,7 @@ When you call `call.myTask(args)`, the host **handler**:
 3. Encodes the arguments and writes them to that lane's mailbox (or queues them for the inliner).
 4. Returns a promise that resolves when the response arrives.
 
-The handler runs on *every* call. *Which* lane it picks is the job of the **balancer** strategy -- and that only matters when there's more than one lane to choose between. With a single worker and no inliner there is nothing to balance, so the balancer is bypassed entirely.
+The handler runs on *every* call; the **balancer** only decides *which* lane it lands on. With a single worker and no inliner there is nothing to balance, so the balancer is bypassed entirely.
 
 ### Balancer strategies
 
@@ -164,7 +164,7 @@ Key details:
 - `position: "first" | "last"` -- where the inline lane sits in the balancer's lane order.
 - `batchSize` -- how many inline tasks run per event-loop tick.
 - `dispatchThreshold` -- minimum in-flight calls before the inline lane is eligible.
-- Abort signals on inline tasks use a static toolkit where `hasAborted()` always returns `false` (inline tasks can't be individually cancelled since they share the host thread).
+- Abort signals on inline tasks use a static toolkit where `hasAborted()` always returns `false` (inline tasks can't be individually cancelled since they share the host thread). From the next release the toolkit also carries `now()`, which behaves normally and reads the host's clock.
 
 See [Inliner guide](/guides/inliner) for when to use it and when to avoid it.
 
@@ -253,7 +253,7 @@ Either way:
 
 Tasks defined with `abortSignal: true` or `abortSignal: { hasAborted: true }` use a shared-memory bitset to track cancellation state. The pool has a fixed capacity (default 258, tunable via `abortSignalCapacity`).
 
-When the host calls `.reject()` on an abort-aware promise, it flips a bit in the shared bitset. The worker can poll `toolkit.hasAborted()` to check that bit and bail out early.
+When the host calls `.reject()` on an abort-aware promise, it flips a bit in the shared bitset. The worker can poll `signal.hasAborted()` to check that bit and bail out early.
 
 This is cooperative, not preemptive -- the worker must check. If it doesn't, the host promise still rejects immediately, but the worker task runs to completion in the background.
 

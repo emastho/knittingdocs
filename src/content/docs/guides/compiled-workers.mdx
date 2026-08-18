@@ -1,0 +1,196 @@
+---
+title: Compiled workers
+description: Compile supported tasks into native Porffor workers.
+sidebar:
+  order: 11
+---
+
+If you want to experiment with compiling a task into native code, compiled
+workers let you do that with [Porffor](https://github.com/CanadaHonk/porffor).
+Porffor compiles the task module and Knitting runs the result as a child
+process.
+
+Your task code and the `pool.call.*()` API stay the same. The only change is
+the worker configuration:
+
+:::caution
+Compiled workers are not in the current release (`0.1.56`); they land in the
+next one. Porffor is also still early-stage, so expect its compiler and artifact
+format to change. The generated program is native code and is not sandboxed. This is a
+feature to try with code you trust, not a security boundary for untrusted
+tasks.
+:::
+
+## Enable Porffor
+
+Let's say your task module is `tasks.ts`. Knitting will look beside it for two
+files: the compiled program, `tasks.knt`, and its manifest,
+`tasks.knt.json`.
+
+For the usual setup, use both settings below. They tell Knitting to use Porffor
+and to reuse the compiled file whenever it is still valid:
+
+```ts
+import { createPool, isMain } from "knitting";
+
+export const hello = (name: string) => "Hello " + name;
+
+if (isMain) {
+  using pool = createPool({
+    worker: { runtime: "compiled", processRuntime: "porffor" },
+  })({ hello });
+
+  console.log(await pool.call.hello("World!")); // Hello World!
+}
+```
+
+Each setting has a separate job:
+
+- `runtime: "compiled"` reuses a compatible `.knt` file and rebuilds it if it
+  is missing, stale, or no longer matches the current setup.
+- `processRuntime: "porffor"` selects Porffor. Used by itself, it rebuilds once
+  for each pool.
+
+If the pool has several workers, Knitting still compiles the module only once;
+all of the native workers start from the same artifact.
+
+## Keep the task module self-contained
+
+Porffor bundles the task module and everything it imports. That works well for
+small, self-contained computations, but it means the task module has to stay
+simple.
+
+There are two rules worth knowing:
+
+- From `knitting`, import only `task`, `isMain`, and `createPool`. APIs such as
+  `Envelope`, `importTask`, and `checkCompiledWorker` do not have compiled-worker
+  equivalents and will make the build fail. Keep host-only code in a separate
+  module when you need it.
+- Do not import Node.js built-ins such as `node:fs` or `node:crypto`. Porffor
+  does not provide them, and some unsupported imports can hang the compiler
+  instead of producing a useful error. Plain local modules are fine.
+
+The short version: compiled workers are a good match for focused, synchronous
+computation. If a task needs I/O, timers, or the wider Node.js runtime, a
+regular thread or process worker will be a better fit.
+
+## Build artifacts ahead of time
+
+When Knitting needs to build automatically, it looks for Porffor in this order:
+
+1. `worker.compiled.compiler`
+2. `PORFFOR_MAIN` or `PORF`
+3. `porf` on `PATH`
+
+If it cannot find one, Knitting downloads a pinned compiler to
+`$XDG_CACHE_HOME/knitting` or, when that variable is not set,
+`~/.cache/knitting`.
+
+For deployments, you may prefer to build the artifact in CI or during your
+release step. That keeps production from invoking a compiler at startup:
+
+```bash
+bun run build:compiled --module tasks.ts --out tasks.knt --tasks addOne
+```
+
+```ts
+const pool = createPool({
+  worker: {
+    runtime: "compiled",
+    compiled: {
+      artifact: "./build/tasks-linux-x64.knt",
+      build: false,
+    },
+  },
+})({ addOne });
+```
+
+The `worker.compiled.build` option controls when Knitting is allowed to build:
+
+- `true` — build only when the artifact cannot be reused;
+- `false` — never build; fail if the artifact is unavailable;
+- `"always"` — rebuild every time.
+
+Use `worker.compiled.manifest` when the sidecar manifest is somewhere else.
+Before starting a worker, Knitting checks that the manifest still matches the
+protocol version, platform, architecture, source module, source timestamp, and
+requested task names.
+
+If you want to check this yourself, `checkCompiledWorker(task, options)` reports
+the compatibility state without building the artifact or running the task.
+
+## Supported values and limits
+
+Compiled workers support fewer payload types than regular thread and process
+workers:
+
+| Value | Behavior |
+| --- | --- |
+| JSON primitives, arrays, and plain objects | Copied; limited to 1 MiB per call |
+| `ArrayBuffer`, `DataView`, and typed arrays | Copied |
+| `ProcessSharedBuffer` | Mapped by the worker instead of copied |
+| `Promise<supported>` | Resolved on the host before dispatch |
+| `Envelope`, `BufferReference`, and BigInt typed arrays | Rejected |
+
+There are two other limits to keep in mind: task functions must be synchronous,
+so returning a promise is not supported, and strings may contain BMP characters
+but not supplementary Unicode code points yet.
+
+For large binary data, use `ProcessSharedBuffer`. It is the one payload type
+that a compiled worker maps directly instead of copying through the call frame.
+See [Shared memory](/guides/shared-memory/) to get started with it.
+
+## Abort signals
+
+You can also use cooperative cancellation on POSIX systems. Knitting publishes
+the abort state in named shared memory, and the compiled worker reads it
+directly instead of asking the host on every check.
+
+```ts
+import { task } from "knitting";
+
+export const search = task({
+  abortSignal: true,
+  f: (limit: number, signal) => {
+    for (let i = 0; i < limit; i++) {
+      if (signal.hasAborted()) return i;
+    }
+    return limit;
+  },
+});
+```
+
+`signal.now()` returns a monotonic millisecond clock for measuring elapsed time
+inside the task. Cancellation is cooperative: if the task never checks the
+signal, it continues until it finishes. Windows support is not available yet.
+
+## What is not supported yet
+
+Porffor is intentionally a smaller backend for now. The options below fail
+during pool creation or invocation instead of quietly switching to another
+worker type:
+
+| Option | Why it is unsupported |
+| --- | --- |
+| `inliner`, `host` | There is no compiled equivalent of a host-side lane. |
+| `permission` | Native artifacts do not use runtime permission flags. |
+| `worker.bootstrap` | The worker does not import a host bootstrap module. |
+| `worker.timers`, task `timeout` | The compiled worker has no timer scheduler. |
+| `importTask` | The compiler needs the task body at build time. |
+| `payload`, `unsafe`, `source`, `workerExecArgv` | These options belong to the regular frame transport. |
+| `worker.processCommandPrefix`, `worker.processSharedMemory`, `worker.resolveAfterFinishingAll` | These are process-worker options with no compiled equivalent. |
+
+`worker.hardTimeoutMs` is the exception: it works because the host enforces it
+from outside the compiled worker.
+
+If you need one of these features, use a regular process worker instead. See
+[Process workers](/guides/process-workers/).
+
+## Is this a good fit?
+
+Porffor is worth trying when your task is small, synchronous, self-contained,
+and mostly CPU work. It is less suitable when the task depends on libraries,
+filesystem or network access, timers, rich payloads, or runtime-specific APIs.
+
+If you are unsure, start with a regular thread or process worker first. Once the
+task works there, compiling it with Porffor is a straightforward experiment.

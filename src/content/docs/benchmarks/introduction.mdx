@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: Overall benchmark overview across Node, Deno, and Bun, plus a Tokio comparison for primitive and small-payload benchmark shapes.
+description: A quick overview of Knitting benchmark results across runtimes.
 sidebar:
   order: 1
 ---
@@ -14,36 +14,36 @@ import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 import TokioCloseUp from '../../../components/TokioCloseUp.astro';
 
-This page is the high-level benchmark summary across Node, Deno, and Bun, with a Tokio close-up for the small-payload fast path.
-For runtime-specific detail, see the dedicated pages for Node, Deno, Bun, and Tokio.
+This page gives you the short version of Knitting's benchmark results across
+Node, Deno, Bun, and Tokio.
 
-These benchmarks quantify communication overhead and scaling behavior in specific benchmark shapes.
-They are not a direct prediction of end-to-end application speedup.
+The tests focus on worker communication, payload sizes, batching, and
+CPU-heavy work. They are useful for comparing shapes of workloads—not for
+predicting exactly how fast your application will be.
 
 
-## What these benchmarks measure
+## The short version
 
-- IPC overhead between main and worker threads
-- End-to-end message latency as batch size increases
-- Payload sensitivity (primitive, structured, and binary types)
-- Throughput at growing payload sizes (up to `1 MiB`)
-- Heavy-task scaling and parallel efficiency under CPU-intensive workloads
+- Small calls have low overhead.
+- Batching improves throughput, especially as the number of calls grows.
+- Large binary payloads are mainly limited by copying and memory bandwidth.
+- CPU-heavy work scales across workers, but the result depends on the runtime
+  and the number of threads.
 
-Interpretation rule: "`x` faster" here means faster for this benchmark setup (payloads, batching, CPU profile), not universally `x` faster for any app.
+When the charts say one option is “faster,” that only applies to the test shown:
+the payload, batching, runtime, and amount of work all matter.
 
 <TokioCloseUp />
 
-For primitive calls and low binary payloads, Knitting stays in the same microsecond tier as Tokio in these benchmark shapes.
-Read that as handoff cost: wakeups/signaling plus copying or cloning very small payloads, not a claim that every payload shape matches Tokio.
-That matters because it shows the shared-memory fast path is not just "good for JavaScript" — it can stay competitive with a Rust baseline when coordination dominates.
+## Message overhead
 
-## IPC (combined)
+This chart compares Knitting with worker `postMessage`, WebSocket, and HTTP.
 
-The IPC combined chart compares Knitting against worker `postMessage`, websocket, and HTTP across runtimes.
+In these runs, Knitting is roughly:
 
-- At one message, Knitting is typically about `3.5x-6x` faster than worker `postMessage`.
-- Against websocket, Knitting is usually around `3.5x-15x` faster.
-- Against HTTP, Knitting is usually around `10x-57x` faster for the same benchmark shape.
+- `3.5–6×` faster than worker `postMessage`;
+- `3.5–15×` faster than WebSocket;
+- `10–57×` faster than HTTP.
 
 <img
   src={ipcCombined.src}
@@ -53,13 +53,13 @@ The IPC combined chart compares Knitting against worker `postMessage`, websocket
   loading="lazy"
 />
 
-## Latency (line)
+## Latency as calls grow
 
-This chart shows how latency changes as the number of messages per iteration increases.
+This chart shows what happens as each test sends more messages at a time.
 
-- Across runtimes and batch sizes, Knitting is generally around `3x-45x` faster than worker baselines.
-- The advantage is strongest in small-to-medium batch ranges where message overhead dominates.
-- At very large batches, absolute latency rises for all approaches, but Knitting still keeps lower overhead.
+Knitting is generally around `3–45×` faster than the worker baselines in these
+runs. The advantage is clearest in small and medium batches, where communication
+overhead makes up more of the total time.
 
 <img
   src={latencyLine.src}
@@ -69,13 +69,13 @@ This chart shows how latency changes as the number of messages per iteration inc
   loading="lazy"
 />
 
-## Payload Types (combined)
+## Different payload types
 
-These two charts compare type-dependent overhead at count `1` and count `100`.
+These charts compare one value at a time with batches of `100` values.
 
-- Count `1`: Knitting remains low-latency even for structured and binary payloads.
-- Count `100`: batching increases throughput while preserving strong relative performance.
-- Heavier payload classes (e.g. large objects/arrays, errors) cost more in every runtime, but Knitting keeps the best profile overall.
+Structured and binary values cost more than primitives, and large objects and
+errors cost more again. Batching improves throughput while keeping Knitting's
+relative advantage in these tests.
 
 <img
   src={typesCombinedCount1.src}
@@ -93,10 +93,10 @@ These two charts compare type-dependent overhead at count `1` and count `100`.
   loading="lazy"
 />
 
-## Call growth (1 MiB throughput)
+## Moving a 1 MiB payload
 
-From the `1048576 B` row (`avg`) in each runtime's `*_call-growth-batch` result (`batch=64`),
-one-way transfer throughput is:
+These are one-way transfer results for a `1 MiB` payload with a batch size of
+`64`:
 
 | Runtime | String (GB/s) | Uint8Array (GB/s) |
 | --- | ---: | ---: |
@@ -104,23 +104,20 @@ one-way transfer throughput is:
 | Deno | `3.37` | `5.78` |
 | Bun | `11.86` | `16.21` |
 
-Quick takeaways:
+Bun is fastest in this particular 1 MiB test for both strings and binary data.
+At this size, memory bandwidth and runtime details matter as much as the worker
+coordination itself.
 
-- Bun is clearly fastest at 1 MiB in this batched benchmark shape, for both text and binary payloads.
-- Node's `Uint8Array` path improves sharply under batching and overtakes Deno on binary throughput, while Deno keeps the stronger string path.
-- This complements the IPC/latency charts by showing behavior when payload size, not just call count, grows.
-- At this size, ceilings are strongly influenced by memory bandwidth and runtime internals, not application logic.
-
-## Heavy Load: Speedup and Efficiency
+## CPU-heavy work
 
 <HeavyTaskPrimeTransferCaution />
 
-Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute work across extra threads.
+This test distributes a CPU-intensive prime-number workload across extra
+threads. In these runs, speedup reaches roughly `3.5–3.8×` with four extra
+threads, while efficiency stays around `70–77%`.
 
-- Speedup grows steadily as threads are added, reaching roughly `3.5x-3.8x` at `+4` extra threads in these runs.
-- Efficiency remains strong under contention, staying around `~70-77%` at higher thread counts.
-- Bun and Deno show slightly stronger scaling than Node in this specific heavy-load scenario.
-- This does not imply every app gets `3.5x+`; I/O-heavy services often see smaller changes.
+That does not mean every application will scale the same way. I/O-heavy work
+usually behaves very differently.
 
 <img
   src={withloadSpeedup.src}
@@ -138,20 +135,21 @@ Heavy-load benchmarks run a CPU-intensive prime-number workload and distribute w
   loading="lazy"
 />
 
-## Where to read details
+## Explore the details
 
-- Use this page for cross-runtime trends.
-- Use `benchmarks/node`, `benchmarks/deno`, `benchmarks/bun`, and `benchmarks/tokio` for raw tables and per-runtime interpretation.
+This page is for the broad trends. For raw tables and runtime-specific notes,
+see the dedicated [Node](/benchmarks/node/), [Deno](/benchmarks/deno/),
+[Bun](/benchmarks/bun/), and [Tokio](/benchmarks/tokio/) pages.
 
-## Run the suite
+## Run the benchmarks
 
 ```bash
 ./run.sh
 ```
 
-Results are written into `results/`.
+Results are written to `results/`.
 
-## JSON output
+To write JSON for plotting or other scripts:
 
 ```bash
 ./run.sh --json

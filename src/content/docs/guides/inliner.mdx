@@ -140,7 +140,8 @@ passed through as-is). Timeout specs from `task()` are applied via a
 
 Abort signals on inline tasks use a static toolkit where `hasAborted()` always
 returns `false` -- inline tasks cannot be individually aborted since they share
-the host thread.
+the host thread. From the next release the toolkit also carries `now()`, which
+behaves normally and reads the host's clock.
 
 ## Balancer guidance
 

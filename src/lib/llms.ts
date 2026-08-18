@@ -5,7 +5,7 @@ type Doc = CollectionEntry<"docs">;
 export const TITLE = "Knitting";
 
 export const TAGLINE =
-  "Knitting is a zero-dependency multi-threading runtime and worker pool for Node.js, Deno, and Bun. Export a function, create a pool, and call it like a normal async function — on real threads or isolated processes.";
+  "Knitting is a zero-dependency worker runtime for Node.js, Deno, and Bun. Define typed tasks once, run them on worker threads or isolated processes, and call them like async functions.";
 
 // A small, hand-maintained cheat sheet of the things an AI most often gets
 // wrong about Knitting. The page listings below are generated from the docs,
@@ -23,12 +23,12 @@ export const ESSENTIALS = [
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',
   "- Security: for untrusted or security-sensitive code, define the task with `importTask`. The host holds only a typed wrapper and never imports or evaluates the module, so that code runs only in the worker (under its permissions), never at host scope.",
   "- Zero-copy IN: `ProcessSharedBuffer` (`knitting/shared-memory`) shares bytes across processes; `SharedArrayBuffer` and `BufferReference` (`knitting/unsafe`) move bytes to thread workers without copying. Pick by boundary — process vs thread.",
-  "- Zero-copy OUT (good practice): for large binary results from a thread worker, RETURN a `BufferReference` so bytes move back instead of being copied through the transport. `knitting/utils` converts string/JSON/number ↔ `SharedArrayBuffer`.",
+  "- Binary results: for large results from a thread worker, RETURN a `BufferReference`; owning Node addons can move them back zero-copy, while the safe default may take one copy on Deno/Bun (use the explicit borrow mode only when its lifetime rules fit). `knitting/utils` converts string/JSON/number ↔ `SharedArrayBuffer`.",
   "- Optimized for HTTP: `call.*()` accepts `Promise<supported>` inputs, so forward `request.arrayBuffer()` (e.g. Hono `c.req.arrayBuffer()`) straight into a task without awaiting it on the request thread — UTF-8 decode / JSON parse then happens in the worker. Ideal for SSR, JWT, and upload routes.",
   "- Workers are quiet and contained by default: in strict mode (the default) worker `console.*` does NOT reach the host — set `permission: { console: true }` to surface it. Task code cannot take the host down: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are blocked.",
   "- Debugging goes to STDERR: pass `debug: true` to `createPool` (or set the `KNITTING_DEBUG=*` env var) to stream diagnostics, each line tagged with the worker (`host`, `w0`, `w1`, …), the runtime, and a per-worker ms timer. Select namespaces instead of all — `host` (pool/task setup), `imports` (which modules each worker loaded), `lifecycle` (worker ready / process events), `signals` (per-dispatch traffic, very chatty), `globals` (`globalThis` pollution per load phase) — via `debug: { host: true, imports: true }` or `KNITTING_DEBUG=host,imports`. The option and the env var merge; either can enable a namespace. Zero-cost when off: the logger module isn't even imported.",
   "- Payload size: dynamic payloads are hard-capped at ~8 MiB by default (over-cap calls reject with `KNT_ERROR_3`). Raise it with `payload: { maxPayloadBytes, payloadMaxByteLength }` — `maxPayloadBytes` must be `<= payloadMaxByteLength >> 3`; the buffer growth cap defaults to 64 MiB.",
-  "- Cancellation & timeouts: `task({ f, timeout: { time: 100 } })` bounds a call, `task({ f, abortSignal: true })` injects an `AbortSignal`, and `worker.hardTimeoutMs` is a hard wall-clock kill for runaway CPU.",
+  "- Cancellation & timeouts: `task({ f, timeout: { time: 100 } })` bounds a call, `task({ f, abortSignal: true })` injects an abort toolkit (`signal.hasAborted()`) as the task's second argument — it is NOT a DOM `AbortSignal` (no `.aborted`, no `addEventListener`, cannot be passed to `fetch`) — and `worker.hardTimeoutMs` is a hard wall-clock kill for runaway CPU.",
   "- Errors are real: thrown errors and rejected promises return to the host as `Error` objects with `name`, `message`, `stack`, and the full `cause` chain.",
   "",
   "```ts",

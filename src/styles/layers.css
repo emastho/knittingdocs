@@ -1,0 +1,9 @@
+/* Starlight declares this order in its own layers.css, but Astro bundles our
+   customCss ahead of it. A layer's priority is fixed the first time it is seen,
+   so any `@layer starlight.components` we open before Starlight's declaration
+   would register that layer first — below starlight.reset, whose `* { margin: 0 }`
+   then wipes out the margins Starlight's components rely on (FileTree's
+   indentation, for one). Declaring the order here, from the first stylesheet
+   loaded, keeps it correct no matter what the files below do. */
+@layer starlight.base, starlight.reset, starlight.core, starlight.content,
+  starlight.components, starlight.utils;

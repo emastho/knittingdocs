@@ -1751,7 +1751,7 @@ z
      <use xlink:href="#DejaVuSans-73" transform="translate(1679.248047 0)"/>
     </g>
    </g>
-   <g id="text_25">
+   <g id="text_25" style="display: none">
     <!-- Uint8Array Size Sweep (less is better) -->
     <g style="fill: #f0f0f0" transform="translate(41.278365 42.029268) scale(0.17 -0.17)">
      <defs>

@@ -1,7 +1,7 @@
 {
   "name": "Knitting",
   "short_name": "Knitting",
-  "description": "A multi-threading runtime and worker pool for Node.js, Deno, and Bun.",
+  "description": "A zero-dependency worker runtime for Node.js, Deno, and Bun.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#FFF1D6",

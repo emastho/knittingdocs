@@ -26,8 +26,6 @@ discussion, start with [Hono server routes](/examples/data_transforms/rendering_
 
 **If you're rendering HTML** -- [React SSR](/examples/data_transforms/rendering_output/react_ssr) for basic server rendering, [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) to also test Brotli placement, or [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) for a simpler pipeline without React.
 
-**If you handle file uploads** -- [Image processing API](/examples/data_transforms/rendering_output/image_processing) offloads resize, thumbnail, and watermark operations to workers using sharp. It's the binary payload counterpart to the Hono SSR example.
-
 **If you want the full picture** -- [Hono server routes](/examples/data_transforms/rendering_output/hono_server) is a real HTTP server that combines SSR, JWT, and health checks. It's the closest to a production setup.
 
 <CardGrid>
@@ -41,7 +39,6 @@ discussion, start with [Hono server routes](/examples/data_transforms/rendering_
   <Card title="Rendering & output">
     Take validated input and produce final output formats.
     [Hono server routes](/examples/data_transforms/rendering_output/hono_server),
-    [Image processing API](/examples/data_transforms/rendering_output/image_processing),
     [React SSR](/examples/data_transforms/rendering_output/react_ssr),
     [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress),
     [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html).

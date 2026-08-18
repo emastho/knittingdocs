@@ -1,65 +1,73 @@
 ---
 title: Performance
-description: Tips about performance and good practices.
+description: How payloads, worker counts, and runtime choices affect performance.
 sidebar:
   order: 9
 ---
 
 import { Badge } from '@astrojs/starlight/components';
 
-## Quick legend
+## How to read the ratings
 
-Bear in mind that even <Badge text="Slow" variant="danger" /> here can still be **2-4x faster** than `postMessage` (depending on payload and workload).
+These ratings are a rough guide to the cost of one call. A <Badge text="Slow"
+variant="danger" /> entry can still be **2–4× faster** than
+`postMessage`, depending on the payload and the work being done.
 
-- <Badge text="Best" variant="note" />: near "header-only" cost, best path
-- <Badge text="Fast" variant="success" />: still very cheap per call
-- <Badge text="Good" variant="tip" />: fine for real workloads
-- <Badge text="Fair" variant="caution" />: watch frequency
-- <Badge text="Slow" variant="danger" />: avoid in hot loops, consider alternatives
+- <Badge text="Best" variant="note" /> — almost no per-call overhead
+- <Badge text="Fast" variant="success" /> — inexpensive for most workloads
+- <Badge text="Good" variant="tip" /> — suitable for normal workloads
+- <Badge text="Fair" variant="caution" /> — fine occasionally; watch hot paths
+- <Badge text="Slow" variant="danger" /> — consider another representation in tight loops
 
-### Rating thresholds (per call, easy to tweak later)
+### Thresholds
 
-These tiers are intentionally simple. If you re-run benchmarks on a new CPU/runtime, edit these numbers and re-label rows as needed.
+The thresholds below are intentionally broad. They describe the approximate
+cost of one call, not the total time spent running the task:
 
-- Best: < 1 us
-- Fast: < 2 us
-- Good: < 4 us
-- Fair: < 9 us
-- Slow: > 9 us
-
----
-
-## Benchmark environment
-
-- clk: ~3.86 GHz
-- cpu: Apple M3 Ultra
-- runtime: node 24.12.0 (arm64-darwin)
+- Best: < 1 µs
+- Fast: < 2 µs
+- Good: < 4 µs
+- Fair: < 9 µs
+- Slow: > 9 µs
 
 ---
 
-## Mental model (what makes things fast)
+## Benchmark context
 
-**1) Header-only / "no payload"**
-Values fit into the call header: tiny encode/decode cost.
-
-**2) Static payload**
-Reuses part of the header plus a small buffer, only for small payloads.
-
-**3) Dynamic payload (allocator path)**
-Needs allocation, copying, and bookkeeping. Still fast, but you'll feel it in hot loops.
-
-**4) Pointer teleportation (zero-copy)**
-`SharedArrayBuffer` and `ProcessSharedBuffer` are never copied — only a
-pointer/handle crosses the boundary and both sides map the same bytes. Size
-stops mattering: a 1 KiB and a 64 MiB `SharedArrayBuffer` cost the same to pass.
-`BufferReference` (`knitting/unsafe`) is the thread-only *move* variant: it
-detaches the source and hands the bytes over without a copy.
+The figures on this page were measured on an Apple M3 Ultra running Node
+24.12.0 on arm64-darwin, at roughly 3.86 GHz. Treat them as useful comparisons,
+not promises: your runtime, CPU, payload shape, and task itself will change the
+result.
 
 ---
 
-## Single call categories (1 value)
+## How payloads move
 
-| Case | Tier |
+Most performance differences come down to how much data has to cross the worker
+boundary and whether that data is copied.
+
+- **Small values.** Numbers, booleans, short strings, and similar values fit in
+  the call header, so encoding and decoding are very cheap.
+- **Small binary payloads.** Typed arrays and other small values use the
+  transport's preallocated space and usually stay fast.
+- **Larger payloads.** The transport may need to allocate more space and copy
+  the data. This is still efficient, but the cost becomes visible in a hot
+  loop.
+- **Shared memory.** `SharedArrayBuffer` and `ProcessSharedBuffer` avoid copying
+  the bytes. Knitting passes a handle instead, so the cost of sending a 1 KiB
+  buffer and a 64 MiB buffer is roughly the same. `BufferReference`
+  (`knitting/unsafe`) is the thread-only move variant: it detaches the source
+  and hands the bytes to the worker.
+
+---
+
+## Typical cost by value type
+
+These ratings describe one value passed in a single call. They are useful for
+choosing a representation, but measure your real workload before tuning around
+them.
+
+| Value | Typical cost |
 | --- | --- |
 | Primitives: `boolean`, `undefined`, `null` | <Badge text="Best" variant="note" /> |
 | Numbers: `number` | <Badge text="Best" variant="note" /> |
@@ -76,58 +84,59 @@ detaches the source and hands the bytes over without a copy.
 
 ---
 
-## Configuration effects on performance
+## Tuning the pool
 
 ### Thread count
 
-More threads means more lanes for the balancer to distribute work across, but
-each thread has a fixed memory cost (payload buffers, shared lock regions,
-abort signal pool). Returns diminish past the number of physical cores. For
-compute-only workloads, `threads: os.availableParallelism() - 1` is a
-reasonable starting point.
+More threads can improve throughput when tasks can run in parallel, but every
+thread also consumes memory for payload buffers, shared locks, and cancellation
+state. Adding threads beyond the number of available cores usually stops
+helping. For compute-heavy work, `threads: os.availableParallelism() - 1` is a
+reasonable starting point; benchmark the result with your own tasks.
 
 ### Inliner
 
-The inliner skips encode/decode entirely, so header-only payloads on the
-inline lane are effectively free. For tiny math tasks, adding
-`inliner: { position: "last", batchSize: 64 }` can improve throughput
-noticeably. See [Inliner guide](/guides/inliner).
+The inliner runs eligible calls without sending them through a worker, skipping
+transport encoding and decoding. It is most useful for very small tasks, such
+as simple arithmetic. For example,
+`inliner: { position: "last", batchSize: 64 }` can improve throughput. See the
+[Inliner guide](/guides/inliner).
 
 ### Permissions
 
-Enabling `permission: "strict"` adds startup cost per worker (flag generation,
-lock file resolution) but has no measurable per-call overhead once workers are
-running. The cost is one-time and small.
+Strict permissions add a small amount of startup work for each worker, such as
+generating flags and resolving lock files. They do not add measurable overhead
+to individual calls once the workers are running.
 
 ### Payload sizing
 
 `payload.payloadInitialBytes`, `payload.payloadMaxByteLength`, and
-`payload.maxPayloadBytes` control the shared buffer each worker allocates.
-Larger initial buffers avoid runtime growth at the cost of upfront memory.
-If your payloads are consistently small (primitives, short strings), the
-defaults (`4 MiB` initial, `64 MiB` max length, `8 MiB` hard dynamic cap) are
-usually enough.
+`payload.maxPayloadBytes` control the transport buffer used by each worker.
+Increasing the initial size avoids growth later, but uses more memory up front.
+For consistently small payloads such as primitives and short strings, the
+defaults—`4 MiB` initially, `64 MiB` maximum length, and an `8 MiB` dynamic
+payload cap—are usually enough.
 
 ---
 
-## Threads vs processes
+## Choosing threads or processes
 
-The two worker runtimes isolate memory differently, so they expose different
-zero-copy tools:
+Threads and processes have different memory boundaries, so the best zero-copy
+option depends on which one you use:
 
 | Runtime | Isolation | Zero-copy tools |
 | --- | --- | --- |
 | `thread` (default) | shares the host address space | `SharedArrayBuffer`, `BufferReference` (move) |
 | `process` | separate memory and permissions | `ProcessSharedBuffer` (OS shared memory) |
 
-A `SharedArrayBuffer` or `BufferReference` cannot cross a process boundary —
-reach for `ProcessSharedBuffer` when the worker is a process. See
+A `SharedArrayBuffer` or `BufferReference` cannot cross a process boundary. Use
+`ProcessSharedBuffer` when the worker runs in a separate process. See
 [Shared memory](/guides/shared-memory/) and
 [Buffer reference](/guides/buffer-reference/).
 
-Because a process worker is just a child process, you can spawn it behind a
-command prefix (`worker.processCommandPrefix`) so another tool launches it — a
-sandbox like `bwrap` or a container like Docker:
+Because a process worker is a child process, you can start it through another
+tool using `worker.processCommandPrefix`. This is useful for a sandbox such as
+`bwrap` or a container such as Docker:
 
 ```ts
 worker: {
@@ -139,21 +148,20 @@ worker: {
 See [Process workers](/guides/process-workers/) for the full wrapper recipes.
 
 :::caution
-For anything security-sensitive, define the task with
+For security-sensitive work, define the task with
 [`importTask`](/guides/defining-tasks/#importing-worker-side-code-with-importtask).
 The host holds only a typed wrapper and **never imports or evaluates the
-module** — that code runs only inside the worker, under the worker's
-permissions, never at host scope.
+module**. The task runs only inside the worker, under the worker's permissions,
+and never at host scope.
 :::
 
 ---
 
-## HTTP request handling
+## Keep request bodies off the main thread
 
-`call.*()` accepts `Promise<supported>` inputs, not just already-resolved
-values. In an HTTP handler this lets you forward the request body promise
-straight into a task without stopping the request thread to materialize it
-first:
+`call.*()` accepts promises for supported inputs. In an HTTP handler, you can
+pass the request body's promise straight to a task instead of awaiting it on
+the request thread:
 
 ```ts
 app.post("/jwt", async (c) => {
@@ -165,20 +173,21 @@ app.post("/jwt", async (c) => {
 });
 ```
 
-The promise isn't faster on its own — the win is that the request thread never
-stops to materialize the body before handing it to Knitting:
+The promise itself is not faster. The benefit is that the request thread can
+hand the body to Knitting immediately:
 
 - `c.req.arrayBuffer()` already returns a promise, so forwarding it skips an
   `await` in the handler.
-- UTF-8 decode / JSON parsing happens in the worker, not on the request thread.
+- UTF-8 decoding and JSON parsing happen in the worker, not on the request
+  thread.
 - `ArrayBuffer` stays on the binary fast path.
 
-### Head + body with `Envelope`
+### Metadata and body with `Envelope`
 
-When you need both the request metadata (the head) and the raw body, wrap them
-in an `Envelope`: the header carries the parsed metadata, the payload carries
-the body bytes. Shape it from the body promise with `.then(...)` so you still
-never await the body on the request thread:
+When a task needs both request metadata and the raw body, put them in an
+`Envelope`. The header carries the metadata and the payload carries the bytes.
+Use `.then(...)` to build the envelope from the body promise without awaiting
+the body on the request thread:
 
 ```ts
 import { Envelope } from "knitting";
@@ -198,38 +207,41 @@ app.post("/upload", async (c) => {
 });
 ```
 
-For a large binary body sent to a **thread** worker, make the body a
-`BufferReference` instead of an `ArrayBuffer` to move the bytes with no copy —
-only the body line changes:
+For a large binary body sent to a **thread** worker, use a `BufferReference`
+instead of an `ArrayBuffer`. The bytes move without a copy; only the body line
+changes:
 
 ```ts
 import { BufferReference } from "knitting/unsafe";
 
 new Envelope(
   { contentType: c.req.header("content-type") ?? "application/octet-stream" },
-  new BufferReference(body), // moves the body bytes, zero-copy (thread workers)
+  new BufferReference(body), // moves the body bytes without copying
 );
 ```
 
-This is most useful when the route is basically a transport layer and the
-worker owns parsing anyway, like SSR or JWT issuance. If you need to inspect the
-body on the main thread before dispatch, await it locally and validate there.
+This works best when the route is mainly forwarding data and the worker does
+the parsing, such as SSR or JWT issuance. If the main thread needs to inspect
+or validate the body first, await it there instead.
 
-### Choosing a return type
+### Choosing how to return data
 
-The return path has the same costs as the input path, in reverse. There are
-many ways to return a result; pick by how big it is and what it already is:
+Returning data has the same costs as sending it, just in the other direction.
+Choose the return type based on the size of the result and how the data is
+already represented:
 
 - **JSON object / array** — serialized on the worker and parsed again on the
-  host, so it pays a *double* pass over the data (stringify + parse). Fine for
-  small results, heavy for large ones.
-- **`SharedArrayBuffer` / `ProcessSharedBuffer`** — pointer teleportation; the
-  cheapest way to hand bytes back when you can back the result with shared
-  memory. `ProcessSharedBuffer` also works from process workers.
-- **`BufferReference`** — for big binaries you cannot easily cast into a
-  `SharedArrayBuffer` (for example a buffer produced by a library you don't
-  control). Zero-copy on Node; a single copy on Deno and Bun. Thread workers
-  only.
+  host, so it makes two passes over the data. This is fine for small results but
+  expensive for large ones.
+- **`SharedArrayBuffer` / `ProcessSharedBuffer`** — shared memory is usually the
+  cheapest way to return bytes when the result can use it. `ProcessSharedBuffer`
+  also works with process workers.
+- **`BufferReference`** — useful for large binary results, especially when a
+  library gives you an ordinary `ArrayBuffer` that you cannot turn into shared
+  memory. Returned references can stay zero-copy on Node with native ownership;
+  the safe default makes one copy on Deno, Bun, and some Node builds. See the
+  [Buffer reference guide](/guides/buffer-reference/) for the explicit borrow
+  option and its lifetime rules.
 
 See [Payloads](/guides/payloads/) and
 [Buffer reference](/guides/buffer-reference/) for the full type list.

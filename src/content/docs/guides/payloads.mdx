@@ -42,7 +42,7 @@ If a promise input rejects, the host call rejects and the worker task is not
 executed. Only native `Promise` is accepted; thenables are treated as regular
 values.
 
-See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs) for details.
+See [Promise inputs are awaited on the host](/guides/defining-tasks/#promise-inputs-are-awaited-on-the-host) for details.
 
 ```ts
 type JSONValue =

@@ -1,33 +1,35 @@
 ---
 title: Buffer reference
-description: knitting/unsafe — zero-copy ArrayBuffer handles for thread workers.
+description: Move large ArrayBuffers to thread workers without copying.
 sidebar:
   order: 8
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-`BufferReference` is a zero-copy handle for moving `ArrayBuffer` bytes to
-**thread** workers. Import it from the subpath:
+`BufferReference` is useful when you need to send a large `ArrayBuffer` to a
+**thread** worker without paying for a copy. It moves the bytes instead of
+sharing them. Import it from the `knitting/unsafe` subpath:
 
 ```ts
 import { BufferReference } from "knitting/unsafe";
 ```
 
 <Aside type="note">
-`knitting/unsafe` is experimental, so the API may still change. Used with its
-defaults it is memory-safe on every runtime — the only mode that needs care is
-the `borrow` return ([see below](#return-copy-vs-borrow)), and even that is safe
-on Node.
+This API is experimental, so it may still change. Normal use is safe on all
+supported runtimes. The optional `borrow` mode can avoid a copy for returned
+buffers, but it comes with stricter lifetime rules; see [Copying and borrowing
+returned buffers](#copying-and-borrowing-returned-buffers).
 </Aside>
 
 ---
 
-## Move semantics
+## Moving the buffer
 
-Constructing a `BufferReference` **detaches the source immediately**. The
-bytes now belong to the reference; reading or writing the original buffer
-after construction returns zero-length or stale data.
+Creating a `BufferReference` **detaches the source immediately**. The bytes now
+belong to the reference, so the original view can no longer access them. For a
+typed-array view, `byteLength` and `length` become zero; APIs that require an
+attached `ArrayBuffer` may throw.
 
 ```ts
 const pixels = new Uint8Array([0, 64, 128, 192, 255]);
@@ -38,14 +40,14 @@ console.log(pixels.byteLength);          // 0 — the source was moved
 console.log(ref.byteLength);             // 5
 ```
 
-This is intentional: the move is what makes the transfer zero-copy.
+That is the trade-off that makes the transfer zero-copy: after the move, there
+is only one owner of the bytes.
 
 ---
 
-## Sending to a worker
+## Send it to a worker
 
-Use `BufferReference` as a task argument to move bytes to a thread worker
-without serializing them through the transport:
+Wrap the buffer and pass the reference as a task argument:
 
 ```ts
 import { createPool, isMain, task } from "knitting";
@@ -53,10 +55,10 @@ import { BufferReference } from "knitting/unsafe";
 
 export const invert = task<BufferReference, BufferReference>({
   f: (ref) => {
-    const pixels = ref.toUint8Array();         // the moved bytes, no copy
+    const pixels = ref.toUint8Array();
     const out = new Uint8Array(pixels.length);
     for (let i = 0; i < pixels.length; i++) out[i] = 255 - pixels[i];
-    return new BufferReference(out);           // move the result back
+    return new BufferReference(out);
   },
 });
 
@@ -73,24 +75,25 @@ if (isMain) {
 
 ## Reading the bytes
 
-Two accessors materialize the moved region:
+Use either accessor to read the bytes:
 
 | Method | Returns | Notes |
 |--------|---------|-------|
-| `toUint8Array()` | `Uint8Array` | View over the moved bytes. |
-| `toArrayBuffer()` | `ArrayBuffer` | The underlying buffer. |
+| `toUint8Array()` | `Uint8Array` | A view over the bytes. |
+| `toArrayBuffer()` | `ArrayBuffer` | An `ArrayBuffer` containing the bytes; a subview may require a copy. |
 
-These views are backed by the reference, so use them while it is alive and let
-`using` / `release()` clean up when you are done. In the default copy mode this
-is ordinary lifecycle hygiene, not a safety hazard — the stricter rules only
-apply to the `borrow` return mode below.
+Both methods can be called more than once while the reference is active. Keep
+the reference alive while you use the returned view or buffer, and call
+`release()` when you are done. Releasing the reference detaches any views it
+created first, so an escaped view becomes empty or throws instead of reading
+freed memory.
 
 ---
 
-## Disposing
+## Releasing the reference
 
-`BufferReference` implements `Symbol.dispose`. Use `using` to release
-automatically, or call `release()` explicitly:
+`BufferReference` implements `Symbol.dispose`, so `using` is usually the easiest
+way to clean it up:
 
 ```ts
 {
@@ -100,31 +103,37 @@ automatically, or call `release()` explicitly:
 } // result is released here
 ```
 
-After `release()` the reference no longer owns the bytes, so stop using any view
-you took from it. In the default copy mode this is just normal cleanup; the only
-mode where reading too late is an actual use-after-free is `borrow` on Deno and
-Bun (see below).
+If you are not using `using`, call `release()` yourself.
+
+After `release()`, stop using any view you took from the reference. On runtimes
+where the host and worker cannot safely keep the same backing store alive,
+Knitting detaches those views before releasing the worker's memory. If
+detaching fails, it keeps the memory alive rather than risk a use-after-free.
 
 ---
 
-## Constraints
+## Important constraints
 
-- **Thread workers only.** The handle is a process-local pointer. Sending a
-  `BufferReference` to a process worker throws. For cross-process sharing use
+- **Thread workers only.** The handle refers to memory in the current process.
+  Sending it to a process worker throws. For cross-process sharing, use
   `ProcessSharedBuffer` (see [Shared memory](/guides/shared-memory/)).
-- **`ArrayBuffer` sources only.** `SharedArrayBuffer` cannot be detached and
-  is rejected. SAB-backed typed-array views are also rejected.
-- **One-shot.** Each reference is used once. The worker materializes the bytes
-  with `toUint8Array()` / `toArrayBuffer()`, and those values are borrowed for
-  the duration of the call. Do not use them from fire-and-forget work after the
-  task returns.
+- **`ArrayBuffer`-backed views only.** `SharedArrayBuffer` cannot be detached
+  and is rejected. SAB-backed typed-array views are also rejected.
+- **The move is one-way.** A reference may be read more than once while it is
+  active, but it cannot be used after `release()`. Do not hand its view to a
+  timer, stream, or other work that continues after the task.
+
+`BufferReference` is intended for trusted, same-process code. It is not a
+security boundary, so do not accept raw metadata or native pointers from
+untrusted code.
 
 ---
 
-## Return copy vs borrow
+## Copying and borrowing returned buffers
 
-When a worker returns a `BufferReference`, the host must take possession of the
-bytes. The default is **copy** (safe on all runtimes):
+When a worker returns a `BufferReference`, Knitting must make those bytes
+readable on the host. By default, it chooses the safe option. You can make that
+choice explicit with `BufferReferenceReturn: "copy"`:
 
 ```ts
 using pool = createPool({
@@ -133,11 +142,10 @@ using pool = createPool({
 })({ invert });
 ```
 
-On Node.js the return is always zero-copy regardless of this setting — the
-engine co-owns the backing store across threads, so there is no use-after-free
-risk even with `"borrow"`. On Deno and Bun, `"copy"` takes a single copy of the
-returned bytes so they safely outlive the worker. Set it to `"borrow"` to skip
-that copy:
+On Node 22/24 with the current native support, the host can share the returned
+memory, so no copy is needed. On Deno, Bun, and Node builds without that
+support, Knitting makes one safe copy. Choose `"borrow"` when you want to skip
+that copy and can keep the result's lifetime under control:
 
 ```ts
 import { BufferReferenceReturn } from "knitting/unsafe";
@@ -147,36 +155,39 @@ using pool = createPool({
   unsafe: { BufferReferenceReturn: BufferReferenceReturn.Borrow },
 })({ invert });
 
+const input = new Uint8Array([0, 64, 128, 192, 255]);
 {
-  using result = await pool.call.invert(new BufferReference(pixels));
-  const out = result.toUint8Array(); // borrowed — valid only while result lives
+  using result = await pool.call.invert(new BufferReference(input));
+  const out = result.toUint8Array(); // valid while result is alive
   console.log([...out]);
 } // result is released here; do not read out after this point
 ```
 
 <Aside type="caution">
-`"borrow"` only carries risk on **Deno and Bun**: the host reads directly into
-the worker's memory, so you must call `release()` (or let `using` do it)
-**before** the producing worker shuts down, and if the bytes escape into HTTP
-responses, streams, timers, or caches you must copy them first. On Node there is
-no such hazard — the return is zero-copy and safe either way.
+On Deno, Bun, and Node builds without native ownership support, `"borrow"`
+reads directly from worker memory. Release the result before its worker shuts
+down. If the bytes need to outlive the result—for example in an HTTP response,
+stream, timer, or cache—make a normal copy while the reference is still active,
+for example with `new Uint8Array(result.toUint8Array())`. Worker shutdown
+revokes outstanding borrows, but you should not rely on a view surviving it.
 </Aside>
 
-The named constants `BufferReferenceReturn.Copy` (`"copy"`) and
-`BufferReferenceReturn.Borrow` (`"borrow"`) are exported from `knitting/unsafe`.
+If you prefer named constants, `BufferReferenceReturn.Copy` (`"copy"`) and
+`BufferReferenceReturn.Borrow` (`"borrow"`) are exported from
+`knitting/unsafe`.
 
 ---
 
-## As an `Envelope` body
+## Use it in an `Envelope`
 
-`BufferReference` can be the body of an `Envelope`, combining a JSON header
-with zero-copy bytes:
+An `Envelope` can carry a `BufferReference` body when you need a JSON header
+alongside binary data:
 
 ```ts
-import { Envelope } from "knitting";
+import { Envelope, task } from "knitting";
 import { BufferReference } from "knitting/unsafe";
 
-export const process = task<
+export const processImage = task<
   Envelope<{ op: string }, BufferReference>,
   Envelope<{ done: boolean }, BufferReference>
 >({
@@ -189,19 +200,19 @@ export const process = task<
 });
 ```
 
-Disposing the envelope also disposes a `BufferReference` body. Disposing is a
-no-op for `ArrayBuffer` and `SharedArrayBuffer` bodies.
+Disposing the envelope also disposes a `BufferReference` body. An
+`ArrayBuffer` or `SharedArrayBuffer` body has nothing to dispose.
 
 See [Payloads — Envelope](/guides/payloads#envelope) for the full body type table.
 
 ---
 
-## When to reach for it
+## When to use it
 
-Below roughly 256 KiB the per-call pointer setup tends to cost more than just
-copying through the shared transport. Reach for `BufferReference` only when the
-copy cost of a large buffer to a thread worker actually matters in profiling.
+For smaller buffers, the setup cost can outweigh the time saved by avoiding a
+copy. Use `BufferReference` when profiling shows that copying large buffers is
+actually a bottleneck; this is usually more relevant for buffers that are
+hundreds of kilobytes or several megabytes in size.
 
-For process workers, use `ProcessSharedBuffer` instead.
-For smaller buffers, a plain `ArrayBuffer` or typed array is simpler and works
-for both thread and process workers.
+For process workers, use `ProcessSharedBuffer` instead. For smaller payloads, a
+plain `ArrayBuffer` or typed array is simpler and works with both worker types.

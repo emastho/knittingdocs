@@ -1,38 +1,37 @@
 ---
 title: Creating pools
-description: Spin up workers and call tasks.
+description: Every createPool option in one place — threads, balancer strategies, the inliner lane, payload buffers, permissions, debug namespaces, and how a pool shuts down.
 sidebar:
   order: 2
 ---
 
-`createPool(options)(tasks)` starts worker threads and returns helpers:
+`createPool(options)(tasks)` starts the worker threads and hands back three
+things:
 
-- `call.<task>(args)` enqueue a task and return a promise.
-- `shutdown(delayMs?)` stop workers immediately or after an optional delay.
-- `[Symbol.dispose]` so a `using` declaration closes the pool when its scope ends.
+- `call.<task>(args)` enqueues a task and returns a promise.
+- `shutdown(delayMs?)` stops the workers, either now or after a delay.
+- `[Symbol.dispose]`, which is what lets a `using` declaration close the pool
+  when its scope ends.
 
-Prefer `using pool = createPool(...)({ ... })` and let the pool dispose itself.
-`shutdown()` is still there, though — call `await pool.shutdown()` to close the
-pool **before** the `using` scope ends, when you need to await teardown, or when
-you are on a runtime without `using`. `using` simply calls `shutdown()` for you
-at scope exit.
+Reach for `using pool = createPool(...)({ ... })` and let the pool close itself.
+`await pool.shutdown()` is for the cases `using` cannot cover: closing **before**
+the scope ends, awaiting teardown, or running where `using` does not exist.
 
-`call.*()` always returns a promise.
-Inputs may also be native promises; they are resolved on the host before
-dispatch. If an input promise rejects, the host call rejects and the worker
-task is not executed.
+Arguments may be promises as well as plain values. Knitting resolves them on the
+host before dispatch, so a rejected input rejects the call and the worker never
+runs it.
 
-See [Promise inputs and awaited outputs](/guides/defining-tasks#promise-inputs-and-awaited-outputs).
+See [Promise inputs are awaited on the host](/guides/defining-tasks/#promise-inputs-are-awaited-on-the-host).
 
 :::note
-`createPool(...)` can only be called from the main thread. Use `isMain` to guard
-entrypoints that create pools.
+`createPool(...)` only works on the main thread. Guard any entrypoint that
+creates one with `isMain`.
 :::
 
 ## Batching pattern
 
-`call.*()` enqueues work and dispatches automatically.
-For batches, create all calls first and then await them together.
+Enqueued calls dispatch on their own, so the way to get a batch moving is to
+create every call first and await them together afterwards.
 
 ```ts
 const jobs = Array.from({ length: 1_000 }, () => call.hello());
@@ -58,8 +57,8 @@ createPool({
       | "firstIdleOrRandom"
   } | "roundRobin" | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
-    runtime?: "thread" | "process",
-    processRuntime?: "node" | "deno" | "bun",
+    runtime?: "thread" | "process" | "compiled", // "compiled": next release
+    processRuntime?: "node" | "deno" | "bun" | "porffor", // "porffor": next release
     processCommandPrefix?: string[],
     processSharedMemory?: "inherit" | "named" | {
       mode?: "inherit" | "named",
@@ -113,59 +112,64 @@ Deprecated payload aliases are still accepted at the top level:
 - `bufferMode` -> `payload.mode`
 - `maxPayloadBytes` -> `payload.maxPayloadBytes`
 
-### threads
+## threads
 
-Number of worker threads to spawn (default `1`). The total lane count is
+How many worker threads to spawn (default `1`). Lanes are counted as
 `threads + (inliner ? 1 : 0)`.
 
 ## payload
 
-Payload transport tuning lives under `payload`.
+These options tune the shared buffers that carry arguments out and results
+back.
 
 ### mode
 
-Selects shared-buffer transport mode:
+Picks how the shared buffer is allocated:
 
-- `"growable"`: growable shared array buffer mode.
-- `"fixed"`: fixed-size shared array buffer mode.
+- `"growable"`: starts at `payloadInitialBytes` and grows on demand, up to
+  `payloadMaxByteLength`.
+- `"fixed"`: allocates `payloadMaxByteLength` at startup and stays that size.
 
-Default is `"growable"` when SAB growth is available, otherwise `"fixed"`.
+Growable is the default wherever growable `SharedArrayBuffer`s exist, fixed
+everywhere else. Asking for `"growable"` on a runtime without them gets you
+`"fixed"` regardless — the request is downgraded, not refused.
 
 ### payloadMaxByteLength
 
-Maximum size (in bytes) each payload buffer may grow to. Default is
-`64 MiB`.
+How large a single payload buffer may grow, in bytes. Default `64 MiB`.
 
 ### payloadInitialBytes
 
-Initial payload buffer size in bytes. Default is `4 MiB` in growable mode.
-In fixed mode, startup uses the full `payloadMaxByteLength`.
+The size a buffer starts at, in bytes, default `4 MiB`. Growable mode clamps it
+to `payloadMaxByteLength`; fixed mode ignores it and allocates the full
+`payloadMaxByteLength` up front.
 
 ### maxPayloadBytes
 
-Hard cap for dynamic payload encoding. Must be `> 0` and
-`<= payloadMaxByteLength >> 3`.
-Default is `payloadMaxByteLength >> 3` (`8 MiB` with defaults).
+A hard ceiling on any one dynamically encoded payload. Must be `> 0` and
+`<= payloadMaxByteLength >> 3`, which is also the default (`8 MiB` with
+everything else left alone).
 
-Calls that exceed this cap are rejected with `KNT_ERROR_3` before dynamic slot
-reservation.
+Go over it and the call is rejected with `KNT_ERROR_3`, before a slot is even
+reserved.
 
-If `payload.mode` is `"fixed"` and payload size is under the cap but still does
-not fit current capacity, the call is rejected with a controlled encoder error.
+In `"fixed"` mode a payload can sit under the cap and still not fit what is left
+of the buffer. There is no room to grow into, so that call is rejected with an
+encoder error.
 
-### Scope
+### How the limits are applied
 
-Payload limits apply per worker and per direction (request payload + return
-payload), so each worker allocates two payload buffers with these limits.
+Every limit above is per worker and per direction. Each worker allocates two
+buffers, one for arguments and one for results, and each buffer gets the full
+allowance.
 
-### abortSignalCapacity
+## abortSignalCapacity
 
-Maximum number of concurrent abort-aware calls the pool can track.
-Default is `258`, and it applies only when at least one task declares
-`abortSignal`.
+How many abort-aware calls the pool can track at once, default `258`. It only
+matters if a task declares `abortSignal` in the first place.
 
 Only tasks defined with `abortSignal: true` or
-`abortSignal: { hasAborted: true }` count against this limit.
+`abortSignal: { hasAborted: true }` count against the limit.
 
 ```ts
 const pool = createPool({
@@ -175,8 +179,6 @@ const pool = createPool({
 ```
 
 ## Example
-
-Basic example:
 
 ```ts
 import { createPool, isMain, task } from "knitting";
@@ -212,8 +214,8 @@ Pass a string or an object with a `strategy` key.
 - `randomLane`: pick a random lane.
 - `firstIdleOrRandom`: pick the first idle lane, else random.
 
-When only one thread is spawned and no inliner is enabled, the balancer is
-bypassed and calls go directly to the single worker.
+With one thread and no inliner there is nothing to balance, so calls skip the
+balancer and go straight to that worker.
 
 ## inliner
 
@@ -237,21 +239,31 @@ isolation, and unlocks `processRuntime`, `processCommandPrefix`, and
 `processSharedMemory`. See [Process workers](/guides/process-workers) for the
 full story — sandboxes, containers, and the stdin / fd-0 handshake.
 
+`"compiled"` builds the task module into a native executable with Porffor and
+runs that as a child process. It is experimental, and supports a smaller feature
+set than the other two — see [Compiled workers](/guides/compiled-workers/).
+
+:::caution[Not in the current release]
+`runtime: "compiled"` and `processRuntime: "porffor"` land in the next release.
+On `0.1.56` the accepted values are `"thread" | "process"` and
+`"node" | "deno" | "bun"`.
+:::
+
 ### bootstrap
 
-A privileged module imported and awaited once per worker before task modules
-load: `{ href, name?, data? }`. Use it to install runtime guards, strip
-environment variables, or prepare worker-only globals. Bootstrap is worker-only
-and cannot be combined with the inline lane.
+A privileged module — `{ href, name?, data? }` — that every worker imports and
+awaits once, before any task module loads. Use it to install runtime guards,
+strip environment variables, or set up worker-only globals. It is worker-only,
+so it cannot be combined with the inline lane.
 
 ### resolveAfterFinishingAll
 
-When set to `true`, workers wait for all pending promises to settle before
-exiting.
+Set this to `true` and workers wait for every pending promise to settle before
+they exit.
 
 ### timers
 
-Idle behavior tuning while workers have no work:
+What a worker does while it has nothing to run:
 
 - `spinMicroseconds`: busy-spin budget before parking.
 - `parkMs`: `Atomics.wait` timeout while parked.
@@ -259,12 +271,12 @@ Idle behavior tuning while workers have no work:
 
 ### hardTimeoutMs
 
-Hard wall-clock timeout for each task call. On timeout, the pool force-shuts
-down to stop runaway CPU execution.
+A wall-clock timeout on every task call. Tripping it shuts the whole pool down,
+which is the only way to stop a worker already burning CPU in a tight loop.
 
 ### resourceLimits
 
-Node.js worker memory/stack limits:
+Memory and stack limits for Node.js workers:
 
 - `maxOldGenerationSizeMb`
 - `maxYoungGenerationSizeMb`
@@ -281,47 +293,47 @@ When `permission` is set to `"unsafe"`, inherited Node permission flags
 
 ## permission
 
-Runtime permission flag policy for workers.
+Which permission flags the workers start with.
 
-- Omit `permission`: strict defaults plus `allowImport: true` (web imports
-  allowed).
-- `"strict"` (default when passing an object): computes conservative defaults.
-- `"unsafe"`: disables permission flags and strips inherited Node permission
-  flags.
-- In object mode, `console` defaults to `false` in strict mode and `true` in
-  unsafe mode.
+- Leave `permission` out: strict defaults, plus `allowImport: true` so web
+  imports still work.
+- `"strict"` (what you get when you pass an object): conservative defaults,
+  worked out per runtime.
+- `"unsafe"`: no permission flags at all, and any inherited Node ones are
+  stripped.
+- In object mode, `console` is `false` under strict and `true` under unsafe.
 
 See [Permissions guide](/guides/permissions) for runtime-specific mapping and
 strict defaults.
 
 ## Timing note
 
-Worker timing paths capture a high-resolution `performance.now()` reference at
-module load/startup time. This keeps scheduling and timeout precision stable
-without freezing global `performance`.
+Each worker takes one high-resolution `performance.now()` reading at startup and
+measures everything against it. Scheduling and timeouts stay precise that way,
+and global `performance` is left alone for your own code to use.
 
 ## Safety hardening defaults
 
-- Startup-only guard layer: safety hooks are installed once before the worker
-  loop starts (no extra checks inside the hot task-processing loop).
-- Process termination APIs from task code are blocked: `process.exit`,
-  `process.kill`, `process.abort`, plus `Deno.exit` when present.
-- Permission enforcement is delegated to runtime-native mechanisms (Node worker
-  permission flags and Deno worker permissions when available). In-process
-  FS/network/env monkey-patching is not performed.
+- The guards go in once, before the worker loop starts, so nothing extra runs
+  inside the hot task loop.
+- Task code cannot take the process down: `process.exit`, `process.kill` and
+  `process.abort` are blocked, along with `Deno.exit` where it exists.
+- Permissions are enforced by the runtime itself — Node's worker permission
+  flags, Deno's worker permissions — rather than by monkey-patching FS, network
+  or env from inside the worker.
 
 ## host
 
-Host dispatcher backoff and scheduling options.
+How the host dispatcher backs off when there is nothing to do.
 
 ### stallFreeLoops
 
-How many notify loops run before backoff starts (default `128`).
+How many notify loops run before backoff kicks in (default `128`).
 
 ### maxBackoffMs
 
-Maximum backoff delay in milliseconds once the dispatcher starts stalling
-(default `10`).
+The longest the dispatcher will wait between polls once it starts stalling, in
+milliseconds (default `10`).
 
 ## dispatcher
 
@@ -350,9 +362,10 @@ never even imported.
 
 ## source
 
-Override worker entry module URL/path explicitly.
+Point workers at a specific entry module instead of the one Knitting resolves
+for you.
 
 ## Limits
 
-A single pool supports up to **65,536 tasks** (function IDs are stored as
-`Uint16`, range `0..0xFFFF`). Passing more tasks throws a `RangeError`.
+One pool holds up to **65,536 tasks** — function IDs are `Uint16`, so the range
+is `0..0xFFFF`. Hand it more than that and you get a `RangeError`.

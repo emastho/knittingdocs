@@ -12,7 +12,7 @@ to copy. The Hono server page is the one that keeps the fuller performance story
 ## Pick the right example for your use case
 
 **"I have a web server and want to keep it responsive under load"**
-Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It's the most realistic example -- a real HTTP server with SSR, JWT, and health check routes. If your server handles file uploads, [Image processing API](/examples/data_transforms/rendering_output/image_processing) shows the same pattern with binary payloads (resize, thumbnail, watermark via sharp).
+Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It's the most realistic example -- a real HTTP server with SSR, JWT, and health check routes.
 
 **"I do SSR and want to offload rendering"**
 [React SSR](/examples/data_transforms/rendering_output/react_ssr) shows the basic pattern. [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
@@ -48,7 +48,6 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 - [React SSR](/examples/data_transforms/rendering_output/react_ssr) -- render React components on workers
 - [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) -- SSR + Brotli, worker vs host comparison
 - [Hono server routes](/examples/data_transforms/rendering_output/hono_server) -- real HTTP server with offloaded routes
-- [Image processing API](/examples/data_transforms/rendering_output/image_processing) -- resize, thumbnail, and watermark with sharp on workers
 - [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) -- simple markdown transform pipeline
 
 ## Patterns worth copying

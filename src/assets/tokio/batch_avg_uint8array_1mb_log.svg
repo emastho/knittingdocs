@@ -988,7 +988,7 @@ z
      <use xlink:href="#DejaVuSans-42" transform="translate(777.791016 0)"/>
     </g>
    </g>
-   <g id="text_9">
+   <g id="text_9" style="display: none">
     <!-- Batch Avg Latency (less is better) -->
     <g style="fill: #f0f0f0" transform="translate(41.278365 32.107717) scale(0.17 -0.17)">
      <defs>
