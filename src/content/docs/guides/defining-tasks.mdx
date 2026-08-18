@@ -4,8 +4,6 @@ description: A task is a function your workers run. Use a plain function for the
 sidebar:
   order: 1
 ---
-import { Badge } from '@astrojs/starlight/components';
-
 A **task** is a function your workers run. An exported function already counts as
 one; wrap it in `task({ f })` when you want options like timeouts or abort
 signals.
@@ -175,12 +173,7 @@ The toolkit is not a DOM `AbortSignal`. There is no `.aborted`, no
 | Method | What it gives you |
 | --- | --- |
 | `signal.hasAborted()` | `true` once the call has been cancelled. Poll it in a loop and bail out. |
-| `signal.now()` <Badge text="next release" variant="caution" /> | A monotonic millisecond clock, for measuring elapsed time inside the task. |
-
-:::caution[`signal.now()` is not out yet]
-On the current release (`0.1.56`) the toolkit is `{ hasAborted }` only, and
-`signal.now()` is `undefined`. Everything else in this section works today.
-:::
+| `signal.now()` | A monotonic millisecond clock, for measuring elapsed time inside the task. |
 
 Monotonic means a clock adjustment can't make a duration come out negative, which
 is what makes `now()` safe for giving a loop its own budget:

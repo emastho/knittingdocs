@@ -57,8 +57,8 @@ createPool({
       | "firstIdleOrRandom"
   } | "roundRobin" | "robinRound" | "firstIdle" | "randomLane" | "firstIdleOrRandom",
   worker?: {
-    runtime?: "thread" | "process" | "compiled", // "compiled": next release
-    processRuntime?: "node" | "deno" | "bun" | "porffor", // "porffor": next release
+    runtime?: "thread" | "process" | "compiled",
+    processRuntime?: "node" | "deno" | "bun" | "porffor",
     processCommandPrefix?: string[],
     processSharedMemory?: "inherit" | "named" | {
       mode?: "inherit" | "named",
@@ -242,12 +242,6 @@ full story — sandboxes, containers, and the stdin / fd-0 handshake.
 `"compiled"` builds the task module into a native executable with Porffor and
 runs that as a child process. It is experimental, and supports a smaller feature
 set than the other two — see [Compiled workers](/guides/compiled-workers/).
-
-:::caution[Not in the current release]
-`runtime: "compiled"` and `processRuntime: "porffor"` land in the next release.
-On `0.1.56` the accepted values are `"thread" | "process"` and
-`"node" | "deno" | "bun"`.
-:::
 
 ### bootstrap
 

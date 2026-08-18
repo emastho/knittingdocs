@@ -164,7 +164,7 @@ Key details:
 - `position: "first" | "last"` -- where the inline lane sits in the balancer's lane order.
 - `batchSize` -- how many inline tasks run per event-loop tick.
 - `dispatchThreshold` -- minimum in-flight calls before the inline lane is eligible.
-- Abort signals on inline tasks use a static toolkit where `hasAborted()` always returns `false` (inline tasks can't be individually cancelled since they share the host thread). From the next release the toolkit also carries `now()`, which behaves normally and reads the host's clock.
+- Abort signals on inline tasks use a static toolkit where `hasAborted()` always returns `false` (inline tasks can't be individually cancelled since they share the host thread), while `now()` behaves normally and reads the host's clock.
 
 See [Inliner guide](/guides/inliner) for when to use it and when to avoid it.
 
