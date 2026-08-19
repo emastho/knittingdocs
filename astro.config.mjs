@@ -85,6 +85,10 @@ const crossOriginIsolationHeaders = {
 
 // https://astro.build/config
 export default defineConfig({
+  // The browser page used to live at the site root; keep the old URL working.
+  redirects: {
+    "/browser": "/guides/browser/",
+  },
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
   server: {

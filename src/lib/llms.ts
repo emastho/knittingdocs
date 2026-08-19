@@ -29,6 +29,7 @@ export const ESSENTIALS = [
   "- Debugging goes to STDERR: pass `debug: true` to `createPool` (or set the `KNITTING_DEBUG=*` env var) to stream diagnostics, each line tagged with the worker (`host`, `w0`, `w1`, …), the runtime, and a per-worker ms timer. Select namespaces instead of all — `host` (pool/task setup), `imports` (which modules each worker loaded), `lifecycle` (worker ready / process events), `signals` (per-dispatch traffic, very chatty), `globals` (`globalThis` pollution per load phase) — via `debug: { host: true, imports: true }` or `KNITTING_DEBUG=host,imports`. The option and the env var merge; either can enable a namespace. Zero-cost when off: the logger module isn't even imported.",
   "- Payload size: dynamic payloads are hard-capped at ~8 MiB by default (over-cap calls reject with `KNT_ERROR_3`). Raise it with `payload: { maxPayloadBytes, payloadMaxByteLength }` — `maxPayloadBytes` must be `<= payloadMaxByteLength >> 3`; the buffer growth cap defaults to 64 MiB.",
   "- Cancellation & timeouts: `task({ f, timeout: { time: 100 } })` bounds a call, `task({ f, abortSignal: true })` injects an abort toolkit (`signal.hasAborted()`, `signal.now()`) as the task's second argument — it is NOT a DOM `AbortSignal` (no `.aborted`, no `addEventListener`, cannot be passed to `fetch`) — and `worker.hardTimeoutMs` is a hard wall-clock kill for runaway CPU.",
+  '- Browser: `knitting/browser` runs the same pool API on web workers. Two hard requirements: the page must be cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp`, or `createPool` throws), and every task module must call `setModuleUrl(import.meta.url)` before defining tasks, because stack-based module discovery needs V8\'s `Error.prepareStackTrace`, which Firefox and Safari do not have. Not available in a page: process workers, compiled/Porffor workers, `BufferReference`, `ProcessSharedBuffer`, and passing a `SharedArrayBuffer` as a task argument. `permission: {...}` is accepted but IGNORED — a web worker holds the full privileges of the page that started it.',
   "- Errors are real: thrown errors and rejected promises return to the host as `Error` objects with `name`, `message`, `stack`, and the full `cause` chain.",
   "",
   "```ts",
@@ -65,13 +66,19 @@ const orderOf = (d: Doc): number => {
 
 // llms.txt / llms-full.txt mirror the sidebar: only pages under a navbar
 // section directory are part of the guided, maintained docs. This drops the
-// splash home page and any off-navbar top-level pages (e.g. browser.mdx,
-// license.md) so stale or out-of-band content never leaks into the llms files.
+// splash home page and off-navbar top-level pages such as license.md, so stale
+// or out-of-band content never leaks into the llms files.
 const SECTION_DIRS = new Set(SECTIONS.map((s) => s.dir));
+
+// Pages hidden from the sidebar are excluded for the same reason. They are live
+// demos or scratch pages (e.g. the browser smoke test), and their prose says
+// nothing an agent can act on.
+const isHidden = (d: Doc): boolean =>
+  (d.data as { sidebar?: { hidden?: boolean } }).sidebar?.hidden === true;
 
 export async function loadDocs(): Promise<Doc[]> {
   const docs = await getCollection("docs");
-  return docs.filter((d) => SECTION_DIRS.has(d.id.split("/")[0]));
+  return docs.filter((d) => SECTION_DIRS.has(d.id.split("/")[0]) && !isHidden(d));
 }
 
 export function groupDocs(docs: Doc[]): Array<{ label: string; docs: Doc[] }> {

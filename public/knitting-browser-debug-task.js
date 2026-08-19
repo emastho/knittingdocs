@@ -1,4 +1,9 @@
-import { importTask, task } from "./knitting.js";
+import { importTask, setModuleUrl, task } from "./knitting.js";
+
+// Caller discovery walks the stack through V8's Error.prepareStackTrace, which
+// only V8 has. Firefox and Safari hand back a plain string, so task() and
+// importTask() throw unless the module states its own URL up front.
+setModuleUrl(import.meta.url);
 
 const TASK_MODULE_HREF = import.meta.url;
 const IMPORTED_TASK_MODULE_HREF = new URL(

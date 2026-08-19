@@ -321,4 +321,4 @@ Knowing where Knitting stops is as useful as knowing what it does:
 - **No preemption.** A long-running task blocks its lane until it finishes. Use `abortSignal` with `hasAborted()` polling for cooperative cancellation.
 - **Same host only.** Workers can be threads *or* separate processes on one machine, but the shared memory never crosses the network -- there is no cross-machine transport. Pair Knitting with one if you need to scale out.
 - **No automatic scaling.** Worker count is fixed at pool creation. You choose the parallelism level upfront.
-- **Browser support is limited.** There is a [browser build](/browser/), but shared memory there needs cross-origin isolation (`COOP` / `COEP` headers) because of Spectre-era constraints. Most Knitting work still happens server-side.
+- **Browser support is limited.** There is a [browser build](/guides/browser/), but shared memory there needs cross-origin isolation (`COOP` / `COEP` headers) because of Spectre-era constraints. Most Knitting work still happens server-side.

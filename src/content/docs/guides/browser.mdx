@@ -1,0 +1,218 @@
+---
+title: Browser
+description: Run Knitting in a browser — download the build, see what works over web workers, and learn what a page cannot do.
+sidebar:
+  order: 12
+---
+
+`knitting/browser` runs the same pool API on web workers and `SharedArrayBuffer`.
+Tasks, typed-array payloads, parallel calls, abort signals, and shutdown all work the
+way they do on Node, Deno, and Bun.
+
+What follows is the part that does not carry over: what a page cannot do, what you see
+when you try, and why.
+
+<div class="browser-page-actions">
+  <a class="sl-link-button primary" href="/knitting.js" download="knitting.js">Download Latest Stable Browser Build</a>
+  <br></br>
+  <a class="sl-link-button secondary" href="/start/quick-start/">Open Quick Start</a>
+</div>
+
+:::danger
+Do not use this website as a resource. `/knitting.js` is served open
+(`Access-Control-Allow-Origin: *`) so the smoke test can run, not as a CDN. It is
+unversioned, it changes whenever these docs are rebuilt, and it carries no uptime,
+caching, or integrity guarantees. Download the file or install `knitting` from npm,
+then serve it from your own origin.
+:::
+
+The [browser smoke test](/guides/browser-smoke-test/) runs the hosted bundle in your
+own browser. It starts real one-thread pools through both `task()` and `importTask()`,
+so you can watch the build work before you install anything.
+
+## Two things your page must do
+
+### Serve the page cross-origin isolated
+
+A browser only hands out `SharedArrayBuffer` when the page arrives with both of these
+headers:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Without them, `createPool` throws before it starts a worker:
+
+> SharedArrayBuffer is unavailable: serve the page cross-origin isolated
+> (Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy:
+> require-corp).
+
+That is the browser's rule, not Knitting's, and there is no way around it. No shared
+memory means no pool.
+
+Turning isolation on affects the whole page, not just Knitting. Every cross-origin
+image, script, or font now needs `Cross-Origin-Resource-Policy` or CORS, or the
+browser refuses to load it.
+
+This site sends both headers in local Astro dev and preview, and on Netlify through
+`public/_headers`. If you host the bundle somewhere else, set them up there too. When
+the smoke test reports `crossOriginIsolated: false`, a missing header is almost always
+the reason.
+
+### Call `setModuleUrl(import.meta.url)` in every task module
+
+A worker has to import the module your tasks live in, so Knitting needs that module's
+URL. On Node, Deno, and Bun it finds the URL by reading the call stack. That does not
+survive a browser: it depends on `Error.prepareStackTrace`, which only V8 provides,
+and a bundler rewrites the paths anyway. So in a browser the module says where it
+lives:
+
+```js
+import { setModuleUrl, task } from "knitting/browser";
+
+setModuleUrl(import.meta.url);
+
+export const square = task({ f: (value) => value * value });
+```
+
+Put the call at the top, above the `task()` and `importTask()` calls it covers. Leave
+it out and the first of those calls throws, long before you reach a pool:
+
+> Unable to determine caller file. This runtime exposes no stack traces (e.g.
+> Andromeda); call setModuleUrl(import.meta.url) at the top of the module that defines
+> your tasks before creating a pool.
+
+An unbundled page in Chromium works without the call, because there the stack really
+does name the module. Do not rely on that. It breaks as soon as the page goes through
+a bundler or opens in Firefox or Safari.
+
+## Basic URL import example
+
+You do not need a package import in a browser. Load the bundle from a URL, then point
+`importTask()` at a second URL that holds your tasks.
+
+```ts
+const knittingUrl = new URL("/knitting.js", window.location.origin).href;
+const taskModuleUrl = new URL("/example-task.mjs", window.location.origin).href;
+const { importTask } = await import(knittingUrl);
+
+const add = importTask<[number, number], number>({
+  href: taskModuleUrl,
+  name: "add",
+});
+
+const pool = add.createPool({ threads: 1 });
+
+try {
+  console.log(await pool.call([2, 3])); // 5
+} finally {
+  await pool.shutdown();
+}
+```
+
+The module on the other end names itself the same way:
+
+```js
+import { setModuleUrl, task } from "./knitting.js";
+
+setModuleUrl(import.meta.url);
+
+export const add = task({
+  f: ([a, b]) => a + b,
+});
+```
+
+That is the whole wiring. The page loads `knitting.js` by URL, each task module
+reports its own URL, and the workers import from there.
+
+## What a page cannot do
+
+| Feature | What happens |
+| --- | --- |
+| Process workers (`worker.runtime: "process"`, `processRuntime`) | throws `process workers are unavailable in the browser build` |
+| Compiled / Porffor workers (`runtime: "compiled"`, `.knt` artifacts) | throws `compiled workers are unavailable in the browser build` |
+| `BufferReference` | throws `BufferReference cannot run in runtime "browser"` |
+| `ProcessSharedBuffer`, named shared memory | throws `ProcessSharedBuffer is unavailable in the browser build` |
+| Native addons, FFI, file descriptors | unreachable; nothing in a page can load them |
+| `checkCompiledWorker` | not exported from `knitting/browser` |
+| Permissions (`permission: {...}`) | accepted and ignored, see below |
+
+All of these need a filesystem, a process to spawn, or FFI. The browser build replaces
+them with stubs that throw the messages above, so a call fails where you wrote it
+instead of somewhere deep inside a worker.
+
+### Permissions do nothing here
+
+The `permission` option is accepted and then skipped. There is no filesystem to
+restrict, no process to sandbox, and no runtime flags to pass, so a policy that locks
+down a Node worker locks down nothing in a page.
+
+:::caution
+A web worker has the same privileges as the page that started it: same origin, same
+`fetch` reach, same storage. Do not run task code in a browser pool that you would not
+trust with your origin. Sandboxing that code is the browser's job, through an iframe
+on a separate origin, and not something Knitting can do for you.
+:::
+
+### Passing a `SharedArrayBuffer` yourself
+
+Handing a `SharedArrayBuffer` to a task *as an argument* works on Node, Deno, and Bun.
+In a browser it throws:
+
+```
+KNT_ERROR_3: Unsupported payload type; BufferReference cannot run in runtime "browser"
+```
+
+That path shares a buffer by pinning a pointer through FFI, and a page has no FFI. The
+pool's own transport is unaffected, which is how the workers talk at all. Only buffers
+you pass yourself are refused.
+
+A browser version of this is possible. A cross-origin isolated page can send a
+`SharedArrayBuffer` straight through `postMessage`, with no pointer involved. It is
+just not implemented yet.
+
+## Works, but differently
+
+- **Workers start from a message, not from `workerData`.** The pool posts the boot
+  payload after it constructs the worker. You cannot see this from the API; it matters
+  if you are reading worker startup code.
+- **`KNITTING_DEBUG` does nothing.** The env gate reads `Deno.env` or `process.env`,
+  and a page has neither. Pass the `debug` option to `createPool` instead.
+- **`threads` still defaults to 1.** No runtime picks a thread count for you. In a
+  browser, `navigator.hardwareConcurrency` tells you how many cores you have.
+- **Every worker parses the whole bundle.** The worker URL is the bundle's own URL, so
+  memory use grows with thread count.
+
+## Not a browser problem
+
+These fail the same way on Node, so do not go looking for a browser cause:
+
+- `BigInt` payloads: `Do not know how to serialize a BigInt`
+- `Map` and `Set` payloads: `Unsupported object type`
+- Functions as payloads: `KNT_ERROR_0: Function is not a valid type`
+- `Error` values round-trip as `{ name }`, dropping the message
+
+## Browser support
+
+Tests run against headless Chromium in two layouts: one bundle holding tasks and
+library together, and the standalone single-file bundle loaded from a script tag
+beside a separate task module.
+
+Chromium is the only engine covered. Firefox and Safari have the same building blocks,
+web workers and `SharedArrayBuffer` under cross-origin isolation, so they are expected
+to work, but nothing has been checked against them. One difference is already known:
+neither implements `Error.prepareStackTrace`. There, `setModuleUrl(import.meta.url)`
+is not just good practice, it is the only way a task module can be found.
+
+## How the build is produced
+
+`knitting/browser` ships as a single self-contained file. The copy hosted here is the
+unminified build, about 233 KB on disk and 49 KB over the wire. The published minified
+build is roughly 94 KB, or 32 KB gzipped.
+
+Node-only subsystems are swapped for stubs at bundle time by
+[`scripts/browser-stubs/plugin.ts`](https://github.com/mimiMonads/knitting/blob/main/scripts/browser-stubs/plugin.ts).
+Each stub does what the real module would have done in a page anyway: return nothing,
+answer false, or throw one of the messages above. That is why these errors name the
+feature you reached for instead of failing generically.

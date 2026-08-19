@@ -1,0 +1,32 @@
+---
+title: Browser smoke test
+description: A live check of the hosted knitting.js build — starts real web-worker pools through both task() and importTask().
+sidebar:
+  hidden: true
+pagefind: false
+---
+
+import BrowserKnittingDebug from "../../../components/BrowserKnittingDebug.astro";
+
+This page runs the browser build in your own browser, right now. It loads
+`/knitting.js`, imports a task module that uses both `task()` and `importTask()`,
+starts one-thread pools, and puts real calls through each of them.
+
+The check runs on its own when the page loads. For what the build can and cannot do,
+read [Browser](/guides/browser/).
+
+<BrowserKnittingDebug />
+
+## When it fails
+
+**`crossOriginIsolated: false`** means the page did not receive
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
+require-corp`. Without those headers the browser withholds `SharedArrayBuffer`, and no
+pool can start. This site sends both through `public/_headers`.
+
+**`Unable to determine caller file`** means the task module never called
+`setModuleUrl(import.meta.url)`. Knitting finds a task's module by reading the call
+stack, which needs `Error.prepareStackTrace`, a V8 feature. Expect this failure in
+Firefox and Safari.
+
+Both are covered in more detail on the [Browser](/guides/browser/) page.

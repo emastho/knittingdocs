@@ -1,19 +1,128 @@
+var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, {
+      get: all[name],
+      enumerable: true,
+      configurable: true,
+      set: __exportSetter.bind(all, name)
+    });
+};
+var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+
+// src/debug/env-diff.ts
+var snapshotGlobals = () => ({
+  keys: new Set(Reflect.ownKeys(globalThis))
+}), diffGlobals = (before, after) => {
+  const added = [];
+  const removed = [];
+  for (const key of after.keys) {
+    if (!before.keys.has(key))
+      added.push(key);
+  }
+  for (const key of before.keys) {
+    if (!after.keys.has(key))
+      removed.push(key);
+  }
+  return { added, removed };
+}, describeGlobalKey = (key) => {
+  const name = typeof key === "symbol" ? key.toString() : key;
+  let descriptor;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+  } catch {
+    return name;
+  }
+  if (descriptor === undefined)
+    return name;
+  const kind = descriptor.get !== undefined || descriptor.set !== undefined ? "accessor" : typeof descriptor.value;
+  const flags = `${descriptor.writable === false ? "" : "w"}${descriptor.configurable ? "c" : ""}${descriptor.enumerable ? "e" : ""}`;
+  return flags.length > 0 ? `${name} (${kind} ${flags})` : `${name} (${kind})`;
+};
+
+// src/debug/handle.ts
+var exports_handle = {};
+__export(exports_handle, {
+  initDebug: () => initDebug
+});
+var initDebug = ({ name, runtime, namespaces }) => {
+  const all = namespaces.has("*");
+  const enabled = (namespace) => all || namespaces.has(namespace);
+  const base = performance.now();
+  const tag = `${name}·${runtime}`;
+  const log = (namespace, message) => {
+    if (!enabled(namespace))
+      return;
+    const elapsed = (performance.now() - base).toFixed(1);
+    console.error(`[${tag}·+${elapsed}ms] ${namespace}: ${message}`);
+  };
+  let previous = enabled("globals") ? snapshotGlobals() : undefined;
+  const envPhase = (label) => {
+    if (previous === undefined)
+      return;
+    const current = snapshotGlobals();
+    const { added, removed } = diffGlobals(previous, current);
+    previous = current;
+    if (added.length === 0 && removed.length === 0) {
+      log("globals", `${label}: no new globals`);
+      return;
+    }
+    if (added.length > 0) {
+      log("globals", `${label} +${added.length}: ${added.map(describeGlobalKey).join("  ")}`);
+    }
+    if (removed.length > 0) {
+      log("globals", `${label} -${removed.length}: ${removed.map(String).join("  ")}`);
+    }
+  };
+  return { enabled, log, envPhase };
+};
+var init_handle = () => {};
+
+// src/common/node-compat.ts
+var nodeProcess = (() => {
+  const candidate = globalThis.process;
+  return typeof candidate?.versions?.node === "string" ? candidate : undefined;
+})();
+var getNodeProcess = () => nodeProcess;
+var getNodeBuiltinModule = (specifier) => {
+  const getter = nodeProcess?.getBuiltinModule;
+  if (typeof getter !== "function")
+    return;
+  try {
+    return getter.call(nodeProcess, specifier);
+  } catch {}
+  if (!specifier.startsWith("node:"))
+    return;
+  try {
+    return getter.call(nodeProcess, specifier.slice(5));
+  } catch {
+    return;
+  }
+};
+
 // src/common/runtime.ts
 var globals = globalThis;
+var nodeProcess2 = getNodeProcess();
 var IS_DENO = typeof globals.Deno?.version?.deno === "string";
 var IS_BUN = typeof globals.Bun?.version === "string";
-var IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
-var IS_BROWSER = !IS_DENO && !IS_BUN && !IS_NODE && (typeof globals.document !== "undefined" || typeof globals.navigator !== "undefined" || typeof globals.WorkerGlobalScope === "function");
-var RUNTIME = IS_DENO ? "deno" : IS_BUN ? "bun" : IS_NODE ? "node" : "unknown";
+var IS_NODE = typeof nodeProcess2?.versions?.node === "string";
+var IS_ANDROMEDA = typeof globals.__andromeda__ !== "undefined";
+var IS_BROWSER = !IS_DENO && !IS_BUN && !IS_NODE && !IS_ANDROMEDA && (typeof globals.document !== "undefined" || typeof globals.WorkerGlobalScope === "function");
+var RUNTIME = IS_DENO ? "deno" : IS_BUN ? "bun" : IS_NODE ? "node" : IS_ANDROMEDA ? "andromeda" : IS_BROWSER ? "browser" : "unknown";
+var WebAssemblyRef = globals.WebAssembly;
 var SET_IMMEDIATE = typeof globals.setImmediate === "function" ? globals.setImmediate : undefined;
 var WASM_MEMORY_PAGE_BYTES = 64 * 1024;
 var wasmSharedBufferMemory = new WeakMap;
 var wasmSharedBufferMaxByteLength = new WeakMap;
 var hasSharedWasmMemory = (() => {
-  if (typeof WebAssembly?.Memory !== "function")
+  if (typeof WebAssemblyRef?.Memory !== "function")
     return false;
   try {
-    new WebAssembly.Memory({ initial: 0, maximum: 1, shared: true });
+    new WebAssemblyRef.Memory({ initial: 0, maximum: 1, shared: true });
     return true;
   } catch {
     return false;
@@ -21,7 +130,7 @@ var hasSharedWasmMemory = (() => {
 })();
 var roundupWasmPages = (byteLength) => Math.ceil(Math.max(0, byteLength) / WASM_MEMORY_PAGE_BYTES);
 var createSharedWasmBuffer = (byteLength, maxByteLength) => {
-  const memory = new WebAssembly.Memory({
+  const memory = new WebAssemblyRef.Memory({
     initial: roundupWasmPages(byteLength),
     maximum: Math.max(roundupWasmPages(byteLength), roundupWasmPages(maxByteLength)),
     shared: true
@@ -83,219 +192,70 @@ var growSharedArrayBuffer = (sab, byteLength) => {
   return nextBuffer;
 };
 
-// src/common/node-compat.ts
-var hiddenImport = Function("specifier", "return import(specifier);");
-var importNodeModule = async (specifier) => {
-  if (!IS_NODE)
-    return;
-  try {
-    return await hiddenImport(specifier);
-  } catch {
-    return;
-  }
-};
-var rawPathModule = await importNodeModule("node:path");
-var rawFsModule = await importNodeModule("node:fs");
-var rawUrlModule = await importNodeModule("node:url");
-var pathModule = rawPathModule?.default ?? rawPathModule;
-var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[/\\]/;
-var WINDOWS_UNC_PATH = /^[/\\]{2}[^/\\]+[/\\][^/\\]+/;
-var hostIsWindows = (() => {
-  try {
-    if (typeof process !== "undefined")
-      return process.platform === "win32";
-  } catch {}
-  const g = globalThis;
-  return g.Deno?.build?.os === "windows";
-})();
-var looksWindowsPath = (value) => hostIsWindows || WINDOWS_DRIVE_PATH.test(value) || WINDOWS_UNC_PATH.test(value);
-var normalizePathSeparators = (value) => value.replace(/\\/g, "/");
-var splitRoot = (value) => {
-  const normalized = normalizePathSeparators(value);
-  if (WINDOWS_UNC_PATH.test(value)) {
-    const [, host = "", share = "", rest = ""] = normalized.match(/^\/\/([^/]+)\/([^/]+)(\/.*)?$/) ?? [];
-    return {
-      root: `//${host}/${share}`,
-      rest: rest.replace(/^\/+/, "")
-    };
-  }
-  if (WINDOWS_DRIVE_PATH.test(value)) {
-    return {
-      root: normalized.slice(0, 2).toUpperCase() + "/",
-      rest: normalized.slice(3)
-    };
-  }
-  if (normalized.startsWith("/")) {
-    return {
-      root: "/",
-      rest: normalized.replace(/^\/+/, "")
-    };
-  }
-  return {
-    root: "",
-    rest: normalized
-  };
-};
-var normalizeJoinedPath = (value) => {
-  const { root, rest } = splitRoot(value);
-  const parts = rest.split("/");
-  const stack = [];
-  for (const part of parts) {
-    if (!part || part === ".")
-      continue;
-    if (part === "..") {
-      if (stack.length > 0 && stack[stack.length - 1] !== "..") {
-        stack.pop();
-      } else if (!root) {
-        stack.push("..");
-      }
-      continue;
-    }
-    stack.push(part);
-  }
-  if (root) {
-    const joined = stack.join("/");
-    return joined.length > 0 ? `${root}${joined}` : root;
-  }
-  return stack.length > 0 ? stack.join("/") : ".";
-};
-var fallbackIsAbsolute = (value) => {
-  if (value.length === 0)
-    return false;
-  const normalized = normalizePathSeparators(value);
-  return normalized.startsWith("/") || WINDOWS_DRIVE_PATH.test(value) || WINDOWS_UNC_PATH.test(value);
-};
-var fallbackResolve = (...segments) => {
-  let resolved = "";
-  for (let i = segments.length - 1;i >= 0; i--) {
-    const segment = segments[i];
-    if (!segment)
-      continue;
-    resolved = resolved ? `${segment}/${resolved}` : segment;
-    if (fallbackIsAbsolute(segment))
-      break;
-  }
-  if (!fallbackIsAbsolute(resolved)) {
-    resolved = `/${resolved}`;
-  }
-  return normalizeJoinedPath(resolved);
-};
-var fallbackJoin = (...segments) => normalizeJoinedPath(segments.filter(Boolean).join("/"));
-var fallbackDirname = (value) => {
-  const normalized = normalizeJoinedPath(value);
-  const { root, rest } = splitRoot(normalized);
-  if (!rest)
-    return root || ".";
-  const parts = rest.split("/");
-  parts.pop();
-  if (root) {
-    return parts.length > 0 ? `${root}${parts.join("/")}` : root;
-  }
-  return parts.length > 0 ? parts.join("/") : ".";
-};
-var fallbackBasename = (value) => {
-  const normalized = normalizeJoinedPath(value);
-  const { rest } = splitRoot(normalized);
-  const parts = rest.split("/");
-  return parts[parts.length - 1] ?? "";
-};
-var splitRelativeParts = (value) => {
-  const normalized = normalizeJoinedPath(value);
-  const { rest } = splitRoot(normalized);
-  if (!rest)
-    return [];
-  return rest.split("/").filter(Boolean);
-};
-var fallbackRelative = (from, to) => {
-  const fromResolved = fallbackResolve(from);
-  const toResolved = fallbackResolve(to);
-  const fromRoot = splitRoot(fromResolved).root;
-  const toRoot = splitRoot(toResolved).root;
-  if (fromRoot !== toRoot)
-    return toResolved;
-  const fromParts = splitRelativeParts(fromResolved);
-  const toParts = splitRelativeParts(toResolved);
-  let common = 0;
-  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
-    common++;
-  }
-  const up = new Array(fromParts.length - common).fill("..");
-  const down = toParts.slice(common);
-  const out = [...up, ...down].join("/");
-  return out.length > 0 ? out : "";
-};
-var encodeFilePath = (value) => encodeURI(value).replace(/\?/g, "%3F").replace(/#/g, "%23");
-var fallbackFileURLToPath = (value) => {
-  const url = value instanceof URL ? value : new URL(value);
-  if (url.protocol !== "file:") {
-    throw new TypeError("Expected a file URL");
-  }
-  let pathname = decodeURIComponent(url.pathname);
-  if (/^\/[A-Za-z]:/.test(pathname))
-    pathname = pathname.slice(1);
-  if (url.host.length > 0) {
-    return `//${url.host}${pathname}`;
-  }
-  return looksWindowsPath(pathname) ? pathname.replace(/\//g, "\\") : pathname;
-};
-var fallbackPathToFileURL = (value) => {
-  if (WINDOWS_UNC_PATH.test(value)) {
-    const normalized2 = normalizePathSeparators(value).replace(/^\/+/, "");
-    return new URL(`file://${encodeFilePath(normalized2)}`);
-  }
-  if (WINDOWS_DRIVE_PATH.test(value)) {
-    const normalized2 = normalizePathSeparators(value);
-    return new URL(`file:///${encodeFilePath(normalized2)}`);
-  }
-  const absolute = fallbackIsAbsolute(value) ? value : fallbackResolve(value);
-  const normalized = normalizePathSeparators(absolute);
-  return new URL(`file://${encodeFilePath(normalized.startsWith("/") ? normalized : `/${normalized}`)}`);
-};
-var pathResolve = pathModule?.resolve?.bind(pathModule) ?? fallbackResolve;
-var pathJoin = pathModule?.join?.bind(pathModule) ?? fallbackJoin;
-var pathDirname = pathModule?.dirname?.bind(pathModule) ?? fallbackDirname;
-var pathBasename = pathModule?.basename?.bind(pathModule) ?? fallbackBasename;
-var pathRelative = pathModule?.relative?.bind(pathModule) ?? fallbackRelative;
-var pathIsAbsolute = pathModule?.isAbsolute?.bind(pathModule) ?? fallbackIsAbsolute;
-var fileURLToPathCompat = rawUrlModule?.fileURLToPath ?? fallbackFileURLToPath;
-var pathToFileURLCompat = rawUrlModule?.pathToFileURL ?? fallbackPathToFileURL;
-var existsSyncCompat = rawFsModule?.existsSync;
-var realpathSyncCompat = rawFsModule?.realpathSync?.native ?? rawFsModule?.realpathSync;
-
 // src/common/worker-runtime.ts
-var workerThreads = await importNodeModule("node:worker_threads");
-var isWebWorkerScope = () => {
+var RUNTIME_PROCESS_WORKER_ENV = "KNITTING_PROCESS_WORKER";
+var RUNTIME_POOL_DEPTH_ENV = "KNITTING_POOL_DEPTH";
+var nodeProcess3 = getNodeProcess();
+var RUNTIME_IS_PROCESS_WORKER = nodeProcess3?.env?.[RUNTIME_PROCESS_WORKER_ENV] === "1";
+var readPoolDepth = () => {
+  const raw = nodeProcess3?.env?.[RUNTIME_POOL_DEPTH_ENV];
+  if (typeof raw !== "string")
+    return 0;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+var RUNTIME_POOL_DEPTH = readPoolDepth();
+var workerThreads = getNodeBuiltinModule("node:worker_threads");
+var isWorkerGlobalScope = () => {
   const scopeCtor = globalThis.WorkerGlobalScope;
-  if (typeof scopeCtor !== "function")
-    return false;
-  try {
-    return globalThis instanceof scopeCtor;
-  } catch {
-    return false;
+  if (typeof scopeCtor === "function") {
+    try {
+      if (globalThis instanceof scopeCtor) {
+        return true;
+      }
+    } catch {}
   }
+  if (IS_ANDROMEDA && typeof globalThis.self !== "undefined") {
+    return true;
+  }
+  return false;
 };
 var RUNTIME_WORKER = workerThreads?.Worker ?? globalThis.Worker;
 var RUNTIME_MESSAGE_CHANNEL = workerThreads?.MessageChannel ?? globalThis.MessageChannel;
 var HAS_NODE_WORKER_THREADS = workerThreads != null;
-var RUNTIME_IS_MAIN_THREAD = workerThreads?.isMainThread ?? !isWebWorkerScope();
+var RUNTIME_IS_MAIN_THREAD = RUNTIME_IS_PROCESS_WORKER ? false : workerThreads?.isMainThread ?? !isWorkerGlobalScope();
 var RUNTIME_WORKER_DATA = workerThreads?.workerData;
-var RUNTIME_PARENT_PORT = workerThreads?.parentPort ?? undefined;
+var RUNTIME_PARENT_PORT = workerThreads?.parentPort ?? (RUNTIME_IS_PROCESS_WORKER && typeof nodeProcess3?.send === "function" ? {
+  postMessage: (message) => nodeProcess3.send(message)
+} : undefined);
 var createRuntimeMessageChannel = () => {
   if (typeof RUNTIME_MESSAGE_CHANNEL !== "function") {
     throw new Error("MessageChannel is not available in this runtime");
   }
   return new RUNTIME_MESSAGE_CHANNEL;
 };
+var addRuntimeDataListener = (target, handler) => {
+  if (typeof target.on === "function") {
+    target.on("message", handler);
+    return;
+  }
+  if (typeof target.addEventListener === "function") {
+    target.addEventListener("message", (event) => handler(event?.data));
+    return;
+  }
+  target.onmessage = (event) => handler(event?.data);
+};
 
 // src/common/shared-buffer-region.ts
+var isSharedBuffer = (value) => value instanceof SharedArrayBuffer || value instanceof ArrayBuffer;
 var isSharedBufferRegion = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return candidate.sab instanceof SharedArrayBuffer && typeof candidate.byteOffset === "number" && Number.isInteger(candidate.byteOffset) && candidate.byteOffset >= 0 && typeof candidate.byteLength === "number" && Number.isInteger(candidate.byteLength) && candidate.byteLength >= 0;
+  return isSharedBuffer(candidate.sab) && typeof candidate.byteOffset === "number" && Number.isInteger(candidate.byteOffset) && candidate.byteOffset >= 0 && typeof candidate.byteLength === "number" && Number.isInteger(candidate.byteLength) && candidate.byteLength >= 0;
 };
-var isSharedBufferSource = (value) => value instanceof SharedArrayBuffer || isSharedBufferRegion(value);
-var toSharedBufferRegion = (value) => value instanceof SharedArrayBuffer ? {
+var isSharedBufferSource = (value) => isSharedBuffer(value) || isSharedBufferRegion(value);
+var toSharedBufferRegion = (value) => isSharedBuffer(value) ? {
   sab: value,
   byteOffset: 0,
   byteLength: value.byteLength
@@ -365,7 +325,7 @@ var probeLockBufferTextCompat = ({
   payload: probeSharedBufferTextCompat(payload)
 });
 
-// src/ipc/tools/RingQueue.ts
+// src/ipc/tools/ring-queue.ts
 class RingQueue {
   #buf;
   #mask;
@@ -499,16 +459,1065 @@ class RingQueue {
   }
 }
 
+// src/memory/payload-config.ts
+var PAYLOAD_DEFAULT_MAX_BYTE_LENGTH = 64 * 1024 * 1024;
+var PAYLOAD_DEFAULT_INITIAL_BYTES = 4 * 1024 * 1024;
+var toPositiveInteger = (value) => {
+  if (!Number.isFinite(value))
+    return;
+  const int = Math.floor(value);
+  return int > 0 ? int : undefined;
+};
+var canGrowSharedBuffer = (sab) => {
+  if (sab == null)
+    return false;
+  return sab instanceof SharedArrayBuffer && HAS_SAB_GROW && isGrowableSharedArrayBuffer(sab);
+};
+var sharedBufferMaxByteLength = (sab) => {
+  if (sab == null)
+    return;
+  if (sab instanceof SharedArrayBuffer) {
+    return toPositiveInteger(sharedArrayBufferMaxByteLength(sab));
+  }
+  return toPositiveInteger(sab.byteLength);
+};
+var resolvePayloadBufferOptions = ({
+  options,
+  sab
+}) => {
+  const sabRegion = sab === undefined ? undefined : toSharedBufferRegion(sab);
+  const backing = sabRegion?.sab;
+  const requestedMode = options?.mode;
+  const modeDefault = HAS_SAB_GROW ? "growable" : "fixed";
+  let mode = requestedMode ?? modeDefault;
+  if (mode === "growable" && backing != null && !canGrowSharedBuffer(backing)) {
+    mode = "fixed";
+  }
+  if (mode === "growable" && !HAS_SAB_GROW) {
+    mode = "fixed";
+  }
+  const payloadMaxByteLength = toPositiveInteger(options?.payloadMaxByteLength) ?? toPositiveInteger(sabRegion?.byteLength) ?? sharedBufferMaxByteLength(backing) ?? PAYLOAD_DEFAULT_MAX_BYTE_LENGTH;
+  const requestedInitialBytes = toPositiveInteger(options?.payloadInitialBytes);
+  const payloadInitialBytes = mode === "fixed" ? payloadMaxByteLength : Math.min(requestedInitialBytes ?? PAYLOAD_DEFAULT_INITIAL_BYTES, payloadMaxByteLength);
+  const maxPayloadCeiling = payloadMaxByteLength >> 3;
+  if (maxPayloadCeiling <= 0) {
+    throw new RangeError("payloadMaxByteLength is too small; must be at least 8 bytes.");
+  }
+  const rawMaxPayloadBytes = options?.maxPayloadBytes;
+  if (rawMaxPayloadBytes !== undefined) {
+    const normalized = Math.floor(rawMaxPayloadBytes);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new RangeError(`maxPayloadBytes must be > 0 and <= ${maxPayloadCeiling}.`);
+    }
+  }
+  const maxPayloadBytes = toPositiveInteger(rawMaxPayloadBytes) ?? maxPayloadCeiling;
+  if (maxPayloadBytes <= 0 || maxPayloadBytes > maxPayloadCeiling) {
+    throw new RangeError(`maxPayloadBytes must be > 0 and <= ${maxPayloadCeiling}.`);
+  }
+  return {
+    mode,
+    payloadInitialBytes,
+    payloadMaxByteLength,
+    maxPayloadBytes
+  };
+};
+
+// src/memory/lock.ts
+var registeredEncodePayload;
+var registeredDecodePayload;
+var registerLockPayloadCodec = (encode, decode) => {
+  registeredEncodePayload = encode;
+  registeredDecodePayload = decode;
+};
+var PayloadSignal = {
+  UNREACHABLE: 0,
+  BigInt: 2,
+  True: 3,
+  False: 4,
+  Undefined: 5,
+  NaN: 6,
+  Float64: 9,
+  Null: 10
+};
+var PayloadBuffer = {
+  BORDER_SIGNAL_BUFFER: 11,
+  String: 11,
+  Json: 12,
+  StaticString: 15,
+  StaticJson: 16,
+  Binary: 17,
+  StaticBinary: 18,
+  Int32Array: 19,
+  Float64Array: 20,
+  BigInt64Array: 21,
+  BigUint64Array: 22,
+  DataView: 23,
+  Error: 24,
+  Date: 25,
+  Symbol: 26,
+  StaticSymbol: 27,
+  BigInt: 28,
+  StaticBigInt: 29,
+  StaticInt32Array: 31,
+  StaticFloat64Array: 32,
+  StaticBigInt64Array: 33,
+  StaticBigUint64Array: 34,
+  StaticDataView: 35,
+  ArrayBuffer: 36,
+  StaticArrayBuffer: 37,
+  Buffer: 38,
+  StaticBuffer: 39,
+  EnvelopeStaticHeader: 40,
+  EnvelopeDynamicHeader: 41,
+  EnvelopeStaticHeaderString: 42,
+  EnvelopeDynamicHeaderString: 43,
+  ExternalPayload: 44,
+  StaticExternalPayload: 45,
+  ProcessSharedBuffer: 46,
+  BufferReference: 47,
+  SharedArrayBuffer: 48,
+  EnvelopeStaticHeaderExternal: 49,
+  EnvelopeDynamicHeaderExternal: 50,
+  EnvelopeStaticHeaderStringExternal: 51,
+  EnvelopeDynamicHeaderStringExternal: 52,
+  NumericArray: 53,
+  StaticNumericArray: 54
+};
+var PayloadBufferName = {};
+for (const key of Object.keys(PayloadBuffer)) {
+  PayloadBufferName[PayloadBuffer[key]] = key;
+}
+var payloadBufferName = (value) => PayloadBufferName[value] ?? String(value);
+var LockBound = {
+  paddingLock: 0,
+  padding: 0,
+  slots: 32,
+  header: 0
+};
+var LOCK_CACHE_LINE_BYTES = 64;
+var LOCK_SECTOR_BYTES = 256;
+var PayloadTransportFinalizer = Symbol.for("knitting.payloadCodec.transportFinalizer");
+var PromisePayloadMarker = Symbol.for("knitting.promise.payload");
+var TASK_LOCAL_FLAGS_INDEX = 7;
+var TASK_LOCAL_PROMISE_PENDING_FLAG = 1 << 0;
+var TASK_LOCAL_PROMISE_TRACKED_FLAG = 1 << 1;
+var beginPromisePayload = (task) => {
+  const flags = task[TASK_LOCAL_FLAGS_INDEX];
+  if ((flags & TASK_LOCAL_PROMISE_PENDING_FLAG) !== 0)
+    return false;
+  task[TASK_LOCAL_FLAGS_INDEX] = (flags | TASK_LOCAL_PROMISE_PENDING_FLAG) >>> 0;
+  return true;
+};
+var finishPromisePayload = (task) => {
+  task[TASK_LOCAL_FLAGS_INDEX] = (task[TASK_LOCAL_FLAGS_INDEX] & ~TASK_LOCAL_PROMISE_PENDING_FLAG) >>> 0;
+};
+var isPromisePayloadPending = (task) => (task[TASK_LOCAL_FLAGS_INDEX] & TASK_LOCAL_PROMISE_PENDING_FLAG) !== 0;
+var resetTaskLocalFlags = (task) => {
+  task[TASK_LOCAL_FLAGS_INDEX] = 0;
+};
+var addTaskFinalizer = (task, finalizer) => {
+  const previous = task.finalize;
+  task.finalize = previous === undefined ? finalizer : () => {
+    try {
+      previous();
+    } finally {
+      finalizer();
+    }
+  };
+};
+var attachPayloadTransportFinalizer = (task, value) => {
+  if (task.finalize !== undefined || value === null || typeof value !== "object") {
+    return;
+  }
+  const finalizer = value[PayloadTransportFinalizer]?.();
+  if (typeof finalizer === "function")
+    addTaskFinalizer(task, finalizer);
+};
+var runTaskFinalizers = (task) => {
+  const finalizer = task.finalize;
+  task.finalize = undefined;
+  if (finalizer !== undefined) {
+    try {
+      finalizer();
+    } catch {}
+  }
+};
+var TaskIndex = {
+  FlagsToHost: 0,
+  FunctionID: 0,
+  ID: 1,
+  Type: 2,
+  Start: 3,
+  End: 4,
+  PayloadLen: 5,
+  slotBuffer: 6,
+  Size: 8,
+  TotalBuff: 144
+};
+var TASK_SLOT_INDEX_BITS = 5;
+var TASK_SLOT_INDEX_MASK = (1 << TASK_SLOT_INDEX_BITS) - 1;
+var TASK_SLOT_META_BITS = 32 - TASK_SLOT_INDEX_BITS;
+var TASK_SLOT_META_VALUE_MASK = 4294967295 >>> TASK_SLOT_INDEX_BITS;
+var TASK_SLOT_META_PACKED_MASK = ~TASK_SLOT_INDEX_MASK >>> 0;
+var TASK_FUNCTION_ID_BITS = 16;
+var TASK_FUNCTION_ID_MASK = (1 << TASK_FUNCTION_ID_BITS) - 1;
+var TASK_FUNCTION_META_BITS = 32 - TASK_FUNCTION_ID_BITS;
+var TASK_FUNCTION_META_VALUE_MASK = 4294967295 >>> TASK_FUNCTION_ID_BITS;
+var TASK_FUNCTION_META_PACKED_MASK = ~TASK_FUNCTION_ID_MASK >>> 0;
+var getTaskFunctionMeta = (task) => task[TaskIndex.FunctionID] >>> TASK_FUNCTION_ID_BITS & TASK_FUNCTION_META_VALUE_MASK;
+var getTaskSlotIndex = (task) => task[TaskIndex.slotBuffer] & TASK_SLOT_INDEX_MASK;
+var getTaskSlotMeta = (task) => task[TaskIndex.slotBuffer] >>> TASK_SLOT_INDEX_BITS & TASK_SLOT_META_VALUE_MASK;
+var TaskFlag = {
+  Reject: 1
+};
+var LOCK_WORD_BYTES = Int32Array.BYTES_PER_ELEMENT;
+var LOCK_HOST_BITS_OFFSET_BYTES = LockBound.paddingLock;
+var LOCK_WORKER_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES;
+var LOCK_SECTOR_BYTE_LENGTH = LOCK_SECTOR_BYTES;
+var PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 2;
+var PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 3;
+var HEADER_SLOT_STRIDE_U32 = LockBound.header + TaskIndex.TotalBuff;
+var HEADER_SLOT_STRIDE_BYTES = HEADER_SLOT_STRIDE_U32 * Uint32Array.BYTES_PER_ELEMENT;
+var HEADER_TASK_LINE_U32 = LOCK_CACHE_LINE_BYTES / Uint32Array.BYTES_PER_ELEMENT;
+var HEADER_STATIC_PAYLOAD_U32 = TaskIndex.TotalBuff - HEADER_TASK_LINE_U32;
+var HEADER_TASK_OFFSET_IN_SLOT_U32 = HEADER_STATIC_PAYLOAD_U32;
+var HEADER_U32_LENGTH = LockBound.header + HEADER_SLOT_STRIDE_U32 * LockBound.slots;
+var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
+var INDEX_ID = 0;
+var INIT_VAL = PayloadSignal.UNREACHABLE;
+var def = (_) => {};
+var createTaskShell = () => {
+  const task = new Uint32Array(TaskIndex.Size);
+  task.value = null;
+  task.finalize = undefined;
+  task.resolve = def;
+  task.reject = def;
+  task[TASK_LOCAL_FLAGS_INDEX] = 0;
+  return task;
+};
+var makeTask = () => {
+  const task = createTaskShell();
+  task[TaskIndex.ID] = INDEX_ID++;
+  return task;
+};
+var fillTaskFrom = (task, array, at) => {
+  task[0] = array[at];
+  task[1] = array[at + 1];
+  task[2] = array[at + 2];
+  task[3] = array[at + 3];
+  task[4] = array[at + 4];
+  task[5] = array[at + 5];
+  task[6] = array[at + 6];
+  task[TASK_LOCAL_FLAGS_INDEX] = 0;
+};
+var makeTaskFrom = (array, at) => {
+  const task = createTaskShell();
+  fillTaskFrom(task, array, at);
+  return task;
+};
+var settleTask = (task) => {
+  if (task[TaskIndex["FlagsToHost"]] === 0) {
+    task.resolve(task.value);
+  } else {
+    task.reject(task.value);
+    task[TaskIndex["FlagsToHost"]] = 0;
+  }
+};
+var lock2 = ({
+  headers,
+  headerSlotStrideU32,
+  LockBoundSector,
+  payload,
+  payloadConfig,
+  payloadSector,
+  textCompat,
+  resultList,
+  toSentList,
+  recycleList,
+  processBoundary
+}) => {
+  const lockSectorRegion = toSharedBufferRegion(LockBoundSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
+  const LockBoundSAB = lockSectorRegion.sab;
+  const hostBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_HOST_BITS_OFFSET_BYTES, 1);
+  const workerBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_WORKER_BITS_OFFSET_BYTES, 1);
+  const headersRegion = toSharedBufferRegion(headers ?? createWasmSharedArrayBuffer(HEADER_BYTE_LENGTH));
+  const headersBuffer = new Uint32Array(headersRegion.sab, headersRegion.byteOffset, headersRegion.byteLength >>> 2);
+  const headersSlotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
+  const resolvedPayloadConfig = resolvePayloadBufferOptions({
+    sab: payload,
+    options: payloadConfig
+  });
+  const payloadSAB = payload ?? (resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes));
+  const payloadLockRegion = toSharedBufferRegion(payloadSector ?? lockSectorRegion);
+  const resolvedTextCompat = textCompat ?? probeLockBufferTextCompat({
+    headers: headersRegion,
+    payload: payloadSAB
+  });
+  let promiseHandler;
+  if (registeredEncodePayload === undefined || registeredDecodePayload === undefined) {
+    throw new Error("Payload codec not registered before lock2(). Ensure the module that " + 'builds locks imports "./payloadCodec.ts" (it self-registers on load).');
+  }
+  const encodeTask = registeredEncodePayload({
+    payload: {
+      sab: payloadSAB,
+      config: resolvedPayloadConfig
+    },
+    headersBuffer,
+    headerSlotStrideU32: headersSlotStride,
+    lockSector: payloadLockRegion,
+    textCompat: resolvedTextCompat,
+    processBoundary,
+    onPromise: (task, isRejected, value) => {
+      if ((task[TASK_LOCAL_FLAGS_INDEX] & TASK_LOCAL_PROMISE_TRACKED_FLAG) !== 0 && pendingPromiseCount > 0) {
+        task[TASK_LOCAL_FLAGS_INDEX] = (task[TASK_LOCAL_FLAGS_INDEX] & ~TASK_LOCAL_PROMISE_TRACKED_FLAG) >>> 0;
+        pendingPromiseCount = pendingPromiseCount - 1 | 0;
+      }
+      promiseHandler(task, isRejected, value);
+    }
+  });
+  const decodeTask = registeredDecodePayload({
+    payload: {
+      sab: payloadSAB,
+      config: resolvedPayloadConfig
+    },
+    headersBuffer,
+    headerSlotStrideU32: headersSlotStride,
+    lockSector: payloadLockRegion,
+    textCompat: resolvedTextCompat,
+    processBoundary
+  });
+  let LastLocal = 0 | 0;
+  let LastWorker = 0 | 0;
+  let lastTake = 32 | 0;
+  const toBeSent = toSentList ?? new RingQueue;
+  const recyclecList = recycleList ?? new RingQueue;
+  const resolved = resultList ?? new RingQueue;
+  let deferredCount = 0 | 0;
+  let pendingPromiseCount = 0 | 0;
+  const a_load = Atomics.load;
+  const a_store = Atomics.store;
+  let workerShadow = a_load(workerBits, 0) | 0;
+  const refreshWorkerShadow = () => workerShadow = a_load(workerBits, 0) | 0;
+  const ensureSenderStateHasFree = (state) => ~state !== 0 ? state : LastLocal ^ refreshWorkerShadow() | 0;
+  const toBeSentPush = (task) => toBeSent.push(task);
+  const toBeSentShift = () => toBeSent.shiftNoClear();
+  const toBeSentUnshift = (task) => toBeSent.unshift(task);
+  const recycleShift = () => recyclecList.shiftNoClear();
+  const resolvedPush = (task) => resolved.push(task);
+  const clz32 = Math.clz32;
+  const slotBaseU32 = LockBound.header + HEADER_TASK_OFFSET_IN_SLOT_U32;
+  const takeTask = ({ queue }) => (at) => {
+    const off = at * headersSlotStride + slotBaseU32;
+    const task = queue[headersBuffer[off + TaskIndex.ID]];
+    fillTaskFrom(task, headersBuffer, off);
+    return task;
+  };
+  const enlist = (task) => toBeSentPush(task);
+  const trackDeferredTask = (task) => {
+    const flags = task[TASK_LOCAL_FLAGS_INDEX];
+    if ((flags & TASK_LOCAL_PROMISE_TRACKED_FLAG) !== 0)
+      return;
+    task[TASK_LOCAL_FLAGS_INDEX] = (flags | TASK_LOCAL_PROMISE_TRACKED_FLAG) >>> 0;
+    pendingPromiseCount = pendingPromiseCount + 1 | 0;
+  };
+  const encodeTaskValue = (task, slotIndex) => encodeTask(task, slotIndex);
+  let selectedSlotIndex = 0 | 0, selectedSlotBit = 0 >>> 0;
+  const encodeWithState = (task, state) => {
+    const free = ~state;
+    if (free === 0)
+      return 0;
+    if (!encodeTaskValue(task, selectedSlotIndex = 31 - clz32(free)))
+      return 0;
+    encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
+    return selectedSlotBit;
+  };
+  const encodeManyFrom = (list) => {
+    let state = ensureSenderStateHasFree(LastLocal ^ workerShadow | 0);
+    let encoded = 0 | 0;
+    if (list === toBeSent) {
+      while (true) {
+        const task = toBeSentShift();
+        if (!task)
+          break;
+        state = ensureSenderStateHasFree(state);
+        const bit = encodeWithState(task, state) | 0;
+        if (bit === 0) {
+          toBeSentUnshift(task);
+          break;
+        }
+        state = state ^ bit | 0;
+        encoded = encoded + 1 | 0;
+      }
+    } else {
+      while (true) {
+        const task = list.shiftNoClear();
+        if (!task)
+          break;
+        state = ensureSenderStateHasFree(state);
+        const bit = encodeWithState(task, state) | 0;
+        if (bit === 0) {
+          list.unshift(task);
+          break;
+        }
+        state = state ^ bit | 0;
+        encoded = encoded + 1 | 0;
+      }
+    }
+    return encoded;
+  };
+  const encodeManyTrackedFrom = (list) => {
+    let state = ensureSenderStateHasFree(LastLocal ^ workerShadow | 0);
+    let encoded = 0 | 0;
+    deferredCount = 0 | 0;
+    if (list === toBeSent) {
+      while (true) {
+        const task = toBeSentShift();
+        if (!task)
+          break;
+        state = ensureSenderStateHasFree(state);
+        const bit = encodeWithState(task, state) | 0;
+        if (bit === 0) {
+          if (isPromisePayloadPending(task)) {
+            deferredCount = deferredCount + 1 | 0;
+            trackDeferredTask(task);
+            continue;
+          }
+          toBeSentUnshift(task);
+          break;
+        }
+        state = state ^ bit | 0;
+        encoded = encoded + 1 | 0;
+      }
+    } else {
+      while (true) {
+        const task = list.shiftNoClear();
+        if (!task)
+          break;
+        state = ensureSenderStateHasFree(state);
+        const bit = encodeWithState(task, state) | 0;
+        if (bit === 0) {
+          if (isPromisePayloadPending(task)) {
+            deferredCount = deferredCount + 1 | 0;
+            trackDeferredTask(task);
+            continue;
+          }
+          list.unshift(task);
+          break;
+        }
+        state = state ^ bit | 0;
+        encoded = encoded + 1 | 0;
+      }
+    }
+    return encoded;
+  };
+  const encodeAll = () => {
+    if (toBeSent.isEmpty)
+      return true;
+    encodeManyTrackedFrom(toBeSent);
+    deferredCount = 0 | 0;
+    return toBeSent.isEmpty;
+  };
+  const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
+  const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
+  const encode = (task, state = LastLocal ^ workerShadow | 0) => {
+    state = ensureSenderStateHasFree(state);
+    const free = ~state;
+    if (free === 0)
+      return false;
+    if (!encodeTaskValue(task, selectedSlotIndex = 31 - clz32(free))) {
+      return false;
+    }
+    return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
+  };
+  const encodeTracked = (task, state = LastLocal ^ workerShadow | 0) => {
+    deferredCount = 0 | 0;
+    state = ensureSenderStateHasFree(state);
+    const free = ~state;
+    if (free === 0)
+      return false;
+    if (!encodeTaskValue(task, selectedSlotIndex = 31 - clz32(free))) {
+      if (isPromisePayloadPending(task)) {
+        deferredCount = 1;
+        trackDeferredTask(task);
+      }
+      return false;
+    }
+    return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
+  };
+  const encodeAt = (task, at, bit) => {
+    const off = at * headersSlotStride + slotBaseU32;
+    headersBuffer[off] = task[0];
+    headersBuffer[off + 1] = task[1];
+    headersBuffer[off + 2] = task[2];
+    headersBuffer[off + 3] = task[3];
+    headersBuffer[off + 4] = task[4];
+    headersBuffer[off + 5] = task[5];
+    headersBuffer[off + 6] = task[6];
+    headersBuffer[off + TASK_LOCAL_FLAGS_INDEX] = 0;
+    storeHost(bit);
+    return true;
+  };
+  const hasSpace = () => (hostBits[0] ^ LastWorker) !== 0;
+  const decode = () => {
+    let diff = a_load(hostBits, 0) ^ LastWorker | 0;
+    if (diff === 0)
+      return false;
+    let last = lastTake;
+    let consumedBits = 0 | 0;
+    try {
+      if (last === 32) {
+        decodeAt(selectedSlotIndex = 31 - clz32(diff));
+        selectedSlotBit = 1 << (last = selectedSlotIndex);
+        diff ^= selectedSlotBit;
+        consumedBits = consumedBits ^ selectedSlotBit | 0;
+      }
+      while (diff !== 0) {
+        let pick = diff & (1 << last) - 1;
+        if (pick === 0)
+          pick = diff;
+        decodeAt(selectedSlotIndex = 31 - clz32(pick));
+        selectedSlotBit = 1 << (last = selectedSlotIndex);
+        diff ^= selectedSlotBit;
+        consumedBits = consumedBits ^ selectedSlotBit | 0;
+      }
+    } finally {
+      if (consumedBits !== 0)
+        storeWorker(consumedBits);
+    }
+    lastTake = last;
+    return true;
+  };
+  const resolveHost = ({
+    queue,
+    onResolved,
+    shouldSettle,
+    activeRejectPlaceholder
+  }) => {
+    const getTask = takeTask({ queue });
+    let lastResolved = 32;
+    if (activeRejectPlaceholder !== undefined && onResolved) {
+      const onResolvedTask2 = onResolved;
+      const inactiveReject = activeRejectPlaceholder;
+      return () => {
+        let diff = a_load(hostBits, 0) ^ LastWorker | 0;
+        if (diff === 0)
+          return 0;
+        let modified = 0;
+        let consumedBits = 0 | 0;
+        let last = lastResolved;
+        if (last === 32) {
+          const idx = 31 - clz32(diff);
+          const selectedBit = 1 << idx;
+          const task = getTask(idx);
+          decodeTask(task, idx);
+          consumedBits = consumedBits ^ selectedBit | 0;
+          if (task.reject !== inactiveReject) {
+            settleTask(task);
+            onResolvedTask2(task);
+          }
+          diff ^= selectedBit;
+          modified++;
+          if ((modified & 7) === 0 && consumedBits !== 0) {
+            LastWorker = LastWorker ^ consumedBits | 0;
+            a_store(workerBits, 0, LastWorker);
+            consumedBits = 0 | 0;
+          }
+          last = idx;
+        }
+        while (diff !== 0) {
+          const lowerMask = last === 31 ? 2147483647 : (1 << last) - 1;
+          let pick = diff & lowerMask;
+          if (pick === 0)
+            pick = diff;
+          const idx = 31 - clz32(pick);
+          const selectedBit = 1 << idx;
+          const task = getTask(idx);
+          decodeTask(task, idx);
+          consumedBits = consumedBits ^ selectedBit | 0;
+          if (task.reject !== inactiveReject) {
+            settleTask(task);
+            onResolvedTask2(task);
+          }
+          diff ^= selectedBit;
+          modified++;
+          if ((modified & 7) === 0 && consumedBits !== 0) {
+            LastWorker = LastWorker ^ consumedBits | 0;
+            a_store(workerBits, 0, LastWorker);
+            consumedBits = 0 | 0;
+          }
+          last = idx;
+        }
+        if (consumedBits !== 0) {
+          LastWorker = LastWorker ^ consumedBits | 0;
+          a_store(workerBits, 0, LastWorker);
+        }
+        lastResolved = last;
+        return modified;
+      };
+    }
+    const hasOnResolved = onResolved !== undefined;
+    const onResolvedTask = onResolved ?? def;
+    const shouldSettleTask = shouldSettle;
+    return () => {
+      let diff = a_load(hostBits, 0) ^ LastWorker | 0;
+      if (diff === 0)
+        return 0;
+      let modified = 0;
+      let consumedBits = 0 | 0;
+      let last = lastResolved;
+      if (last === 32) {
+        const idx = 31 - clz32(diff);
+        const selectedBit = 1 << idx;
+        const task = getTask(idx);
+        decodeTask(task, idx);
+        consumedBits = consumedBits ^ selectedBit | 0;
+        if (shouldSettleTask === undefined || shouldSettleTask(task)) {
+          settleTask(task);
+          if (hasOnResolved)
+            onResolvedTask(task);
+        }
+        diff ^= selectedBit;
+        modified++;
+        if ((modified & 7) === 0 && consumedBits !== 0) {
+          LastWorker = LastWorker ^ consumedBits | 0;
+          a_store(workerBits, 0, LastWorker);
+          consumedBits = 0 | 0;
+        }
+        last = idx;
+      }
+      while (diff !== 0) {
+        const lowerMask = last === 31 ? 2147483647 : (1 << last) - 1;
+        let pick = diff & lowerMask;
+        if (pick === 0)
+          pick = diff;
+        const idx = 31 - clz32(pick);
+        const selectedBit = 1 << idx;
+        const task = getTask(idx);
+        decodeTask(task, idx);
+        consumedBits = consumedBits ^ selectedBit | 0;
+        if (shouldSettleTask === undefined || shouldSettleTask(task)) {
+          settleTask(task);
+          if (hasOnResolved)
+            onResolvedTask(task);
+        }
+        diff ^= selectedBit;
+        modified++;
+        if ((modified & 7) === 0 && consumedBits !== 0) {
+          LastWorker = LastWorker ^ consumedBits | 0;
+          a_store(workerBits, 0, LastWorker);
+          consumedBits = 0 | 0;
+        }
+        last = idx;
+      }
+      if (consumedBits !== 0) {
+        LastWorker = LastWorker ^ consumedBits | 0;
+        a_store(workerBits, 0, LastWorker);
+      }
+      lastResolved = last;
+      return modified;
+    };
+  };
+  const decodeAt = (at) => {
+    const off = at * headersSlotStride + slotBaseU32;
+    const recycled = recycleShift();
+    let task;
+    if (recycled) {
+      fillTaskFrom(recycled, headersBuffer, off);
+      recycled.value = null;
+      recycled.finalize = undefined;
+      recycled.resolve = def;
+      recycled.reject = def;
+      task = recycled;
+    } else {
+      task = makeTaskFrom(headersBuffer, off);
+    }
+    decodeTask(task, at);
+    resolvedPush(task);
+    return true;
+  };
+  const publish = (task) => {
+    if (encodeTracked(task))
+      return true;
+    if ((deferredCount | 0) !== 0) {
+      deferredCount = 0 | 0;
+      return false;
+    }
+    toBeSentPush(task);
+    return false;
+  };
+  const flushPending = () => {
+    if (toBeSent.isEmpty)
+      return false;
+    const encoded = encodeManyTrackedFrom(toBeSent) | 0;
+    deferredCount = 0 | 0;
+    return encoded !== 0;
+  };
+  const resetPendingState = () => {
+    toBeSent.clear();
+    deferredCount = 0 | 0;
+    pendingPromiseCount = 0 | 0;
+  };
+  return {
+    enlist,
+    encode,
+    encodeManyFrom,
+    encodeAll,
+    publish,
+    flushPending,
+    decode,
+    hasSpace,
+    resolved,
+    hostBits,
+    workerBits,
+    recyclecList,
+    resolveHost,
+    hasPendingFrames: () => toBeSent.size !== 0,
+    getPendingFrameCount: () => toBeSent.size | 0,
+    getPendingPromiseCount: () => pendingPromiseCount | 0,
+    resetPendingState,
+    takeDeferredCount: () => {
+      const count = deferredCount | 0;
+      deferredCount = 0 | 0;
+      return count;
+    },
+    setPromiseHandler: (handler) => {
+      promiseHandler = handler;
+    }
+  };
+};
+
+// src/worker/composable-runners.ts
+var ABORT_SIGNAL_META_OFFSET = 1;
+var TIMEOUT_KIND_RESOLVE = 1;
+var p_now = performance.now.bind(performance);
+var raceTimeout = (promise, ms, resolveOnTimeout, timeoutValue) => new Promise((resolve, reject) => {
+  let done = false;
+  const timer = setTimeout(() => {
+    if (done)
+      return;
+    done = true;
+    if (resolveOnTimeout)
+      resolve(timeoutValue);
+    else
+      reject(timeoutValue);
+  }, ms);
+  promise.then((value) => {
+    if (done)
+      return;
+    done = true;
+    clearTimeout(timer);
+    resolve(value);
+  }, (err) => {
+    if (done)
+      return;
+    done = true;
+    clearTimeout(timer);
+    reject(err);
+  });
+});
+var nowStamp = (now) => (Math.floor(now()) & TASK_SLOT_META_VALUE_MASK) >>> 0;
+var applyTimeoutBudget = (promise, slot, spec, now) => {
+  const elapsed = nowStamp(now) - getTaskSlotMeta(slot) & TASK_SLOT_META_VALUE_MASK;
+  const remaining = spec.ms - elapsed;
+  if (!(remaining > 0)) {
+    promise.then(() => {}, () => {});
+    return spec.kind === TIMEOUT_KIND_RESOLVE ? Promise.resolve(spec.value) : Promise.reject(spec.value);
+  }
+  const timeoutMs = Math.max(1, Math.floor(remaining));
+  return raceTimeout(promise, timeoutMs, spec.kind === TIMEOUT_KIND_RESOLVE, spec.value);
+};
+var NO_ABORT_SIGNAL = -1;
+var readSignal = (slot) => {
+  const encodedSignal = getTaskFunctionMeta(slot);
+  if (encodedSignal === 0)
+    return NO_ABORT_SIGNAL;
+  const signal = encodedSignal - ABORT_SIGNAL_META_OFFSET | 0;
+  return signal >= 0 ? signal : NO_ABORT_SIGNAL;
+};
+var makeToolkitCache = (hasAborted, now) => {
+  const bySignal = [];
+  return (signal) => {
+    let toolkit = bySignal[signal];
+    if (toolkit)
+      return toolkit;
+    const hasAbortedMethod = () => hasAborted(signal);
+    toolkit = {
+      hasAborted: hasAbortedMethod,
+      now
+    };
+    bySignal[signal] = toolkit;
+    return toolkit;
+  };
+};
+var composeWorkerRunner = ({
+  job,
+  timeout,
+  hasAborted,
+  now
+}) => {
+  const nowTime = now ?? p_now;
+  if (!hasAborted) {
+    if (!timeout) {
+      return (slot) => job(slot.value);
+    }
+    return (slot) => {
+      const result = job(slot.value);
+      if (!(result instanceof Promise))
+        return result;
+      return applyTimeoutBudget(result, slot, timeout, nowTime);
+    };
+  }
+  const getToolkit = makeToolkitCache(hasAborted, nowTime);
+  if (!timeout) {
+    return (slot) => {
+      const signal = readSignal(slot);
+      if (signal === NO_ABORT_SIGNAL)
+        return job(slot.value);
+      return job(slot.value, getToolkit(signal));
+    };
+  }
+  return (slot) => {
+    const signal = readSignal(slot);
+    const result = signal === NO_ABORT_SIGNAL ? job(slot.value) : job(slot.value, getToolkit(signal));
+    if (!(result instanceof Promise))
+      return result;
+    return applyTimeoutBudget(result, slot, timeout, nowTime);
+  };
+};
+
+// scripts/browser-stubs/buffer-reference.ts
+var BUFFER_REFERENCE_NUMERIC_TRANSFER = Symbol.for("knitting.bufferReference.numericTransfer");
+var BUFFER_REFERENCE_RETURN_RELEASE_TOKEN = Symbol.for("knitting.bufferReference.returnReleaseToken");
+var unavailable = () => {
+  throw new Error('BufferReference cannot run in runtime "browser"');
+};
+
+class BufferReference {
+  constructor() {
+    unavailable();
+  }
+  static fromMetadata = unavailable;
+}
+var isBufferReferenceValue = (_value) => false;
+var withBufferReferenceReturnReleaser = (_releaser, run) => run();
+var readBufferReferenceReturnReleaseMessage = (_value) => {
+  return;
+};
+var createBufferReferenceReturnReleaseMessage = unavailable;
+var detachArrayBufferBestEffort = unavailable;
+
+// src/worker/rx-queue.ts
+var createWorkerRxQueue = ({
+  listOfFunctions,
+  workerOptions,
+  lock,
+  returnLock,
+  borrowReturnedBufferReferences,
+  hasAborted,
+  now
+}) => {
+  const PLACE_HOLDER = (_) => {
+    throw "UNREACHABLE FROM PLACE HOLDER (thread)";
+  };
+  let hasAnythingFinished = 0;
+  let awaiting = 0;
+  const jobs = listOfFunctions.reduce((acc, fixed) => (acc.push(fixed.run), acc), []);
+  const toWork = new RingQueue;
+  const pendingFrames = new RingQueue;
+  const toWorkPush = (slot) => toWork.push(slot);
+  const toWorkShift = () => toWork.shiftNoClear();
+  const pendingShift = () => pendingFrames.shiftNoClear();
+  const pendingUnshift = (slot) => pendingFrames.unshift(slot);
+  const pendingPush = (slot) => pendingFrames.push(slot);
+  const recyclePush = (slot) => lock.recyclecList.push(slot);
+  const FUNCTION_ID_MASK = 65535;
+  const IDX_FLAGS = TaskIndex.FlagsToHost;
+  const FLAG_REJECT = TaskFlag.Reject;
+  const a_load = Atomics.load;
+  const returnHostBits = returnLock.hostBits;
+  const returnWorkerBits = returnLock.workerBits;
+  const deferredReleases = [];
+  const explicitReturnReleases = new Map;
+  const drainReturnReleases = () => {
+    if (deferredReleases.length === 0)
+      return;
+    if ((a_load(returnHostBits, 0) ^ a_load(returnWorkerBits, 0)) !== 0)
+      return;
+    for (let i = 0;i < deferredReleases.length; i++) {
+      try {
+        deferredReleases[i]();
+      } catch {}
+    }
+    deferredReleases.length = 0;
+  };
+  const releaseReturnedBufferReference = (token) => {
+    const key = token.toString();
+    const release = explicitReturnReleases.get(key);
+    if (release === undefined)
+      return;
+    explicitReturnReleases.delete(key);
+    try {
+      release();
+    } catch {}
+  };
+  const runByIndex = listOfFunctions.reduce((acc, fixed, idx) => {
+    const job = jobs[idx];
+    acc.push(composeWorkerRunner({
+      job,
+      timeout: fixed.timeout,
+      hasAborted,
+      now
+    }));
+    return acc;
+  }, []);
+  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true ? () => hasAnythingFinished !== 0 && toWork.size === 0 : () => hasAnythingFinished !== 0;
+  const { decode, resolved } = lock;
+  const resolvedShift = () => resolved.shiftNoClear();
+  const enqueueLock = () => {
+    if (!decode())
+      return false;
+    let task = resolvedShift();
+    while (task) {
+      task.resolve = PLACE_HOLDER;
+      task.reject = PLACE_HOLDER;
+      attachPayloadTransportFinalizer(task, task.value);
+      toWorkPush(task);
+      task = resolvedShift();
+    }
+    return true;
+  };
+  const encodeReturnSafe = (slot) => {
+    if (!returnLock.encode(slot))
+      return false;
+    return true;
+  };
+  const sendReturn = (slot, shouldReject) => {
+    slot[IDX_FLAGS] = shouldReject ? FLAG_REJECT : 0;
+    if (!encodeReturnSafe(slot))
+      return false;
+    if (slot.finalize !== undefined) {
+      const token = slot.finalize[BUFFER_REFERENCE_RETURN_RELEASE_TOKEN];
+      if (token === undefined || borrowReturnedBufferReferences !== true) {
+        deferredReleases.push(slot.finalize);
+      } else {
+        explicitReturnReleases.set(token.toString(), slot.finalize);
+      }
+      slot.finalize = undefined;
+    }
+    hasAnythingFinished--;
+    recyclePush(slot);
+    return true;
+  };
+  const settleNow = (slot, isError, value, wasAwaited) => {
+    runTaskFinalizers(slot);
+    slot.value = value;
+    hasAnythingFinished++;
+    if (wasAwaited && awaiting > 0)
+      awaiting--;
+    const shouldReject = isError || slot[IDX_FLAGS] === FLAG_REJECT;
+    if (!sendReturn(slot, shouldReject))
+      pendingPush(slot);
+  };
+  const writeOne = () => {
+    const slot = pendingShift();
+    if (!slot)
+      return false;
+    if (!sendReturn(slot, slot[IDX_FLAGS] === FLAG_REJECT)) {
+      pendingUnshift(slot);
+      return false;
+    }
+    return true;
+  };
+  return {
+    hasCompleted,
+    hasPending: () => toWork.size !== 0,
+    writeBatch: (max) => {
+      let wrote = 0;
+      while (wrote < max) {
+        if (!writeOne())
+          break;
+        wrote++;
+      }
+      return wrote;
+    },
+    serviceBatchImmediate: () => {
+      let processed = 0;
+      while (processed < 5 && toWork.size !== 0) {
+        const slot = toWorkShift();
+        try {
+          const fnIndex = slot[TaskIndex.FunctionID] & FUNCTION_ID_MASK;
+          const result = runByIndex[fnIndex](slot);
+          slot[IDX_FLAGS] = 0;
+          slot.value = null;
+          if (result instanceof Promise) {
+            awaiting++;
+            result.then((value) => settleNow(slot, false, value, true), (err) => settleNow(slot, true, err, true));
+          } else {
+            settleNow(slot, false, result, false);
+          }
+        } catch (err) {
+          settleNow(slot, true, err, false);
+        }
+        ++processed;
+      }
+      return processed;
+    },
+    enqueueLock,
+    drainReturnReleases,
+    releaseReturnedBufferReference,
+    hasAwaiting: () => awaiting > 0,
+    getAwaiting: () => awaiting
+  };
+};
+
+// src/ipc/transport/shared-memory.ts
+var page = 1024 * 4;
+var CACHE_LINE_BYTES = 64;
+var SIGNAL_OFFSETS = {
+  op: 0,
+  rxStatus: CACHE_LINE_BYTES,
+  txStatus: CACHE_LINE_BYTES * 2
+};
+var TRANSPORT_SIGNAL_BYTES = CACHE_LINE_BYTES * 3;
+var a_store = Atomics.store;
+var createSharedMemoryTransport = ({ sabObject, isMain, startTime }) => {
+  const toGrow = sabObject?.size ?? page;
+  const roundedSize = toGrow + (page - toGrow % page) % page;
+  const signalRegion = toSharedBufferRegion(sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(roundedSize, page * page));
+  const sab = signalRegion.sab;
+  const baseByteOffset = signalRegion.byteOffset;
+  const startAt = startTime ?? performance.now();
+  const opView = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.op, 1);
+  if (isMain)
+    a_store(opView, 0, 0);
+  const rxStatus = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.rxStatus, 1);
+  a_store(rxStatus, 0, 1);
+  return {
+    sab: signalRegion,
+    op: opView,
+    startAt,
+    opView,
+    rxStatus,
+    txStatus: new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.txStatus, 1)
+  };
+};
+
 // src/memory/regionRegistry.ts
 var SLOT_META_PACKED_MASK = 4294967264;
-var register = ({ lockSector }) => {
+var register = ({
+  lockSector,
+  publishMode = "plain"
+}) => {
   const lockRegion = toSharedBufferRegion(lockSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
   const lockSAB = lockRegion.sab;
   const hostBits = new Int32Array(lockSAB, lockRegion.byteOffset + PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES, 1);
   const workerBits = new Int32Array(lockSAB, lockRegion.byteOffset + PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES, 1);
-  const startAndIndex = new Uint32Array(32 /* slots */);
-  const size64bit = new Uint32Array(32 /* slots */);
+  const startAndIndex = new Uint32Array(LockBound.slots);
+  const size64bit = new Uint32Array(LockBound.slots);
   const clz32 = Math.clz32;
+  const a_load = Atomics.load;
+  const a_store2 = Atomics.store;
+  const useAtomicPublish = publishMode === "atomic";
   const EMPTY = 4294967295 >>> 0;
   const SLOT_MASK = TASK_SLOT_INDEX_MASK;
   const START_MASK = ~SLOT_MASK >>> 0;
@@ -539,7 +1548,7 @@ var register = ({ lockSector }) => {
     return live;
   };
   const updateTable = () => {
-    const w = Atomics.load(workerBits, 0) | 0;
+    const w = a_load(workerBits, 0) | 0;
     const state = (hostLast ^ w) >>> 0;
     let freeBits = ~state >>> 0;
     if (tableLength === 0 || freeBits === 0)
@@ -566,15 +1575,15 @@ var register = ({ lockSector }) => {
     if (tl === 0 && usedBits === 0) {
       sai[0] = 0;
       sz[0] = size;
-      task[3 /* Start */] = 0;
-      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | 0) >>> 0;
+      task[TaskIndex.Start] = 0;
+      task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | 0) >>> 0;
       tableLength = 1;
       usedBits = 1;
       hostLast ^= 1;
       return 0;
     }
     if (tl !== 0) {
-      const w = Atomics.load(workerBits, 0) | 0;
+      const w = a_load(workerBits, 0) | 0;
       let freeBits = ~(hostLast ^ w) >>> 0;
       if (freeBits !== 0)
         freeBits &= usedBits;
@@ -599,8 +1608,8 @@ var register = ({ lockSector }) => {
           const start = v & START_MASK;
           sai[i] = (start | slotIndex2) >>> 0;
           sz[slotIndex2] = size;
-          task[3 /* Start */] = start;
-          task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex2) >>> 0;
+          task[TaskIndex.Start] = start;
+          task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex2) >>> 0;
           usedBits = usedBits & ~reclaimedBit | freeBit2;
           hostLast ^= freeBit2;
           return slotIndex2;
@@ -631,7 +1640,7 @@ var register = ({ lockSector }) => {
         tableLength = tl = write;
       }
     }
-    if (tl >= 32 /* slots */)
+    if (tl >= LockBound.slots)
       return -1;
     const availableBits = ~usedBits >>> 0;
     const freeBit = (availableBits & -availableBits) >>> 0;
@@ -645,8 +1654,8 @@ var register = ({ lockSector }) => {
           sai[i] = sai[i - 1];
         sai[0] = slotIndex;
         sz[slotIndex] = size;
-        task[3 /* Start */] = 0;
-        task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+        task[TaskIndex.Start] = 0;
+        task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
         tableLength = tl + 1;
         usedBits |= freeBit;
         hostLast ^= freeBit;
@@ -663,8 +1672,8 @@ var register = ({ lockSector }) => {
           sai[i] = sai[i - 1];
         sai[at + 1] = (curEnd | slotIndex) >>> 0;
         sz[slotIndex] = size;
-        task[3 /* Start */] = curEnd;
-        task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+        task[TaskIndex.Start] = curEnd;
+        task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
         tableLength = tl + 1;
         usedBits |= freeBit;
         hostLast ^= freeBit;
@@ -675,8 +1684,8 @@ var register = ({ lockSector }) => {
       const newStart = lastStart + (sz[last & SLOT_MASK] >>> 0) >>> 0;
       sai[tl] = (newStart | slotIndex) >>> 0;
       sz[slotIndex] = size;
-      task[3 /* Start */] = newStart;
-      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+      task[TaskIndex.Start] = newStart;
+      task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
       tableLength = tl + 1;
       usedBits |= freeBit;
       hostLast ^= freeBit;
@@ -685,8 +1694,8 @@ var register = ({ lockSector }) => {
     if (tl === 0) {
       sai[0] = slotIndex;
       sz[slotIndex] = size;
-      task[3 /* Start */] = 0;
-      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+      task[TaskIndex.Start] = 0;
+      task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
       tableLength = 1;
       usedBits |= freeBit;
       hostLast ^= freeBit;
@@ -697,8 +1706,8 @@ var register = ({ lockSector }) => {
         sai[i] = sai[i - 1];
       sai[insertAt] = (insertStart | slotIndex) >>> 0;
       sz[slotIndex] = size;
-      task[3 /* Start */] = insertStart;
-      task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+      task[TaskIndex.Start] = insertStart;
+      task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
       tableLength = tl + 1;
       usedBits |= freeBit;
       hostLast ^= freeBit;
@@ -706,18 +1715,23 @@ var register = ({ lockSector }) => {
     }
     sai[tl] = (prevEnd | slotIndex) >>> 0;
     sz[slotIndex] = size;
-    task[3 /* Start */] = prevEnd;
-    task[6 /* slotBuffer */] = (task[6 /* slotBuffer */] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
+    task[TaskIndex.Start] = prevEnd;
+    task[TaskIndex.slotBuffer] = (task[TaskIndex.slotBuffer] & SLOT_META_PACKED_MASK | slotIndex) >>> 0;
     tableLength = tl + 1;
     usedBits |= freeBit;
     hostLast ^= freeBit;
     return slotIndex;
   };
   const allocTask = (task) => {
-    const payloadLen = task[5 /* PayloadLen */] | 0;
+    const payloadLen = task[TaskIndex.PayloadLen] | 0;
     const size = payloadLen + 63 & ~63;
     const slotIndex = findAndInsert(task, size);
-    hostBits[0] = hostLast;
+    if (slotIndex === -1)
+      return -1;
+    if (useAtomicPublish)
+      a_store2(hostBits, 0, hostLast);
+    else
+      hostBits[0] = hostLast;
     return slotIndex;
   };
   const setSlotLength = (slotIndex, payloadLen) => {
@@ -729,7 +1743,10 @@ var register = ({ lockSector }) => {
   const free = (index) => {
     index = index & TASK_SLOT_INDEX_MASK;
     workerLast ^= 1 << index;
-    Atomics.store(workerBits, 0, workerLast);
+    if (useAtomicPublish)
+      a_store2(workerBits, 0, workerLast);
+    else
+      workerBits[0] = workerLast;
   };
   return {
     allocTask,
@@ -937,70 +1954,12 @@ var createLockControlCarpet = ({
   };
 };
 
-// src/memory/payload-config.ts
-var PAYLOAD_DEFAULT_MAX_BYTE_LENGTH = 64 * 1024 * 1024;
-var PAYLOAD_DEFAULT_INITIAL_BYTES = 4 * 1024 * 1024;
-var toPositiveInteger = (value) => {
-  if (!Number.isFinite(value))
-    return;
-  const int = Math.floor(value);
-  return int > 0 ? int : undefined;
-};
-var canGrowSharedBuffer = (sab) => {
-  if (sab == null)
-    return false;
-  return HAS_SAB_GROW && isGrowableSharedArrayBuffer(sab);
-};
-var sharedBufferMaxByteLength = (sab) => {
-  if (sab == null)
-    return;
-  return toPositiveInteger(sharedArrayBufferMaxByteLength(sab));
-};
-var resolvePayloadBufferOptions = ({
-  options,
-  sab
-}) => {
-  const requestedMode = options?.mode;
-  const modeDefault = HAS_SAB_GROW ? "growable" : "fixed";
-  let mode = requestedMode ?? modeDefault;
-  if (mode === "growable" && sab != null && !canGrowSharedBuffer(sab)) {
-    mode = "fixed";
-  }
-  if (mode === "growable" && !HAS_SAB_GROW) {
-    mode = "fixed";
-  }
-  const payloadMaxByteLength = toPositiveInteger(options?.payloadMaxByteLength) ?? sharedBufferMaxByteLength(sab) ?? PAYLOAD_DEFAULT_MAX_BYTE_LENGTH;
-  const requestedInitialBytes = toPositiveInteger(options?.payloadInitialBytes);
-  const payloadInitialBytes = mode === "fixed" ? payloadMaxByteLength : Math.min(requestedInitialBytes ?? PAYLOAD_DEFAULT_INITIAL_BYTES, payloadMaxByteLength);
-  const maxPayloadCeiling = payloadMaxByteLength >> 3;
-  if (maxPayloadCeiling <= 0) {
-    throw new RangeError("payloadMaxByteLength is too small; must be at least 8 bytes.");
-  }
-  const rawMaxPayloadBytes = options?.maxPayloadBytes;
-  if (rawMaxPayloadBytes !== undefined) {
-    const normalized = Math.floor(rawMaxPayloadBytes);
-    if (!Number.isFinite(normalized) || normalized <= 0) {
-      throw new RangeError(`maxPayloadBytes must be > 0 and <= ${maxPayloadCeiling}.`);
-    }
-  }
-  const maxPayloadBytes = toPositiveInteger(rawMaxPayloadBytes) ?? maxPayloadCeiling;
-  if (maxPayloadBytes <= 0 || maxPayloadBytes > maxPayloadCeiling) {
-    throw new RangeError(`maxPayloadBytes must be > 0 and <= ${maxPayloadCeiling}.`);
-  }
-  return {
-    mode,
-    payloadInitialBytes,
-    payloadMaxByteLength,
-    maxPayloadBytes
-  };
-};
-
-// src/memory/createSharedBufferIO.ts
-var page = 1024 * 4;
+// src/memory/shared-buffer-io.ts
+var page2 = 1024 * 4;
 var textEncode2 = new TextEncoder;
 var textDecode2 = new TextDecoder;
 var DYNAMIC_HEADER_BYTES = 64;
-var DYNAMIC_SAFE_PADDING_BYTES = page;
+var DYNAMIC_SAFE_PADDING_BYTES = page2;
 var alignUpto64 = (n) => n + (64 - 1) & ~(64 - 1);
 var isExactUint8Array = (src) => src.constructor === Uint8Array;
 var canonicalDynamicUint8Array = (src) => isExactUint8Array(src) ? src : new Uint8Array(src.buffer, src.byteOffset, src.byteLength);
@@ -1035,7 +1994,7 @@ var fallbackEncodeInto = (str, target) => {
   return result;
 };
 var fallbackDecode = (bytes) => textDecode2.decode(bytes.slice());
-var browserEncodeInto = (str, target, textCompat) => {
+var sharedBufferEncodeInto = (str, target, textCompat) => {
   if (typeof textEncode2.encodeInto !== "function") {
     return fallbackEncodeInto(str, target);
   }
@@ -1052,7 +2011,7 @@ var browserEncodeInto = (str, target, textCompat) => {
     return fallbackEncodeInto(str, target);
   }
 };
-var browserDecode = (bytes, textCompat) => {
+var sharedBufferDecode = (bytes, textCompat) => {
   if (textCompat?.decode === true)
     return textDecode2.decode(bytes);
   if (textCompat?.decode === false)
@@ -1070,42 +2029,58 @@ var createSharedDynamicBufferIO = ({
   payloadConfig,
   textCompat
 }) => {
-  const bufferCtor = IS_BROWSER ? undefined : getBufferCtor();
+  const payloadRegion = sab === undefined ? undefined : toSharedBufferRegion(sab);
+  const hasExplicitRegion = sab !== undefined && !isSharedBuffer(sab);
+  const hasExternalArrayBuffer = payloadRegion?.sab instanceof ArrayBuffer && !(payloadRegion.sab instanceof SharedArrayBuffer);
+  const forceFixedRegion = hasExplicitRegion || hasExternalArrayBuffer;
+  const regionByteLength = payloadRegion?.byteLength;
+  const bufferCtor = IS_BUN && payloadRegion?.sab instanceof ArrayBuffer && !(payloadRegion.sab instanceof SharedArrayBuffer) ? undefined : getBufferCtor();
   const resolvedPayload = resolvePayloadBufferOptions({
-    sab,
-    options: payloadConfig
+    sab: payloadRegion?.sab,
+    options: !forceFixedRegion || regionByteLength === undefined ? payloadConfig : {
+      ...payloadConfig,
+      mode: "fixed",
+      payloadInitialBytes: payloadConfig?.payloadInitialBytes ?? regionByteLength,
+      payloadMaxByteLength: payloadConfig?.payloadMaxByteLength ?? regionByteLength
+    }
   });
   const canGrow = resolvedPayload.mode === "growable";
-  let lockSAB = sab ?? (canGrow ? createSharedArrayBuffer(resolvedPayload.payloadInitialBytes, resolvedPayload.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayload.payloadInitialBytes));
-  let u8 = new Uint8Array(lockSAB, DYNAMIC_HEADER_BYTES);
-  const requireBufferView = bufferCtor ? (buffer) => {
-    const view = bufferCtor.from(buffer, DYNAMIC_HEADER_BYTES);
+  let lockSAB = payloadRegion?.sab ?? (canGrow ? createSharedArrayBuffer(resolvedPayload.payloadInitialBytes, resolvedPayload.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayload.payloadInitialBytes));
+  let baseByteOffset = payloadRegion?.byteOffset ?? 0;
+  let backingByteLength = payloadRegion?.byteLength ?? lockSAB.byteLength;
+  let u8 = new Uint8Array(lockSAB, baseByteOffset + DYNAMIC_HEADER_BYTES, Math.max(0, backingByteLength - DYNAMIC_HEADER_BYTES));
+  const requireBufferView = bufferCtor ? (buffer, byteOffset) => {
+    const view = bufferCtor.from(buffer, byteOffset + DYNAMIC_HEADER_BYTES);
     if (view.buffer !== buffer) {
-      throw new Error("Buffer view does not alias SharedArrayBuffer");
+      throw new Error("Buffer view does not alias shared buffer");
     }
     return view;
   } : undefined;
-  let buf = requireBufferView?.(lockSAB);
-  let f64 = new Float64Array(lockSAB, DYNAMIC_HEADER_BYTES);
-  const capacityBytes = () => lockSAB.byteLength - DYNAMIC_HEADER_BYTES;
+  let buf = requireBufferView?.(lockSAB, baseByteOffset);
+  let f64 = new Float64Array(lockSAB, baseByteOffset + DYNAMIC_HEADER_BYTES, Math.max(0, backingByteLength - DYNAMIC_HEADER_BYTES) >>> 3);
+  const capacityBytes = () => backingByteLength - DYNAMIC_HEADER_BYTES;
   const ensureCapacity = (neededBytes) => {
     if (capacityBytes() >= neededBytes)
       return true;
     if (!canGrow)
       return false;
     try {
+      if (!(lockSAB instanceof SharedArrayBuffer))
+        return false;
       lockSAB = growSharedArrayBuffer(lockSAB, alignUpto64(DYNAMIC_HEADER_BYTES + neededBytes + DYNAMIC_SAFE_PADDING_BYTES));
     } catch {
       return false;
     }
-    u8 = new Uint8Array(lockSAB, DYNAMIC_HEADER_BYTES, lockSAB.byteLength - DYNAMIC_HEADER_BYTES);
-    buf = requireBufferView?.(lockSAB);
-    f64 = new Float64Array(lockSAB, DYNAMIC_HEADER_BYTES, lockSAB.byteLength - DYNAMIC_HEADER_BYTES >>> 3);
+    baseByteOffset = 0;
+    backingByteLength = lockSAB.byteLength;
+    u8 = new Uint8Array(lockSAB, baseByteOffset + DYNAMIC_HEADER_BYTES, backingByteLength - DYNAMIC_HEADER_BYTES);
+    buf = requireBufferView?.(lockSAB, baseByteOffset);
+    f64 = new Float64Array(lockSAB, baseByteOffset + DYNAMIC_HEADER_BYTES, backingByteLength - DYNAMIC_HEADER_BYTES >>> 3);
     return true;
   };
   const readUtf8 = (start, end) => {
-    if (IS_BROWSER) {
-      return browserDecode(u8.subarray(start, end), textCompat);
+    if (!buf) {
+      return sharedBufferDecode(u8.subarray(start, end), textCompat);
     }
     return buf.toString("utf8", start, end);
   };
@@ -1144,7 +2119,7 @@ var createSharedDynamicBufferIO = ({
   const readBytesCopy = (start, end) => u8.slice(start, end);
   const readBytesView = (start, end) => u8.subarray(start, end);
   const readBytesBufferCopy = (start, end) => {
-    if (IS_BROWSER || !bufferCtor || !buf)
+    if (!bufferCtor || !buf)
       return readBytesCopy(start, end);
     const length = Math.max(0, end - start | 0);
     const out = bufferCtor.allocUnsafe(length);
@@ -1154,7 +2129,7 @@ var createSharedDynamicBufferIO = ({
     return out;
   };
   const readBytesArrayBufferCopy = (start, end) => {
-    if (IS_BROWSER || !bufferCtor || !buf) {
+    if (!bufferCtor || !buf) {
       const out2 = readBytesCopy(start, end);
       return out2.buffer;
     }
@@ -1172,8 +2147,8 @@ var createSharedDynamicBufferIO = ({
       return -1;
     }
     const target = u8.subarray(start, start + reservedBytes);
-    if (IS_BROWSER) {
-      const { read: read2, written: written2 } = browserEncodeInto(str, target, textCompat);
+    if (!buf) {
+      const { read: read2, written: written2 } = sharedBufferEncodeInto(str, target, textCompat);
       if (read2 !== str.length)
         return -1;
       return written2;
@@ -1205,7 +2180,7 @@ var createSharedStaticBufferIO = ({
   slotStrideU32,
   textCompat
 }) => {
-  const bufferCtor = IS_BROWSER ? undefined : getBufferCtor();
+  const bufferCtor = getBufferCtor();
   const buffer = headersBuffer instanceof Uint32Array ? headersBuffer.buffer : headersBuffer;
   const baseByteOffset = headersBuffer instanceof Uint32Array ? headersBuffer.byteOffset : 0;
   const u32Bytes = Uint32Array.BYTES_PER_ELEMENT;
@@ -1218,18 +2193,35 @@ var createSharedStaticBufferIO = ({
     slotIndex: at,
     slotStrideU32: slotStride,
     baseByteOffset,
-    baseU32: 0 /* header */
+    baseU32: LockBound.header
   });
-  const slotByteOffsets = new Uint32Array(32 /* slots */);
-  for (let i = 0;i < 32 /* slots */; i++) {
+  const slotByteOffsets = new Uint32Array(LockBound.slots);
+  for (let i = 0;i < LockBound.slots; i++) {
     slotByteOffsets[i] = slotStartBytes(i) - baseByteOffset;
   }
+  const baseU32 = new Uint32Array(buffer, baseByteOffset, buffer.byteLength - baseByteOffset >>> 2);
+  const slotU32Offsets = new Uint32Array(LockBound.slots);
+  for (let i = 0;i < LockBound.slots; i++) {
+    slotU32Offsets[i] = slotByteOffsets[i] >>> 2;
+  }
+  const writeU32Words = (words, count, at) => {
+    const base = slotU32Offsets[at];
+    for (let i = 0;i < count; i++)
+      baseU32[base + i] = words[i];
+    return count * u32Bytes;
+  };
+  const readU32Words = (out, count, at) => {
+    const base = slotU32Offsets[at];
+    for (let i = 0;i < count; i++)
+      out[i] = baseU32[base + i];
+    return out;
+  };
   const canWrite = (start, length) => (start | 0) >= 0 && start + length <= writableBytes;
   const writeUtf8 = (str, at) => {
     const start = slotByteOffsets[at];
     const target = baseU8.subarray(start, start + writableBytes);
-    if (IS_BROWSER) {
-      const { read: read2, written: written2 } = browserEncodeInto(str, target, textCompat);
+    if (!baseBuf) {
+      const { read: read2, written: written2 } = sharedBufferEncodeInto(str, target, textCompat);
       if (read2 !== str.length)
         return -1;
       return written2;
@@ -1241,8 +2233,8 @@ var createSharedStaticBufferIO = ({
   };
   const readUtf8 = (start, end, at) => {
     const slotStart = slotByteOffsets[at];
-    if (IS_BROWSER) {
-      return browserDecode(baseU8.subarray(slotStart + start, slotStart + end), textCompat);
+    if (!baseBuf) {
+      return sharedBufferDecode(baseU8.subarray(slotStart + start, slotStart + end), textCompat);
     }
     return baseBuf.toString("utf8", slotStart + start, slotStart + end);
   };
@@ -1278,7 +2270,7 @@ var createSharedStaticBufferIO = ({
   const readBytesCopy = (start, end, at) => baseU8.slice(slotByteOffsets[at] + start, slotByteOffsets[at] + end);
   const readBytesView = (start, end, at) => baseU8.subarray(slotByteOffsets[at] + start, slotByteOffsets[at] + end);
   const readBytesBufferCopy = (start, end, at) => {
-    if (IS_BROWSER || !bufferCtor || !baseBuf)
+    if (!bufferCtor || !baseBuf)
       return readBytesCopy(start, end, at);
     const length = end - start;
     const out = bufferCtor.allocUnsafe(length);
@@ -1287,7 +2279,7 @@ var createSharedStaticBufferIO = ({
     return out;
   };
   const readUint8ArrayBufferCopy = (start, end, at) => {
-    if (IS_BROWSER || !bufferCtor)
+    if (!bufferCtor)
       return readBytesCopy(start, end, at);
     const bytes = readBytesBufferCopy(start, end, at);
     return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1295,7 +2287,7 @@ var createSharedStaticBufferIO = ({
   const readUint8ArraySliceCopy = (start, end, at) => readBytesCopy(start, end, at);
   const readUint8ArrayCopy = IS_BUN ? readUint8ArraySliceCopy : readUint8ArrayBufferCopy;
   const readBytesArrayBufferCopy = (start, end, at) => {
-    if (IS_BROWSER || !bufferCtor || !baseBuf) {
+    if (!bufferCtor || !baseBuf) {
       const out2 = readBytesCopy(start, end, at);
       return out2.buffer;
     }
@@ -1317,6 +2309,8 @@ var createSharedStaticBufferIO = ({
     writeArrayBuffer,
     writeExactUint8Array,
     writeUint8Array,
+    writeU32Words,
+    readU32Words,
     write8Binary,
     readBytesCopy,
     readBytesView,
@@ -1333,17 +2327,23 @@ var createSharedStaticBufferIO = ({
 };
 
 // src/error.ts
+var ErrorKnitting = {
+  Function: 0,
+  Symbol: 1,
+  Json: 2,
+  Serializable: 3
+};
 var reasonFrom = (task, type, detail) => {
   switch (type) {
-    case 0 /* Function */: {
+    case ErrorKnitting.Function: {
       const name = typeof task.value === "function" ? task.value.name || "<anonymous>" : "<unknown>";
       return `KNT_ERROR_0: Function is not a valid type; name: ${name}`;
     }
-    case 1 /* Symbol */:
+    case ErrorKnitting.Symbol:
       return "KNT_ERROR_1: Symbol must use Symbol.for(...) keys";
-    case 2 /* Json */:
+    case ErrorKnitting.Json:
       return detail == null || detail.length === 0 ? "KNT_ERROR_2: JSON stringify failed; payload must be JSON-safe" : `KNT_ERROR_2: JSON stringify failed; ${detail}`;
-    case 3 /* Serializable */:
+    case ErrorKnitting.Serializable:
       return detail == null || detail.length === 0 ? "KNT_ERROR_3: Unsupported payload type; serialize it yourself" : `KNT_ERROR_3: Unsupported payload type; ${detail}`;
   }
 };
@@ -1356,7 +2356,7 @@ var encoderError = ({
   const reason = reasonFrom(task, type, detail);
   if (!RUNTIME_IS_MAIN_THREAD) {
     task.value = reason;
-    task[0 /* FlagsToHost */] = 1 /* Reject */;
+    task[TaskIndex.FlagsToHost] = TaskFlag.Reject;
     return false;
   }
   if (onPromise == null) {
@@ -1373,6 +2373,8 @@ var encoderError = ({
 };
 
 // src/common/envelope.ts
+var PayloadTransportFinalizer2 = Symbol.for("knitting.payloadCodec.transportFinalizer");
+
 class Envelope {
   header;
   payload;
@@ -1380,7 +2382,276 @@ class Envelope {
     this.header = header;
     this.payload = payload;
   }
+  [Symbol.dispose]() {
+    const body = this.payload;
+    if (body !== null && typeof body === "object") {
+      body[Symbol.dispose]?.();
+    }
+  }
+  [PayloadTransportFinalizer2]() {
+    const body = this.payload;
+    if (body === null || typeof body !== "object")
+      return;
+    const finalizer = body[PayloadTransportFinalizer2];
+    return typeof finalizer === "function" ? finalizer.call(body) : undefined;
+  }
 }
+
+// scripts/browser-stubs/buffer-reference-native.ts
+var getBufferReferenceCapabilities = () => {
+  throw new Error('BufferReference cannot run in runtime "browser"');
+};
+
+// src/connections/shared-array-buffer-payload.ts
+var SHARED_ARRAY_BUFFER_CODEC_ID = "knitting.sharedArrayBuffer";
+var SHARED_ARRAY_BUFFER_NUMERIC_TRANSFER = Symbol.for("knitting.sharedArrayBuffer.numericTransfer");
+var SHARED_ARRAY_BUFFER_NUMERIC_WORDS = 8;
+var SHARED_ARRAY_BUFFER_TOKEN_NUMERIC_WORDS = 2;
+var EXTERNAL_PAYLOAD_BRAND = Symbol.for("knitting.payloadCodec");
+var getProcessId = () => {
+  const proc = getNodeProcess();
+  if (proc !== undefined && typeof proc.pid === "number")
+    return proc.pid;
+  const deno = globalThis.Deno;
+  if (typeof deno?.pid === "number")
+    return deno.pid;
+  return 0;
+};
+var PROCESS_ORIGIN = `${RUNTIME}:${getProcessId()}`;
+var hasSharedArrayBuffer = typeof SharedArrayBuffer === "function";
+var isSharedArrayBufferValue = (value) => hasSharedArrayBuffer && value instanceof SharedArrayBuffer;
+var pinnedBySab = new WeakMap;
+var payloadBySharedBuffer = new WeakMap;
+var warmedTokensByTransport = new WeakMap;
+var cachedSharedBuffersByToken = new Map;
+var pinFinalizer = typeof FinalizationRegistry === "function" ? new FinalizationRegistry((token) => {
+  try {
+    getBufferReferenceCapabilities().releaseShared(token);
+  } catch {}
+}) : undefined;
+var splitU64 = (value) => [
+  Number(value & 0xffffffffn) >>> 0,
+  Number(value >> 32n & 0xffffffffn) >>> 0
+];
+var joinU64 = (low, high) => BigInt(high >>> 0) << 32n | BigInt(low >>> 0);
+var encodeRuntime = (runtime) => {
+  switch (runtime) {
+    case "node":
+      return 1;
+    case "deno":
+      return 2;
+    case "bun":
+      return 3;
+    default:
+      return 0;
+  }
+};
+var decodeRuntime = (value) => {
+  switch (value) {
+    case 1:
+      return "node";
+    case 2:
+      return "deno";
+    case 3:
+      return "bun";
+    default:
+      return;
+  }
+};
+var getWarmTokens = (transportKey) => {
+  if (transportKey === undefined)
+    return;
+  let warmTokens = warmedTokensByTransport.get(transportKey);
+  if (warmTokens === undefined) {
+    warmTokens = new Set;
+    warmedTokensByTransport.set(transportKey, warmTokens);
+  }
+  return warmTokens;
+};
+var pinSab = (sab) => {
+  let pin = pinnedBySab.get(sab);
+  if (pin === undefined) {
+    const produced = getBufferReferenceCapabilities().produceShared(sab);
+    pin = {
+      token: produced.token,
+      pointer: produced.pointer,
+      byteLength: produced.byteLength
+    };
+    pinnedBySab.set(sab, pin);
+    pinFinalizer?.register(sab, pin.token);
+  }
+  return pin;
+};
+var makeMetadata = (pin) => ({
+  kind: SHARED_ARRAY_BUFFER_CODEC_ID,
+  origin: PROCESS_ORIGIN,
+  runtime: RUNTIME,
+  pointer: pin.pointer.toString(),
+  token: pin.token.toString(),
+  byteLength: pin.byteLength
+});
+var makeFullNumericMetadata = (pin) => {
+  if (pin.byteLength > 4294967295)
+    return;
+  const [tokenLow, tokenHigh] = splitU64(pin.token);
+  const [pointerLow, pointerHigh] = splitU64(pin.pointer);
+  return [
+    tokenLow,
+    tokenHigh,
+    pointerLow,
+    pointerHigh,
+    pin.byteLength >>> 0,
+    encodeRuntime(RUNTIME),
+    getProcessId() >>> 0,
+    0
+  ];
+};
+var makeTokenNumericMetadata = (pin) => {
+  const [tokenLow, tokenHigh] = splitU64(pin.token);
+  return [tokenLow, tokenHigh];
+};
+var wrapSharedArrayBufferPayload = (sab) => {
+  let payload = payloadBySharedBuffer.get(sab);
+  if (payload !== undefined)
+    return payload;
+  const pin = pinSab(sab);
+  payload = createSharedArrayBufferPayload(sab, pin, makeMetadata(pin));
+  return payload;
+};
+var createSharedArrayBufferPayload = (buffer, pin, metadata) => {
+  let payload = payloadBySharedBuffer.get(buffer);
+  if (payload !== undefined)
+    return payload;
+  const fullNumeric = makeFullNumericMetadata(pin);
+  const tokenOnlyNumeric = makeTokenNumericMetadata(pin);
+  payload = {
+    [EXTERNAL_PAYLOAD_BRAND]: SHARED_ARRAY_BUFFER_CODEC_ID,
+    toMetadata: () => metadata,
+    [SHARED_ARRAY_BUFFER_NUMERIC_TRANSFER]: (transportKey) => {
+      if (fullNumeric === undefined) {
+        return;
+      }
+      const warmTokens = getWarmTokens(transportKey);
+      if (warmTokens === undefined)
+        return fullNumeric;
+      if (warmTokens.has(pin.token))
+        return tokenOnlyNumeric;
+      warmTokens.add(pin.token);
+      return fullNumeric;
+    }
+  };
+  payloadBySharedBuffer.set(buffer, payload);
+  return payload;
+};
+var getSharedArrayBufferPayload = (value) => {
+  if (isSharedArrayBufferValue(value))
+    return wrapSharedArrayBufferPayload(value);
+  return payloadBySharedBuffer.get(value);
+};
+var isSharedArrayBufferMetadata = (value) => {
+  if (value === null || typeof value !== "object")
+    return false;
+  const meta = value;
+  return meta.kind === SHARED_ARRAY_BUFFER_CODEC_ID && typeof meta.origin === "string" && typeof meta.runtime === "string" && typeof meta.pointer === "string" && typeof meta.token === "string" && typeof meta.byteLength === "number" && Number.isInteger(meta.byteLength) && meta.byteLength >= 0;
+};
+var materializeSharedBuffer = (metadata, warmOnly) => {
+  if (metadata.origin !== PROCESS_ORIGIN) {
+    throw new Error(`SharedArrayBuffer cannot cross a process boundary (origin ${metadata.origin} ` + `!= ${PROCESS_ORIGIN}); it is shared by reference to thread workers only.`);
+  }
+  const token = BigInt(metadata.token);
+  const cached = cachedSharedBuffersByToken.get(token);
+  if (cached !== undefined)
+    return cached;
+  if (warmOnly) {
+    throw new TypeError("SharedArrayBuffer cache miss for warm token payload");
+  }
+  const region = getBufferReferenceCapabilities().adoptShared({
+    token,
+    pointer: BigInt(metadata.pointer),
+    byteOffset: 0,
+    byteLength: metadata.byteLength
+  });
+  cachedSharedBuffersByToken.set(token, region.buffer);
+  createSharedArrayBufferPayload(region.buffer, {
+    token,
+    pointer: BigInt(metadata.pointer),
+    byteLength: metadata.byteLength
+  }, metadata);
+  return region.buffer;
+};
+var decode = (metadata) => {
+  if (!isSharedArrayBufferMetadata(metadata)) {
+    throw new TypeError("Invalid SharedArrayBuffer payload metadata");
+  }
+  return materializeSharedBuffer(metadata, false);
+};
+var decodeNumeric = (words) => {
+  if (words.length === SHARED_ARRAY_BUFFER_TOKEN_NUMERIC_WORDS) {
+    const token = joinU64(words[0] ?? 0, words[1] ?? 0);
+    const cached = cachedSharedBuffersByToken.get(token);
+    if (cached !== undefined)
+      return cached;
+    throw new TypeError("SharedArrayBuffer cache miss for warm token payload");
+  }
+  const runtime = decodeRuntime(words[5] ?? 0);
+  if (runtime === undefined) {
+    throw new TypeError("Invalid SharedArrayBuffer numeric runtime");
+  }
+  const originPid = words[6];
+  if (originPid === undefined || !Number.isInteger(originPid) || originPid < 0) {
+    throw new TypeError("Invalid SharedArrayBuffer numeric origin");
+  }
+  if (words.length !== SHARED_ARRAY_BUFFER_NUMERIC_WORDS) {
+    throw new TypeError("Invalid SharedArrayBuffer numeric word count");
+  }
+  const metadata = {
+    kind: SHARED_ARRAY_BUFFER_CODEC_ID,
+    origin: `${runtime}:${originPid >>> 0}`,
+    runtime,
+    pointer: joinU64(words[2] ?? 0, words[3] ?? 0).toString(),
+    token: joinU64(words[0] ?? 0, words[1] ?? 0).toString(),
+    byteLength: words[4] ?? 0
+  };
+  return materializeSharedBuffer(metadata, false);
+};
+var codecGlobal = globalThis;
+var codecs = codecGlobal.__KNITTING_PAYLOAD_CODECS__ ??= Object.create(null);
+codecs[SHARED_ARRAY_BUFFER_CODEC_ID] = { decode, decodeNumeric };
+
+// scripts/browser-stubs/process-shared-buffer.ts
+var isProcessSharedBufferValue = (_value) => false;
+var unavailable2 = () => {
+  throw new Error("ProcessSharedBuffer is unavailable in the browser build");
+};
+
+class ProcessSharedBuffer {
+  constructor() {
+    unavailable2();
+  }
+  static create = unavailable2;
+  static fromMetadata = unavailable2;
+  toMetadata = unavailable2;
+}
+
+// src/connections/numeric-array.ts
+var NUMERIC_ARRAY_BRAND = Symbol.for("knitting.numericArray");
+
+class NumericArray extends Array {
+}
+Object.defineProperty(NumericArray.prototype, NUMERIC_ARRAY_BRAND, {
+  value: true,
+  enumerable: false,
+  writable: false,
+  configurable: false
+});
+var isNumericArray = (value) => value[NUMERIC_ARRAY_BRAND] === true;
+var numericArrayFromFloat64 = (view) => {
+  const length = view.length;
+  const out = new NumericArray(length);
+  for (let i = 0;i < length; i++)
+    out[i] = view[i];
+  return out;
+};
 
 // src/memory/payloadCodec.ts
 var memory = new ArrayBuffer(8);
@@ -1388,28 +2659,138 @@ var Float64View = new Float64Array(memory);
 var BigInt64View = new BigInt64Array(memory);
 var Uint32View = new Uint32Array(memory);
 var textEncode3 = new TextEncoder;
-var runtimeBufferClass = IS_BROWSER ? undefined : globalThis.Buffer;
-var runtimeBufferByteLength = !IS_BROWSER && typeof runtimeBufferClass?.byteLength === "function" ? runtimeBufferClass.byteLength.bind(runtimeBufferClass) : undefined;
-var isRuntimeBuffer = IS_BROWSER ? (_) => false : typeof runtimeBufferClass?.isBuffer === "function" ? runtimeBufferClass.isBuffer.bind(runtimeBufferClass) : (_) => false;
-var isRuntimeUint8Array = IS_BROWSER ? (value) => value instanceof Uint8Array : (value) => value != null && typeof value === "object" && Object.getPrototypeOf(value) === Uint8Array.prototype;
-var utf8ByteLength = IS_BROWSER || !runtimeBufferByteLength ? (text) => textEncode3.encode(text).byteLength : (text) => runtimeBufferByteLength(text, "utf8");
+var runtimeBufferClass = globalThis.Buffer;
+var runtimeBufferByteLength = typeof runtimeBufferClass?.byteLength === "function" ? (value, encoding) => runtimeBufferClass.byteLength(value, encoding) : undefined;
+var isRuntimeBuffer = (value) => typeof runtimeBufferClass?.isBuffer === "function" && runtimeBufferClass.isBuffer(value);
+var isRuntimeUint8Array = (value) => value != null && typeof value === "object" && Object.getPrototypeOf(value) === Uint8Array.prototype;
+var utf8ByteLength = !runtimeBufferByteLength ? (text) => textEncode3.encode(text).byteLength : (text) => runtimeBufferByteLength(text, "utf8");
 var BIGINT64_MIN = -(1n << 63n);
 var BIGINT64_MAX = (1n << 63n) - 1n;
 var { parse: parseJSON, stringify: stringifyJSON } = JSON;
 var { for: symbolFor, keyFor: symbolKeyFor } = Symbol;
+var EXTERNAL_PAYLOAD_BRAND2 = symbolFor("knitting.payloadCodec");
+var BUFFER_REFERENCE_CODEC_ID = "knitting.bufferReference";
+var PROCESS_SHARED_BUFFER_CODEC_ID = "knitting.processSharedBuffer";
+var externalPayloadGlobal = globalThis;
 var objectGetPrototypeOf = Object.getPrototypeOf;
 var objectHasOwn = Object.prototype.hasOwnProperty;
 var arrayIsArray = Array.isArray;
 var objectPrototype = Object.prototype;
-var UNSUPPORTED_OBJECT_DETAIL = "Unsupported object type. Allowed: plain object, array, Error, Date, Envelope, Buffer, ArrayBuffer, DataView, and typed arrays. Serialize it yourself.";
-var ENVELOPE_PAYLOAD_DETAIL = "Envelope payload must be an ArrayBuffer.";
+var UNSUPPORTED_OBJECT_DETAIL = "Unsupported object type. Allowed: plain object, array, Error, Date, Envelope, Buffer, ArrayBuffer, DataView, typed arrays, and registered external payloads. Serialize it yourself.";
+var ENVELOPE_PAYLOAD_DETAIL = "Envelope payload must be an ArrayBuffer, SharedArrayBuffer, " + "ProcessSharedBuffer, or BufferReference.";
 var ENVELOPE_HEADER_DETAIL = "Envelope header must be a JSON-like value or string.";
 var ENVELOPE_PROMISE_DETAIL = "Envelope header cannot contain Promise values.";
 var DYNAMIC_PAYLOAD_LIMIT_DETAIL = "Dynamic payload exceeds maxPayloadBytes.";
 var DYNAMIC_PAYLOAD_CAPACITY_DETAIL = "Dynamic payload buffer capacity exceeded.";
+var PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL = "SharedArrayBuffer and BufferReference are process-local pointer payloads " + "and cannot cross a process-worker boundary; use ProcessSharedBuffer instead.";
+var RESERVED_EXTERNAL_PAYLOAD_DETAIL = "Reserved Knitting external payload codec cannot be forged.";
+var isProcessLocalPointerCodec = (codecId) => codecId === SHARED_ARRAY_BUFFER_CODEC_ID || codecId === BUFFER_REFERENCE_CODEC_ID;
+var isReservedExternalPayloadCodec = (codecId) => isProcessLocalPointerCodec(codecId) || codecId === PROCESS_SHARED_BUFFER_CODEC_ID;
 var isPlainJsonObject = (value) => {
   const proto = objectGetPrototypeOf(value);
   return proto === objectPrototype || proto === null;
+};
+var readExternalPayloadCodecId = (value) => {
+  const codecId = value[EXTERNAL_PAYLOAD_BRAND2];
+  return typeof codecId === "string" ? codecId : undefined;
+};
+var runtimeCode = (value) => {
+  switch (value) {
+    case "node":
+      return 1;
+    case "deno":
+      return 2;
+    case "bun":
+      return 3;
+    default:
+      return 0;
+  }
+};
+var kindCode = (value) => {
+  switch (value) {
+    case "shared-array-buffer":
+      return 1;
+    case "external-array-buffer":
+      return 2;
+    default:
+      return 0;
+  }
+};
+var isU32 = (value) => typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295;
+var isExternalPayloadLike = (value) => typeof value.toMetadata === "function" && typeof value[EXTERNAL_PAYLOAD_BRAND2] === "string";
+var readTrustedExternalPayloadMetadata = (value) => {
+  if (isBufferReferenceValue(value)) {
+    return BufferReference.prototype.toMetadata.call(value);
+  }
+  if (isProcessSharedBufferValue(value)) {
+    return ProcessSharedBuffer.prototype.toMetadata.call(value);
+  }
+  return value.toMetadata();
+};
+var decodeExternalPayload = (raw, processBoundary) => {
+  const payload = parseJSON(raw);
+  if (!arrayIsArray(payload) || payload.length !== 2)
+    return payload;
+  const codecId = payload[0];
+  const metadata = payload[1];
+  if (typeof codecId !== "string") {
+    return { codec: codecId, metadata };
+  }
+  if (processBoundary && isProcessLocalPointerCodec(codecId)) {
+    throw new TypeError(PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL);
+  }
+  const codec = externalPayloadGlobal.__KNITTING_PAYLOAD_CODECS__?.[codecId];
+  return typeof codec?.decode === "function" ? codec.decode(metadata) : { codec: codecId, metadata };
+};
+var PROCESS_SHARED_BUFFER_NUMERIC_WORDS = 8;
+var BUFFER_REFERENCE_NUMERIC_WORDS = 8;
+var NUMERIC_SENTINEL = 4294967295;
+var decodeNumericExternalPayload = (codecId, words) => {
+  const codec = externalPayloadGlobal.__KNITTING_PAYLOAD_CODECS__?.[codecId];
+  if (typeof codec?.decodeNumeric === "function") {
+    return codec.decodeNumeric(words);
+  }
+  return { codec: codecId, metadata: Array.from(words) };
+};
+var decodeProcessSharedBufferNumericWords = (words) => decodeNumericExternalPayload(PROCESS_SHARED_BUFFER_CODEC_ID, words);
+var decodeBufferReferenceNumericWords = (words) => decodeNumericExternalPayload(BUFFER_REFERENCE_CODEC_ID, words);
+var decodeSharedArrayBufferNumericWords = (words) => decodeNumericExternalPayload(SHARED_ARRAY_BUFFER_CODEC_ID, words);
+var tryEncodePrimitiveTask = (task) => {
+  const value = task.value;
+  switch (typeof value) {
+    case "number":
+      if (value !== value) {
+        task[TaskIndex.Type] = PayloadSignal.NaN;
+        return true;
+      }
+      Float64View[0] = value;
+      task[TaskIndex.Type] = PayloadSignal.Float64;
+      task[TaskIndex.Start] = Uint32View[0];
+      task[TaskIndex.End] = Uint32View[1];
+      return true;
+    case "boolean":
+      task[TaskIndex.Type] = value ? PayloadSignal.True : PayloadSignal.False;
+      return true;
+    case "undefined":
+      task[TaskIndex.Type] = PayloadSignal.Undefined;
+      return true;
+    case "bigint":
+      if (value < BIGINT64_MIN || value > BIGINT64_MAX)
+        return false;
+      BigInt64View[0] = value;
+      task[TaskIndex.Type] = PayloadSignal.BigInt;
+      task[TaskIndex.Start] = Uint32View[0];
+      task[TaskIndex.End] = Uint32View[1];
+      return true;
+    case "object":
+      if (value === null) {
+        task[TaskIndex.Type] = PayloadSignal.Null;
+        return true;
+      }
+      return false;
+    default:
+      return false;
+  }
 };
 var hasPromiseInEnvelopeHeader = (value, seen) => {
   if (value instanceof Promise)
@@ -1520,10 +2901,10 @@ var decodeBigIntBinary = (bytes) => {
 var initStaticIO = (headersBuffer, headerSlotStrideU32, textCompat) => {
   const slotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
   const requiredBytes = getStridedRegionSpanBytes({
-    slotCount: 32 /* slots */,
+    slotCount: LockBound.slots,
     slotStrideU32: slotStride,
     slotLengthU32: HEADER_STATIC_PAYLOAD_U32,
-    baseU32: 0 /* header */
+    baseU32: LockBound.header
   });
   if (headersBuffer.byteLength < Math.max(requiredBytes, HEADER_BYTE_LENGTH)) {
     return null;
@@ -1549,7 +2930,8 @@ var encodePayload = ({
   headersBuffer,
   headerSlotStrideU32,
   textCompat,
-  onPromise
+  onPromise,
+  processBoundary = false
 }) => {
   const payloadSab = payload?.sab ?? sab;
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
@@ -1577,18 +2959,19 @@ var encodePayload = ({
     writeBuffer: writeStaticBuffer,
     writeArrayBuffer: writeStaticArrayBuffer,
     writeExactUint8Array: writeStaticExactUint8Array,
+    writeU32Words: writeStaticU32Words,
     write8Binary: writeStatic8Binary,
     writeUtf8: writeStaticUtf8
   } = requireStaticIO(headersBuffer, headerSlotStrideU32, textCompat?.headers);
   const dynamicLimitError = (task, actualBytes, label) => encoderError({
     task,
-    type: 3 /* Serializable */,
+    type: ErrorKnitting.Serializable,
     onPromise,
     detail: `${DYNAMIC_PAYLOAD_LIMIT_DETAIL} limit=${maxPayloadBytes}; ` + `actual=${actualBytes}; type=${label}.`
   });
   const dynamicCapacityError = (task) => encoderError({
     task,
-    type: 3 /* Serializable */,
+    type: ErrorKnitting.Serializable,
     onPromise,
     detail: DYNAMIC_PAYLOAD_CAPACITY_DETAIL
   });
@@ -1612,12 +2995,12 @@ var encodePayload = ({
   };
   const dynamicUtf8ReserveBytes = (task, text, label) => dynamicUtf8ReserveBytesWithExtra(task, text, 0, label);
   const reserveDynamic = (task, bytes) => {
-    task[5 /* PayloadLen */] = bytes;
+    task[TaskIndex.PayloadLen] = bytes;
     return allocTask(task);
   };
   let objectDynamicSlot = -1;
   const reserveDynamicObject = (task, bytes) => {
-    task[5 /* PayloadLen */] = bytes;
+    task[TaskIndex.PayloadLen] = bytes;
     const reservedSlot = allocTask(task);
     objectDynamicSlot = reservedSlot;
     return reservedSlot;
@@ -1666,7 +3049,7 @@ var encodePayload = ({
       const detail = encodeErrorReason instanceof Error ? encodeErrorReason.message : String(encodeErrorReason);
       return encoderError({
         task,
-        type: 3 /* Serializable */,
+        type: ErrorKnitting.Serializable,
         onPromise,
         detail
       });
@@ -1674,12 +3057,12 @@ var encodePayload = ({
     const reserveBytes = dynamicUtf8ReserveBytes(task, text, "Error");
     if (reserveBytes < 0)
       return false;
-    task[2 /* Type */] = 24 /* Error */;
+    task[TaskIndex.Type] = PayloadBuffer.Error;
     const reservedSlot = reserveDynamicObject(task, reserveBytes);
-    const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
+    const written = writeDynamicUtf8(text, task[TaskIndex.Start], reserveBytes);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
     task.value = null;
     return true;
@@ -1689,21 +3072,21 @@ var encodePayload = ({
     if (bytes <= staticMaxBytes) {
       const written2 = writeStaticBinary(bytesView, slotIndex);
       if (written2 !== -1) {
-        task[2 /* Type */] = staticType;
-        task[5 /* PayloadLen */] = written2;
+        task[TaskIndex.Type] = staticType;
+        task[TaskIndex.PayloadLen] = written2;
         task.value = null;
         return true;
       }
     }
-    task[2 /* Type */] = dynamicType;
-    if (!ensureWithinDynamicLimit(task, bytes, PayloadBuffer[dynamicType])) {
+    task[TaskIndex.Type] = dynamicType;
+    if (!ensureWithinDynamicLimit(task, bytes, payloadBufferName(dynamicType))) {
       return false;
     }
     const reservedSlot = reserveDynamicObject(task, bytes);
-    const written = writeDynamicBinary(bytesView, task[3 /* Start */]);
+    const written = writeDynamicBinary(bytesView, task[TaskIndex.Start]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
     task.value = null;
     return true;
@@ -1712,19 +3095,19 @@ var encodePayload = ({
     const bytes = bytesView.byteLength;
     if (bytes <= staticMaxBytes) {
       writeStaticExactUint8Array(bytesView, slotIndex);
-      task[2 /* Type */] = 18 /* StaticBinary */;
-      task[5 /* PayloadLen */] = bytes;
+      task[TaskIndex.Type] = PayloadBuffer.StaticBinary;
+      task[TaskIndex.PayloadLen] = bytes;
       task.value = null;
       return true;
     }
-    task[2 /* Type */] = 17 /* Binary */;
+    task[TaskIndex.Type] = PayloadBuffer.Binary;
     if (!ensureWithinDynamicLimit(task, bytes, "Binary"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    const written = writeDynamicBinary(bytesView, task[3 /* Start */]);
+    const written = writeDynamicBinary(bytesView, task[TaskIndex.Start]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
     task.value = null;
     return true;
@@ -1734,20 +3117,20 @@ var encodePayload = ({
     if (bytes <= staticMaxBytes) {
       const written2 = writeStaticBuffer(buffer, slotIndex);
       if (written2 !== -1) {
-        task[2 /* Type */] = 39 /* StaticBuffer */;
-        task[5 /* PayloadLen */] = written2;
+        task[TaskIndex.Type] = PayloadBuffer.StaticBuffer;
+        task[TaskIndex.PayloadLen] = written2;
         task.value = null;
         return true;
       }
     }
-    task[2 /* Type */] = 38 /* Buffer */;
+    task[TaskIndex.Type] = PayloadBuffer.Buffer;
     if (!ensureWithinDynamicLimit(task, bytes, "Buffer"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    const written = writeDynamicBuffer(buffer, task[3 /* Start */]);
+    const written = writeDynamicBuffer(buffer, task[TaskIndex.Start]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
     task.value = null;
     return true;
@@ -1757,20 +3140,51 @@ var encodePayload = ({
     if (bytes <= staticMaxBytes) {
       const written2 = writeStatic8Binary(float64, slotIndex);
       if (written2 !== -1) {
-        task[2 /* Type */] = 32 /* StaticFloat64Array */;
-        task[5 /* PayloadLen */] = written2;
+        task[TaskIndex.Type] = PayloadBuffer.StaticFloat64Array;
+        task[TaskIndex.PayloadLen] = written2;
         task.value = null;
         return true;
       }
     }
-    task[2 /* Type */] = 20 /* Float64Array */;
+    task[TaskIndex.Type] = PayloadBuffer.Float64Array;
     if (!ensureWithinDynamicLimit(task, bytes, "Float64Array"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    const written = writeDynamic8Binary(float64, task[3 /* Start */]);
+    const written = writeDynamic8Binary(float64, task[TaskIndex.Start]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
+    setSlotLength(reservedSlot, written);
+    task.value = null;
+    return true;
+  };
+  let numericArrayScratch = new Float64Array(0);
+  const encodeObjectNumericArray = (task, slotIndex, numericArray) => {
+    const length = numericArray.length;
+    if (numericArrayScratch.length < length) {
+      numericArrayScratch = new Float64Array(length);
+    }
+    for (let i = 0;i < length; i++)
+      numericArrayScratch[i] = numericArray[i];
+    const float64 = numericArrayScratch.subarray(0, length);
+    const bytes = float64.byteLength;
+    if (bytes <= staticMaxBytes) {
+      const written2 = writeStatic8Binary(float64, slotIndex);
+      if (written2 !== -1) {
+        task[TaskIndex.Type] = PayloadBuffer.StaticNumericArray;
+        task[TaskIndex.PayloadLen] = written2;
+        task.value = null;
+        return true;
+      }
+    }
+    task[TaskIndex.Type] = PayloadBuffer.NumericArray;
+    if (!ensureWithinDynamicLimit(task, bytes, "NumericArray"))
+      return false;
+    const reservedSlot = reserveDynamicObject(task, bytes);
+    const written = writeDynamic8Binary(float64, task[TaskIndex.Start]);
+    if (written < 0)
+      return failDynamicWriteAfterReserve(task, reservedSlot);
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
     task.value = null;
     return true;
@@ -1780,76 +3194,219 @@ var encodePayload = ({
     if (bytes <= staticMaxBytes) {
       const written2 = writeStaticArrayBuffer(arrayBuffer, slotIndex);
       if (written2 !== -1) {
-        task[2 /* Type */] = 37 /* StaticArrayBuffer */;
-        task[5 /* PayloadLen */] = written2;
+        task[TaskIndex.Type] = PayloadBuffer.StaticArrayBuffer;
+        task[TaskIndex.PayloadLen] = written2;
         task.value = null;
         return true;
       }
     }
-    task[2 /* Type */] = 36 /* ArrayBuffer */;
+    task[TaskIndex.Type] = PayloadBuffer.ArrayBuffer;
     if (!ensureWithinDynamicLimit(task, bytes, "ArrayBuffer"))
       return false;
     const reservedSlot = reserveDynamicObject(task, bytes);
-    const written = writeDynamicArrayBuffer(arrayBuffer, task[3 /* Start */]);
+    const written = writeDynamicArrayBuffer(arrayBuffer, task[TaskIndex.Start]);
     if (written < 0)
       return failDynamicWriteAfterReserve(task, reservedSlot);
-    task[5 /* PayloadLen */] = written;
+    task[TaskIndex.PayloadLen] = written;
     setSlotLength(reservedSlot, written);
+    task.value = null;
+    return true;
+  };
+  const processSharedBufferWords = new Uint32Array(PROCESS_SHARED_BUFFER_NUMERIC_WORDS);
+  const sharedArrayBufferWords = new Uint32Array(SHARED_ARRAY_BUFFER_NUMERIC_WORDS);
+  const tryEncodeProcessSharedBufferNumeric = (task, slotIndex, value) => {
+    const descriptor = value.descriptor;
+    if (descriptor === undefined || descriptor.name !== undefined || !isU32(descriptor.fd) || !isU32(descriptor.size) || !isU32(descriptor.byteLength) || !isU32(value.byteOffset) || !isU32(value.byteLength)) {
+      return false;
+    }
+    const baseAddressMod64 = descriptor.baseAddressMod64;
+    if (baseAddressMod64 !== undefined && !isU32(baseAddressMod64)) {
+      return false;
+    }
+    processSharedBufferWords[0] = descriptor.fd;
+    processSharedBufferWords[1] = descriptor.size;
+    processSharedBufferWords[2] = descriptor.byteLength;
+    processSharedBufferWords[3] = value.byteOffset;
+    processSharedBufferWords[4] = value.byteLength;
+    processSharedBufferWords[5] = runtimeCode(descriptor.runtime);
+    processSharedBufferWords[6] = kindCode(descriptor.kind);
+    processSharedBufferWords[7] = baseAddressMod64 === undefined ? NUMERIC_SENTINEL : baseAddressMod64;
+    task[TaskIndex.Type] = PayloadBuffer.ProcessSharedBuffer;
+    task[TaskIndex.PayloadLen] = writeStaticU32Words(processSharedBufferWords, PROCESS_SHARED_BUFFER_NUMERIC_WORDS, slotIndex);
+    task.value = null;
+    return true;
+  };
+  const tryEncodeBufferReferenceNumeric = (task, slotIndex, value) => {
+    const words = isBufferReferenceValue(value) ? BufferReference.prototype[BUFFER_REFERENCE_NUMERIC_TRANSFER].call(value) : value[BUFFER_REFERENCE_NUMERIC_TRANSFER]?.();
+    if (words === undefined)
+      return false;
+    task[TaskIndex.Type] = PayloadBuffer.BufferReference;
+    task[TaskIndex.PayloadLen] = writeStaticU32Words(words, BUFFER_REFERENCE_NUMERIC_WORDS, slotIndex);
+    attachPayloadTransportFinalizer(task, value);
+    task.value = null;
+    return true;
+  };
+  const tryEncodeSharedArrayBufferNumeric = (task, slotIndex, value) => {
+    const words = value[SHARED_ARRAY_BUFFER_NUMERIC_TRANSFER]?.(lockSector);
+    if (words === undefined)
+      return false;
+    sharedArrayBufferWords[0] = words[0] ?? 0;
+    sharedArrayBufferWords[1] = words[1] ?? 0;
+    sharedArrayBufferWords[2] = words[2] ?? 0;
+    sharedArrayBufferWords[3] = words[3] ?? 0;
+    sharedArrayBufferWords[4] = words[4] ?? 0;
+    sharedArrayBufferWords[5] = words[5] ?? 0;
+    sharedArrayBufferWords[6] = words[6] ?? 0;
+    sharedArrayBufferWords[7] = words[7] ?? 0;
+    task[TaskIndex.Type] = PayloadBuffer.SharedArrayBuffer;
+    task[TaskIndex.PayloadLen] = writeStaticU32Words(sharedArrayBufferWords, words.length, slotIndex);
+    task.value = null;
+    return true;
+  };
+  const encodeObjectExternalPayload = (task, slotIndex, externalPayload, trustedReservedCodec = false) => {
+    const codecId = readExternalPayloadCodecId(externalPayload);
+    if (codecId === undefined) {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: UNSUPPORTED_OBJECT_DETAIL
+      });
+    }
+    if (trustedReservedCodec) {
+      if (processBoundary && isProcessLocalPointerCodec(codecId)) {
+        return encoderError({
+          task,
+          type: ErrorKnitting.Serializable,
+          onPromise,
+          detail: PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL
+        });
+      }
+      if (codecId === SHARED_ARRAY_BUFFER_CODEC_ID && tryEncodeSharedArrayBufferNumeric(task, slotIndex, externalPayload)) {
+        return true;
+      }
+      if (codecId === BUFFER_REFERENCE_CODEC_ID && tryEncodeBufferReferenceNumeric(task, slotIndex, externalPayload)) {
+        return true;
+      }
+      if (codecId === PROCESS_SHARED_BUFFER_CODEC_ID && tryEncodeProcessSharedBufferNumeric(task, slotIndex, externalPayload)) {
+        return true;
+      }
+    } else if (isReservedExternalPayloadCodec(codecId)) {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: processBoundary && isProcessLocalPointerCodec(codecId) ? PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL : RESERVED_EXTERNAL_PAYLOAD_DETAIL
+      });
+    }
+    let text;
+    try {
+      text = stringifyJSON([
+        codecId,
+        trustedReservedCodec ? readTrustedExternalPayloadMetadata(externalPayload) : externalPayload.toMetadata()
+      ]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail
+      });
+    }
+    if (typeof text !== "string") {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: "External payload metadata must be JSON serializable."
+      });
+    }
+    if (text.length <= staticMaxBytes) {
+      const written2 = writeStaticUtf8(text, slotIndex);
+      if (written2 !== -1) {
+        task[TaskIndex.Type] = PayloadBuffer.StaticExternalPayload;
+        task[TaskIndex.PayloadLen] = written2;
+        attachPayloadTransportFinalizer(task, externalPayload);
+        task.value = null;
+        return true;
+      }
+    }
+    task[TaskIndex.Type] = PayloadBuffer.ExternalPayload;
+    const reserveBytes = dynamicUtf8ReserveBytes(task, text, "ExternalPayload");
+    if (reserveBytes < 0)
+      return false;
+    const reservedSlot = reserveDynamicObject(task, reserveBytes);
+    const written = writeDynamicUtf8(text, task[TaskIndex.Start], reserveBytes);
+    if (written < 0)
+      return failDynamicWriteAfterReserve(task, reservedSlot);
+    task[TaskIndex.PayloadLen] = written;
+    setSlotLength(reservedSlot, written);
+    attachPayloadTransportFinalizer(task, externalPayload);
     task.value = null;
     return true;
   };
   const encodeObjectDate = (task, date) => {
     Float64View[0] = date.getTime();
-    task[2 /* Type */] = 25 /* Date */;
-    task[3 /* Start */] = Uint32View[0];
-    task[4 /* End */] = Uint32View[1];
+    task[TaskIndex.Type] = PayloadBuffer.Date;
+    task[TaskIndex.Start] = Uint32View[0];
+    task[TaskIndex.End] = Uint32View[1];
     task.value = null;
     return true;
   };
-  const encodeObjectEnvelope = (task, slotIndex, envelope) => {
-    const header = envelope.header;
-    const payload2 = envelope.payload;
-    const headerIsString = typeof header === "string";
-    if (!(payload2 instanceof ArrayBuffer)) {
-      return encoderError({
-        task,
-        type: 3 /* Serializable */,
-        onPromise,
-        detail: ENVELOPE_PAYLOAD_DETAIL
-      });
-    }
+  const encodeEnvelopeHeaderText = (task, header, headerIsString) => {
     if (hasPromiseInEnvelopeHeader(header)) {
-      return encoderError({
+      encoderError({
         task,
-        type: 3 /* Serializable */,
+        type: ErrorKnitting.Serializable,
         onPromise,
         detail: ENVELOPE_PROMISE_DETAIL
       });
+      return;
     }
+    if (headerIsString)
+      return header;
     let headerText;
-    if (headerIsString) {
-      headerText = header;
-    } else {
-      try {
-        headerText = stringifyJSON(header);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        return encoderError({
-          task,
-          type: 2 /* Json */,
-          onPromise,
-          detail
-        });
-      }
+    try {
+      headerText = stringifyJSON(header);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      encoderError({ task, type: ErrorKnitting.Json, onPromise, detail });
+      return;
     }
     if (typeof headerText !== "string") {
-      return encoderError({
+      encoderError({
         task,
-        type: 3 /* Serializable */,
+        type: ErrorKnitting.Serializable,
         onPromise,
         detail: ENVELOPE_HEADER_DETAIL
       });
+      return;
     }
+    return headerText;
+  };
+  const resolveEnvelopeExternalBody = (body) => {
+    if (body === null || typeof body !== "object")
+      return;
+    const sharedArrayBuffer = getSharedArrayBufferPayload(body);
+    if (sharedArrayBuffer !== undefined) {
+      return { payload: sharedArrayBuffer, trustedReservedCodec: true };
+    }
+    if (isBufferReferenceValue(body) || isProcessSharedBufferValue(body)) {
+      return {
+        payload: body,
+        trustedReservedCodec: true
+      };
+    }
+    if (isExternalPayloadLike(body)) {
+      return {
+        payload: body,
+        trustedReservedCodec: false
+      };
+    }
+    return;
+  };
+  const encodeEnvelopeArrayBufferBody = (task, slotIndex, headerText, headerIsString, payload2) => {
     const payloadBytes = new Uint8Array(payload2);
     const payloadLength = payloadBytes.byteLength;
     const payloadReserveBytes = payloadLength > 0 ? payloadLength : 1;
@@ -1858,11 +3415,11 @@ var encodePayload = ({
       if (!ensureWithinDynamicLimit(task, payloadReserveBytes, "EnvelopeStaticHeaderPayload"))
         return false;
       const reservedSlot2 = reserveDynamicObject(task, payloadReserveBytes);
-      task[2 /* Type */] = headerIsString ? 42 /* EnvelopeStaticHeaderString */ : 40 /* EnvelopeStaticHeader */;
-      task[5 /* PayloadLen */] = staticHeaderWritten;
-      task[4 /* End */] = payloadLength;
+      task[TaskIndex.Type] = headerIsString ? PayloadBuffer.EnvelopeStaticHeaderString : PayloadBuffer.EnvelopeStaticHeader;
+      task[TaskIndex.PayloadLen] = staticHeaderWritten;
+      task[TaskIndex.End] = payloadLength;
       if (payloadLength > 0) {
-        const payloadWritten = writeDynamicBinary(payloadBytes, task[3 /* Start */]);
+        const payloadWritten = writeDynamicBinary(payloadBytes, task[TaskIndex.Start]);
         if (payloadWritten < 0) {
           return failDynamicWriteAfterReserve(task, reservedSlot2);
         }
@@ -1874,9 +3431,9 @@ var encodePayload = ({
     const headerReserveBytes = dynamicUtf8ReserveBytesWithExtra(task, headerText, payloadLength, headerIsString ? "EnvelopeDynamicHeaderString" : "EnvelopeDynamicHeader");
     if (headerReserveBytes < 0)
       return false;
-    task[2 /* Type */] = headerIsString ? 43 /* EnvelopeDynamicHeaderString */ : 41 /* EnvelopeDynamicHeader */;
+    task[TaskIndex.Type] = headerIsString ? PayloadBuffer.EnvelopeDynamicHeaderString : PayloadBuffer.EnvelopeDynamicHeader;
     const reservedSlot = reserveDynamicObject(task, headerReserveBytes + payloadLength);
-    const baseStart = task[3 /* Start */];
+    const baseStart = task[TaskIndex.Start];
     const writtenHeaderBytes = writeDynamicUtf8(headerText, baseStart, headerReserveBytes);
     if (writtenHeaderBytes < 0) {
       return failDynamicWriteAfterReserve(task, reservedSlot);
@@ -1887,11 +3444,125 @@ var encodePayload = ({
         return failDynamicWriteAfterReserve(task, reservedSlot);
       }
     }
-    task[5 /* PayloadLen */] = writtenHeaderBytes;
-    task[4 /* End */] = payloadLength;
+    task[TaskIndex.PayloadLen] = writtenHeaderBytes;
+    task[TaskIndex.End] = payloadLength;
     setSlotLength(reservedSlot, writtenHeaderBytes + payloadLength);
     task.value = null;
     return true;
+  };
+  const encodeEnvelopeExternalBody = (task, slotIndex, headerText, headerIsString, externalBody, trustedReservedCodec) => {
+    const codecId = readExternalPayloadCodecId(externalBody);
+    if (codecId === undefined) {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: ENVELOPE_PAYLOAD_DETAIL
+      });
+    }
+    if (trustedReservedCodec) {
+      if (processBoundary && isProcessLocalPointerCodec(codecId)) {
+        return encoderError({
+          task,
+          type: ErrorKnitting.Serializable,
+          onPromise,
+          detail: PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL
+        });
+      }
+    } else if (isReservedExternalPayloadCodec(codecId)) {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: processBoundary && isProcessLocalPointerCodec(codecId) ? PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL : RESERVED_EXTERNAL_PAYLOAD_DETAIL
+      });
+    }
+    let bodyText;
+    try {
+      bodyText = stringifyJSON([
+        codecId,
+        trustedReservedCodec ? readTrustedExternalPayloadMetadata(externalBody) : externalBody.toMetadata()
+      ]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail
+      });
+    }
+    if (typeof bodyText !== "string") {
+      return encoderError({
+        task,
+        type: ErrorKnitting.Serializable,
+        onPromise,
+        detail: "Envelope body metadata must be JSON serializable."
+      });
+    }
+    const bodyBytes = textEncode3.encode(bodyText);
+    const bodyLength = bodyBytes.byteLength;
+    const staticHeaderWritten = writeStaticUtf8(headerText, slotIndex);
+    if (staticHeaderWritten !== -1) {
+      if (!ensureWithinDynamicLimit(task, bodyLength, "EnvelopeStaticHeaderExternal"))
+        return false;
+      const reservedSlot2 = reserveDynamicObject(task, bodyLength);
+      task[TaskIndex.Type] = headerIsString ? PayloadBuffer.EnvelopeStaticHeaderStringExternal : PayloadBuffer.EnvelopeStaticHeaderExternal;
+      task[TaskIndex.PayloadLen] = staticHeaderWritten;
+      task[TaskIndex.End] = bodyLength;
+      const bodyWritten2 = writeDynamicBinary(bodyBytes, task[TaskIndex.Start]);
+      if (bodyWritten2 < 0) {
+        return failDynamicWriteAfterReserve(task, reservedSlot2);
+      }
+      setSlotLength(reservedSlot2, bodyWritten2);
+      attachPayloadTransportFinalizer(task, externalBody);
+      task.value = null;
+      return true;
+    }
+    const headerReserveBytes = dynamicUtf8ReserveBytesWithExtra(task, headerText, bodyLength, headerIsString ? "EnvelopeDynamicHeaderStringExternal" : "EnvelopeDynamicHeaderExternal");
+    if (headerReserveBytes < 0)
+      return false;
+    task[TaskIndex.Type] = headerIsString ? PayloadBuffer.EnvelopeDynamicHeaderStringExternal : PayloadBuffer.EnvelopeDynamicHeaderExternal;
+    const reservedSlot = reserveDynamicObject(task, headerReserveBytes + bodyLength);
+    const baseStart = task[TaskIndex.Start];
+    const writtenHeaderBytes = writeDynamicUtf8(headerText, baseStart, headerReserveBytes);
+    if (writtenHeaderBytes < 0) {
+      return failDynamicWriteAfterReserve(task, reservedSlot);
+    }
+    const bodyWritten = writeDynamicBinary(bodyBytes, baseStart + writtenHeaderBytes);
+    if (bodyWritten < 0) {
+      return failDynamicWriteAfterReserve(task, reservedSlot);
+    }
+    task[TaskIndex.PayloadLen] = writtenHeaderBytes;
+    task[TaskIndex.End] = bodyLength;
+    setSlotLength(reservedSlot, writtenHeaderBytes + bodyLength);
+    attachPayloadTransportFinalizer(task, externalBody);
+    task.value = null;
+    return true;
+  };
+  const encodeObjectEnvelope = (task, slotIndex, envelope) => {
+    const header = envelope.header;
+    const payload2 = envelope.payload;
+    const headerIsString = typeof header === "string";
+    if (payload2 instanceof ArrayBuffer) {
+      const headerText = encodeEnvelopeHeaderText(task, header, headerIsString);
+      if (headerText === undefined)
+        return false;
+      return encodeEnvelopeArrayBufferBody(task, slotIndex, headerText, headerIsString, payload2);
+    }
+    const externalBody = resolveEnvelopeExternalBody(payload2);
+    if (externalBody !== undefined) {
+      const headerText = encodeEnvelopeHeaderText(task, header, headerIsString);
+      if (headerText === undefined)
+        return false;
+      return encodeEnvelopeExternalBody(task, slotIndex, headerText, headerIsString, externalBody.payload, externalBody.trustedReservedCodec);
+    }
+    return encoderError({
+      task,
+      type: ErrorKnitting.Serializable,
+      onPromise,
+      detail: ENVELOPE_PAYLOAD_DETAIL
+    });
   };
   const encodeObjectPromise = (task, promise) => {
     if (beginPromisePayload(task)) {
@@ -1909,73 +3580,59 @@ var encodePayload = ({
   };
   const encodeDispatch = (task, slotIndex) => {
     const args = task.value;
+    if (tryEncodePrimitiveTask(task))
+      return true;
     switch (typeof args) {
-      case "bigint":
-        if (args < BIGINT64_MIN || args > BIGINT64_MAX) {
-          const binaryBytes = encodeBigIntIntoScratch(args);
-          const binary = bigintScratch.subarray(0, binaryBytes);
-          if (binaryBytes <= staticMaxBytes) {
-            const written2 = writeStaticBinary(binary, slotIndex);
-            if (written2 !== -1) {
-              task[2 /* Type */] = 29 /* StaticBigInt */;
-              task[5 /* PayloadLen */] = written2;
-              clearBigIntScratch(binaryBytes);
-              task.value = null;
-              return true;
-            }
-          }
-          task[2 /* Type */] = 28 /* BigInt */;
-          if (!ensureWithinDynamicLimit(task, binaryBytes, "BigInt")) {
+      case "bigint": {
+        const binaryBytes = encodeBigIntIntoScratch(args);
+        const binary = bigintScratch.subarray(0, binaryBytes);
+        if (binaryBytes <= staticMaxBytes) {
+          const written2 = writeStaticBinary(binary, slotIndex);
+          if (written2 !== -1) {
+            task[TaskIndex.Type] = PayloadBuffer.StaticBigInt;
+            task[TaskIndex.PayloadLen] = written2;
             clearBigIntScratch(binaryBytes);
-            return false;
+            task.value = null;
+            return true;
           }
-          const reservedSlot = reserveDynamic(task, binaryBytes);
-          const written = writeDynamicBinary(binary, task[3 /* Start */]);
-          if (written < 0) {
-            clearBigIntScratch(binaryBytes);
-            return failDynamicWriteAfterReserve(task, reservedSlot);
-          }
-          task[5 /* PayloadLen */] = written;
-          setSlotLength(reservedSlot, written);
-          clearBigIntScratch(binaryBytes);
-          task.value = null;
-          return true;
         }
-        BigInt64View[0] = args;
-        task[2 /* Type */] = 2 /* BigInt */;
-        task[3 /* Start */] = Uint32View[0];
-        task[4 /* End */] = Uint32View[1];
+        task[TaskIndex.Type] = PayloadBuffer.BigInt;
+        if (!ensureWithinDynamicLimit(task, binaryBytes, "BigInt")) {
+          clearBigIntScratch(binaryBytes);
+          return false;
+        }
+        const reservedSlot = reserveDynamic(task, binaryBytes);
+        const written = writeDynamicBinary(binary, task[TaskIndex.Start]);
+        if (written < 0) {
+          clearBigIntScratch(binaryBytes);
+          return failDynamicWriteAfterReserve(task, reservedSlot);
+        }
+        task[TaskIndex.PayloadLen] = written;
+        setSlotLength(reservedSlot, written);
+        clearBigIntScratch(binaryBytes);
+        task.value = null;
         return true;
-      case "boolean":
-        task[2 /* Type */] = task.value === true ? 3 /* True */ : 4 /* False */;
-        return true;
+      }
       case "function":
         return encoderError({
           task,
-          type: 0 /* Function */,
+          type: ErrorKnitting.Function,
           onPromise
         });
-      case "number":
-        if (args !== args) {
-          task[2 /* Type */] = 6 /* NaN */;
-          return true;
-        }
-        Float64View[0] = args;
-        task[2 /* Type */] = 9 /* Float64 */;
-        task[3 /* Start */] = Uint32View[0];
-        task[4 /* End */] = Uint32View[1];
-        return true;
       case "object":
-        if (args === null) {
-          task[2 /* Type */] = 10 /* Null */;
-          return true;
-        }
         objectDynamicSlot = -1;
         try {
           const objectValue = args;
+          const sharedArrayBufferPayload = getSharedArrayBufferPayload(objectValue);
+          if (sharedArrayBufferPayload !== undefined) {
+            return encodeObjectExternalPayload(task, slotIndex, sharedArrayBufferPayload, true);
+          }
           const objectProto = objectGetPrototypeOf(objectValue);
           if (isRuntimeUint8Array(objectValue)) {
             return encodeObjectUint8Array(task, slotIndex, objectValue);
+          }
+          if (arrayIsArray(objectValue) && isNumericArray(objectValue)) {
+            return encodeObjectNumericArray(task, slotIndex, objectValue);
           }
           if (arrayIsArray(objectValue) || objectProto === objectPrototype || objectProto === null) {
             let text;
@@ -1985,7 +3642,7 @@ var encodePayload = ({
               const detail = error instanceof Error ? error.message : String(error);
               return encoderError({
                 task,
-                type: 2 /* Json */,
+                type: ErrorKnitting.Json,
                 onPromise,
                 detail
               });
@@ -1993,25 +3650,28 @@ var encodePayload = ({
             if (text.length <= staticMaxBytes) {
               const written2 = writeStaticUtf8(text, slotIndex);
               if (written2 !== -1) {
-                task[2 /* Type */] = 16 /* StaticJson */;
-                task[5 /* PayloadLen */] = written2;
+                task[TaskIndex.Type] = PayloadBuffer.StaticJson;
+                task[TaskIndex.PayloadLen] = written2;
                 task.value = null;
                 return true;
               }
             }
-            task[2 /* Type */] = 12 /* Json */;
+            task[TaskIndex.Type] = PayloadBuffer.Json;
             const reserveBytes = dynamicUtf8ReserveBytes(task, text, "Json");
             if (reserveBytes < 0)
               return false;
             const reservedSlot = reserveDynamicObject(task, reserveBytes);
-            const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
+            const written = writeDynamicUtf8(text, task[TaskIndex.Start], reserveBytes);
             if (written < 0) {
               return failDynamicWriteAfterReserve(task, reservedSlot);
             }
-            task[5 /* PayloadLen */] = written;
+            task[TaskIndex.PayloadLen] = written;
             setSlotLength(reservedSlot, written);
             task.value = null;
             return true;
+          }
+          if (isBufferReferenceValue(objectValue) || isProcessSharedBufferValue(objectValue)) {
+            return encodeObjectExternalPayload(task, slotIndex, objectValue, true);
           }
           const objectCtor = objectValue.constructor;
           if (isRuntimeBuffer(objectValue)) {
@@ -2022,21 +3682,21 @@ var encodePayload = ({
               return encodeObjectArrayBuffer(task, slotIndex, objectValue);
             case Int32Array: {
               const int32 = objectValue;
-              return encodeObjectBinary(task, slotIndex, new Uint8Array(int32.buffer, int32.byteOffset, int32.byteLength), 19 /* Int32Array */, 31 /* StaticInt32Array */);
+              return encodeObjectBinary(task, slotIndex, new Uint8Array(int32.buffer, int32.byteOffset, int32.byteLength), PayloadBuffer.Int32Array, PayloadBuffer.StaticInt32Array);
             }
             case Float64Array:
               return encodeObjectFloat64Array(task, slotIndex, objectValue);
             case BigInt64Array: {
               const bigInt64 = objectValue;
-              return encodeObjectBinary(task, slotIndex, new Uint8Array(bigInt64.buffer, bigInt64.byteOffset, bigInt64.byteLength), 21 /* BigInt64Array */, 33 /* StaticBigInt64Array */);
+              return encodeObjectBinary(task, slotIndex, new Uint8Array(bigInt64.buffer, bigInt64.byteOffset, bigInt64.byteLength), PayloadBuffer.BigInt64Array, PayloadBuffer.StaticBigInt64Array);
             }
             case BigUint64Array: {
               const bigUint64 = objectValue;
-              return encodeObjectBinary(task, slotIndex, new Uint8Array(bigUint64.buffer, bigUint64.byteOffset, bigUint64.byteLength), 22 /* BigUint64Array */, 34 /* StaticBigUint64Array */);
+              return encodeObjectBinary(task, slotIndex, new Uint8Array(bigUint64.buffer, bigUint64.byteOffset, bigUint64.byteLength), PayloadBuffer.BigUint64Array, PayloadBuffer.StaticBigUint64Array);
             }
             case DataView: {
               const dataView = objectValue;
-              return encodeObjectBinary(task, slotIndex, new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength), 23 /* DataView */, 35 /* StaticDataView */);
+              return encodeObjectBinary(task, slotIndex, new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength), PayloadBuffer.DataView, PayloadBuffer.StaticDataView);
             }
             case Date:
               return encodeObjectDate(task, objectValue);
@@ -2059,9 +3719,12 @@ var encodePayload = ({
           if (objectValue instanceof Error) {
             return encodeErrorObject(task, objectValue);
           }
+          if (isExternalPayloadLike(objectValue)) {
+            return encodeObjectExternalPayload(task, slotIndex, objectValue);
+          }
           return encoderError({
             task,
-            type: 3 /* Serializable */,
+            type: ErrorKnitting.Serializable,
             onPromise,
             detail: UNSUPPORTED_OBJECT_DETAIL
           });
@@ -2070,7 +3733,7 @@ var encodePayload = ({
           const detail = error instanceof Error ? error.message : String(error);
           return encoderError({
             task,
-            type: 3 /* Serializable */,
+            type: ErrorKnitting.Serializable,
             onPromise,
             detail
           });
@@ -2080,22 +3743,22 @@ var encodePayload = ({
         if (text.length <= staticMaxBytes) {
           const written2 = writeStaticUtf8(text, slotIndex);
           if (written2 !== -1) {
-            task[2 /* Type */] = 15 /* StaticString */;
-            task[5 /* PayloadLen */] = written2;
+            task[TaskIndex.Type] = PayloadBuffer.StaticString;
+            task[TaskIndex.PayloadLen] = written2;
             task.value = null;
             return true;
           }
         }
-        task[2 /* Type */] = 11 /* String */;
+        task[TaskIndex.Type] = PayloadBuffer.String;
         const reserveBytes = dynamicUtf8ReserveBytes(task, text, "String");
         if (reserveBytes < 0)
           return false;
         const reservedSlot = reserveDynamic(task, reserveBytes);
-        const written = writeDynamicUtf8(text, task[3 /* Start */], reserveBytes);
+        const written = writeDynamicUtf8(text, task[TaskIndex.Start], reserveBytes);
         if (written < 0) {
           return failDynamicWriteAfterReserve(task, reservedSlot);
         }
-        task[5 /* PayloadLen */] = written;
+        task[TaskIndex.PayloadLen] = written;
         setSlotLength(reservedSlot, written);
         task.value = null;
         return true;
@@ -2105,36 +3768,33 @@ var encodePayload = ({
         if (key === undefined) {
           return encoderError({
             task,
-            type: 1 /* Symbol */,
+            type: ErrorKnitting.Symbol,
             onPromise
           });
         }
         if (key.length * 3 <= staticMaxBytes) {
           const written2 = writeStaticUtf8(key, slotIndex);
           if (written2 !== -1) {
-            task[2 /* Type */] = 27 /* StaticSymbol */;
-            task[5 /* PayloadLen */] = written2;
+            task[TaskIndex.Type] = PayloadBuffer.StaticSymbol;
+            task[TaskIndex.PayloadLen] = written2;
             task.value = null;
             return true;
           }
         }
-        task[2 /* Type */] = 26 /* Symbol */;
+        task[TaskIndex.Type] = PayloadBuffer.Symbol;
         const reserveBytes = dynamicUtf8ReserveBytes(task, key, "Symbol");
         if (reserveBytes < 0)
           return false;
         const reservedSlot = reserveDynamic(task, reserveBytes);
-        const written = writeDynamicUtf8(key, task[3 /* Start */], reserveBytes);
+        const written = writeDynamicUtf8(key, task[TaskIndex.Start], reserveBytes);
         if (written < 0) {
           return failDynamicWriteAfterReserve(task, reservedSlot);
         }
-        task[5 /* PayloadLen */] = written;
+        task[TaskIndex.PayloadLen] = written;
         setSlotLength(reservedSlot, written);
         task.value = null;
         return true;
       }
-      case "undefined":
-        task[2 /* Type */] = 5 /* Undefined */;
-        return true;
     }
     return false;
   };
@@ -2148,7 +3808,8 @@ var decodePayload = ({
   headersBuffer,
   headerSlotStrideU32,
   textCompat,
-  host
+  host,
+  processBoundary = false
 }) => {
   const payloadSab = payload?.sab ?? sab;
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
@@ -2175,963 +3836,320 @@ var decodePayload = ({
   });
   const {
     readUtf8: readStaticUtf8,
-    readBytesCopy: readStaticBytesCopy,
     readBytesBufferCopy: readStaticBufferCopy,
     readBufferCopy: readStaticBuffer,
     readUint8ArrayCopy: readStaticUint8ArrayCopy,
     readBytesArrayBufferCopy: readStaticArrayBufferCopy,
     readArrayBufferCopy: readStaticArrayBuffer,
-    read8BytesFloatCopy: readStatic8BytesFloatCopy
+    read8BytesFloatCopy: readStatic8BytesFloatCopy,
+    readU32Words: readStaticU32Words
   } = requireStaticIO(headersBuffer, headerSlotStrideU32, textCompat?.headers);
+  const processSharedBufferWords = new Uint32Array(PROCESS_SHARED_BUFFER_NUMERIC_WORDS);
+  const sharedArrayBufferWords = new Uint32Array(SHARED_ARRAY_BUFFER_NUMERIC_WORDS);
+  const bufferReferenceWords = new Uint32Array(BUFFER_REFERENCE_NUMERIC_WORDS);
   return (task, slotIndex, specialFlags) => {
-    switch (task[2 /* Type */]) {
-      case 2 /* BigInt */:
-        Uint32View[0] = task[3 /* Start */];
-        Uint32View[1] = task[4 /* End */];
+    const payloadType = task[TaskIndex.Type];
+    if (processBoundary && (payloadType === PayloadBuffer.SharedArrayBuffer || payloadType === PayloadBuffer.BufferReference)) {
+      throw new TypeError(PROCESS_BOUNDARY_POINTER_PAYLOAD_DETAIL);
+    }
+    switch (payloadType) {
+      case PayloadSignal.BigInt:
+        Uint32View[0] = task[TaskIndex.Start];
+        Uint32View[1] = task[TaskIndex.End];
         task.value = BigInt64View[0];
         return;
-      case 3 /* True */:
+      case PayloadSignal.True:
         task.value = true;
         return;
-      case 4 /* False */:
+      case PayloadSignal.False:
         task.value = false;
         return;
-      case 9 /* Float64 */:
-        Uint32View[0] = task[3 /* Start */];
-        Uint32View[1] = task[4 /* End */];
+      case PayloadSignal.Float64:
+        Uint32View[0] = task[TaskIndex.Start];
+        Uint32View[1] = task[TaskIndex.End];
         task.value = Float64View[0];
         return;
-      case 6 /* NaN */:
+      case PayloadSignal.NaN:
         task.value = NaN;
         return;
-      case 10 /* Null */:
+      case PayloadSignal.Null:
         task.value = null;
         return;
-      case 5 /* Undefined */:
+      case PayloadSignal.Undefined:
         task.value = undefined;
         return;
-      case 11 /* String */:
-        task.value = readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.String:
+        task.value = readDynamicUtf8(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         freeTaskSlot(task);
         return;
-      case 15 /* StaticString */:
-        task.value = readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticString:
+        task.value = readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex);
         return;
-      case 12 /* Json */:
-        task.value = parseJSON(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+      case PayloadBuffer.Json:
+        task.value = parseJSON(readDynamicUtf8(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]));
         freeTaskSlot(task);
         return;
-      case 16 /* StaticJson */:
-        task.value = parseJSON(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+      case PayloadBuffer.StaticJson:
+        task.value = parseJSON(readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex));
         return;
-      case 40 /* EnvelopeStaticHeader */:
-      case 42 /* EnvelopeStaticHeaderString */: {
-        const rawHeader = readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex);
-        const header = task[2 /* Type */] === 42 /* EnvelopeStaticHeaderString */ ? rawHeader : parseJSON(rawHeader);
-        const payloadLength = task[4 /* End */];
-        const payload2 = payloadLength > 0 ? readDynamicArrayBufferCopy(task[3 /* Start */], task[3 /* Start */] + payloadLength) : new ArrayBuffer(0);
+      case PayloadBuffer.EnvelopeStaticHeader:
+      case PayloadBuffer.EnvelopeStaticHeaderString: {
+        const rawHeader = readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex);
+        const header = task[TaskIndex.Type] === PayloadBuffer.EnvelopeStaticHeaderString ? rawHeader : parseJSON(rawHeader);
+        const payloadLength = task[TaskIndex.End];
+        const payload2 = payloadLength > 0 ? readDynamicArrayBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + payloadLength) : new ArrayBuffer(0);
         task.value = new Envelope(header, payload2);
         freeTaskSlot(task);
         return;
       }
-      case 41 /* EnvelopeDynamicHeader */:
-      case 43 /* EnvelopeDynamicHeaderString */: {
-        const headerStart = task[3 /* Start */];
-        const payloadStart = headerStart + task[5 /* PayloadLen */];
-        const payloadLength = task[4 /* End */];
+      case PayloadBuffer.EnvelopeDynamicHeader:
+      case PayloadBuffer.EnvelopeDynamicHeaderString: {
+        const headerStart = task[TaskIndex.Start];
+        const payloadStart = headerStart + task[TaskIndex.PayloadLen];
+        const payloadLength = task[TaskIndex.End];
         const rawHeader = readDynamicUtf8(headerStart, payloadStart);
-        const header = task[2 /* Type */] === 43 /* EnvelopeDynamicHeaderString */ ? rawHeader : parseJSON(rawHeader);
+        const header = task[TaskIndex.Type] === PayloadBuffer.EnvelopeDynamicHeaderString ? rawHeader : parseJSON(rawHeader);
         const payload2 = payloadLength > 0 ? readDynamicArrayBufferCopy(payloadStart, payloadStart + payloadLength) : new ArrayBuffer(0);
         task.value = new Envelope(header, payload2);
         freeTaskSlot(task);
         return;
       }
-      case 28 /* BigInt */:
-        task.value = decodeBigIntBinary(readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+      case PayloadBuffer.EnvelopeStaticHeaderExternal:
+      case PayloadBuffer.EnvelopeStaticHeaderStringExternal: {
+        const rawHeader = readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex);
+        const header = task[TaskIndex.Type] === PayloadBuffer.EnvelopeStaticHeaderStringExternal ? rawHeader : parseJSON(rawHeader);
+        const bodyStart = task[TaskIndex.Start];
+        const body = decodeExternalPayload(readDynamicUtf8(bodyStart, bodyStart + task[TaskIndex.End]), processBoundary);
+        task.value = new Envelope(header, body);
         freeTaskSlot(task);
         return;
-      case 29 /* StaticBigInt */:
-        task.value = decodeBigIntBinary(readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex));
-        return;
-      case 26 /* Symbol */:
-        task.value = symbolFor(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+      }
+      case PayloadBuffer.EnvelopeDynamicHeaderExternal:
+      case PayloadBuffer.EnvelopeDynamicHeaderStringExternal: {
+        const headerStart = task[TaskIndex.Start];
+        const bodyStart = headerStart + task[TaskIndex.PayloadLen];
+        const rawHeader = readDynamicUtf8(headerStart, bodyStart);
+        const header = task[TaskIndex.Type] === PayloadBuffer.EnvelopeDynamicHeaderStringExternal ? rawHeader : parseJSON(rawHeader);
+        const body = decodeExternalPayload(readDynamicUtf8(bodyStart, bodyStart + task[TaskIndex.End]), processBoundary);
+        task.value = new Envelope(header, body);
         freeTaskSlot(task);
         return;
-      case 27 /* StaticSymbol */:
-        task.value = symbolFor(readStaticUtf8(0, task[5 /* PayloadLen */], slotIndex));
+      }
+      case PayloadBuffer.BigInt:
+        task.value = decodeBigIntBinary(readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]));
+        freeTaskSlot(task);
         return;
-      case 19 /* Int32Array */: {
-        const bytes = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.StaticBigInt:
+        task.value = decodeBigIntBinary(readStaticBufferCopy(0, task[TaskIndex.PayloadLen], slotIndex));
+        return;
+      case PayloadBuffer.Symbol:
+        task.value = symbolFor(readDynamicUtf8(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]));
+        freeTaskSlot(task);
+        return;
+      case PayloadBuffer.StaticSymbol:
+        task.value = symbolFor(readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex));
+        return;
+      case PayloadBuffer.Int32Array: {
+        const bytes = readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
         freeTaskSlot(task);
         return;
       }
-      case 31 /* StaticInt32Array */: {
-        const bytes = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticInt32Array: {
+        const bytes = readStaticBufferCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         task.value = new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 2);
         return;
       }
-      case 20 /* Float64Array */: {
-        task.value = readDynamic8BytesFloatCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.Float64Array: {
+        task.value = readDynamic8BytesFloatCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         freeTaskSlot(task);
         return;
       }
-      case 32 /* StaticFloat64Array */:
-        task.value = readStatic8BytesFloatCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticFloat64Array:
+        task.value = readStatic8BytesFloatCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         return;
-      case 21 /* BigInt64Array */: {
-        const bytes = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.NumericArray: {
+        task.value = numericArrayFromFloat64(readDynamic8BytesFloatView(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]));
+        freeTaskSlot(task);
+        return;
+      }
+      case PayloadBuffer.StaticNumericArray:
+        task.value = numericArrayFromFloat64(readStatic8BytesFloatCopy(0, task[TaskIndex.PayloadLen], slotIndex));
+        return;
+      case PayloadBuffer.BigInt64Array: {
+        const bytes = readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
         freeTaskSlot(task);
         return;
       }
-      case 33 /* StaticBigInt64Array */: {
-        const bytes = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticBigInt64Array: {
+        const bytes = readStaticBufferCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         task.value = new BigInt64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
         return;
       }
-      case 22 /* BigUint64Array */: {
-        const bytes = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.BigUint64Array: {
+        const bytes = readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
         freeTaskSlot(task);
         return;
       }
-      case 34 /* StaticBigUint64Array */: {
-        const bytes = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticBigUint64Array: {
+        const bytes = readStaticBufferCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         task.value = new BigUint64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >>> 3);
         return;
       }
-      case 23 /* DataView */: {
-        const bytes = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.DataView: {
+        const bytes = readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         freeTaskSlot(task);
         return;
       }
-      case 35 /* StaticDataView */: {
-        const bytes = readStaticBufferCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticDataView: {
+        const bytes = readStaticBufferCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         task.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         return;
       }
-      case 25 /* Date */:
-        Uint32View[0] = task[3 /* Start */];
-        Uint32View[1] = task[4 /* End */];
+      case PayloadBuffer.ExternalPayload:
+        task.value = decodeExternalPayload(readDynamicUtf8(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]), processBoundary);
+        freeTaskSlot(task);
+        return;
+      case PayloadBuffer.StaticExternalPayload:
+        task.value = decodeExternalPayload(readStaticUtf8(0, task[TaskIndex.PayloadLen], slotIndex), processBoundary);
+        return;
+      case PayloadBuffer.ProcessSharedBuffer:
+        task.value = decodeProcessSharedBufferNumericWords(readStaticU32Words(processSharedBufferWords, PROCESS_SHARED_BUFFER_NUMERIC_WORDS, slotIndex));
+        return;
+      case PayloadBuffer.SharedArrayBuffer:
+        task.value = decodeSharedArrayBufferNumericWords(readStaticU32Words(sharedArrayBufferWords, task[TaskIndex.PayloadLen] >>> 2, slotIndex));
+        return;
+      case PayloadBuffer.BufferReference:
+        task.value = decodeBufferReferenceNumericWords(readStaticU32Words(bufferReferenceWords, BUFFER_REFERENCE_NUMERIC_WORDS, slotIndex));
+        return;
+      case PayloadBuffer.Date:
+        Uint32View[0] = task[TaskIndex.Start];
+        Uint32View[1] = task[TaskIndex.End];
         task.value = new Date(Float64View[0]);
         return;
-      case 24 /* Error */:
-        task.value = parseErrorPayload(readDynamicUtf8(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]));
+      case PayloadBuffer.Error:
+        task.value = parseErrorPayload(readDynamicUtf8(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]));
         freeTaskSlot(task);
         return;
-      case 17 /* Binary */:
+      case PayloadBuffer.Binary:
         {
-          const buffer = readDynamicBufferCopy(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+          const buffer = readDynamicBufferCopy(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
           task.value = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
         }
         freeTaskSlot(task);
         return;
-      case 18 /* StaticBinary */:
-        task.value = readStaticUint8ArrayCopy(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticBinary:
+        task.value = readStaticUint8ArrayCopy(0, task[TaskIndex.PayloadLen], slotIndex);
         return;
-      case 36 /* ArrayBuffer */:
-        task.value = readDynamicArrayBuffer(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.ArrayBuffer:
+        task.value = readDynamicArrayBuffer(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         freeTaskSlot(task);
         return;
-      case 37 /* StaticArrayBuffer */:
-        task.value = readStaticArrayBuffer(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticArrayBuffer:
+        task.value = readStaticArrayBuffer(0, task[TaskIndex.PayloadLen], slotIndex);
         return;
-      case 38 /* Buffer */:
-        task.value = readDynamicBuffer(task[3 /* Start */], task[3 /* Start */] + task[5 /* PayloadLen */]);
+      case PayloadBuffer.Buffer:
+        task.value = readDynamicBuffer(task[TaskIndex.Start], task[TaskIndex.Start] + task[TaskIndex.PayloadLen]);
         freeTaskSlot(task);
         return;
-      case 39 /* StaticBuffer */:
-        task.value = readStaticBuffer(0, task[5 /* PayloadLen */], slotIndex);
+      case PayloadBuffer.StaticBuffer:
+        task.value = readStaticBuffer(0, task[TaskIndex.PayloadLen], slotIndex);
         return;
     }
   };
 };
-
-// src/memory/lock.ts
-var PayloadBuffer;
-((PayloadBuffer2) => {
-  PayloadBuffer2[PayloadBuffer2["BORDER_SIGNAL_BUFFER"] = 11] = "BORDER_SIGNAL_BUFFER";
-  PayloadBuffer2[PayloadBuffer2["String"] = 11] = "String";
-  PayloadBuffer2[PayloadBuffer2["Json"] = 12] = "Json";
-  PayloadBuffer2[PayloadBuffer2["StaticString"] = 15] = "StaticString";
-  PayloadBuffer2[PayloadBuffer2["StaticJson"] = 16] = "StaticJson";
-  PayloadBuffer2[PayloadBuffer2["Binary"] = 17] = "Binary";
-  PayloadBuffer2[PayloadBuffer2["StaticBinary"] = 18] = "StaticBinary";
-  PayloadBuffer2[PayloadBuffer2["Int32Array"] = 19] = "Int32Array";
-  PayloadBuffer2[PayloadBuffer2["Float64Array"] = 20] = "Float64Array";
-  PayloadBuffer2[PayloadBuffer2["BigInt64Array"] = 21] = "BigInt64Array";
-  PayloadBuffer2[PayloadBuffer2["BigUint64Array"] = 22] = "BigUint64Array";
-  PayloadBuffer2[PayloadBuffer2["DataView"] = 23] = "DataView";
-  PayloadBuffer2[PayloadBuffer2["Error"] = 24] = "Error";
-  PayloadBuffer2[PayloadBuffer2["Date"] = 25] = "Date";
-  PayloadBuffer2[PayloadBuffer2["Symbol"] = 26] = "Symbol";
-  PayloadBuffer2[PayloadBuffer2["StaticSymbol"] = 27] = "StaticSymbol";
-  PayloadBuffer2[PayloadBuffer2["BigInt"] = 28] = "BigInt";
-  PayloadBuffer2[PayloadBuffer2["StaticBigInt"] = 29] = "StaticBigInt";
-  PayloadBuffer2[PayloadBuffer2["StaticInt32Array"] = 31] = "StaticInt32Array";
-  PayloadBuffer2[PayloadBuffer2["StaticFloat64Array"] = 32] = "StaticFloat64Array";
-  PayloadBuffer2[PayloadBuffer2["StaticBigInt64Array"] = 33] = "StaticBigInt64Array";
-  PayloadBuffer2[PayloadBuffer2["StaticBigUint64Array"] = 34] = "StaticBigUint64Array";
-  PayloadBuffer2[PayloadBuffer2["StaticDataView"] = 35] = "StaticDataView";
-  PayloadBuffer2[PayloadBuffer2["ArrayBuffer"] = 36] = "ArrayBuffer";
-  PayloadBuffer2[PayloadBuffer2["StaticArrayBuffer"] = 37] = "StaticArrayBuffer";
-  PayloadBuffer2[PayloadBuffer2["Buffer"] = 38] = "Buffer";
-  PayloadBuffer2[PayloadBuffer2["StaticBuffer"] = 39] = "StaticBuffer";
-  PayloadBuffer2[PayloadBuffer2["EnvelopeStaticHeader"] = 40] = "EnvelopeStaticHeader";
-  PayloadBuffer2[PayloadBuffer2["EnvelopeDynamicHeader"] = 41] = "EnvelopeDynamicHeader";
-  PayloadBuffer2[PayloadBuffer2["EnvelopeStaticHeaderString"] = 42] = "EnvelopeStaticHeaderString";
-  PayloadBuffer2[PayloadBuffer2["EnvelopeDynamicHeaderString"] = 43] = "EnvelopeDynamicHeaderString";
-})(PayloadBuffer ||= {});
-var LOCK_CACHE_LINE_BYTES = 64;
-var LOCK_SECTOR_BYTES = 256;
-var PromisePayloadMarker = Symbol.for("knitting.promise.payload");
-var pendingPromisePayloads = new WeakSet;
-var beginPromisePayload = (task) => {
-  if (pendingPromisePayloads.has(task))
-    return false;
-  pendingPromisePayloads.add(task);
-  return true;
-};
-var finishPromisePayload = (task) => {
-  pendingPromisePayloads.delete(task);
-};
-var isPromisePayloadPending = (task) => pendingPromisePayloads.has(task);
-var TASK_SLOT_INDEX_BITS = 5;
-var TASK_SLOT_INDEX_MASK = (1 << TASK_SLOT_INDEX_BITS) - 1;
-var TASK_SLOT_META_BITS = 32 - TASK_SLOT_INDEX_BITS;
-var TASK_SLOT_META_VALUE_MASK = 4294967295 >>> TASK_SLOT_INDEX_BITS;
-var TASK_SLOT_META_PACKED_MASK = ~TASK_SLOT_INDEX_MASK >>> 0;
-var TASK_FUNCTION_ID_BITS = 16;
-var TASK_FUNCTION_ID_MASK = (1 << TASK_FUNCTION_ID_BITS) - 1;
-var TASK_FUNCTION_META_BITS = 32 - TASK_FUNCTION_ID_BITS;
-var TASK_FUNCTION_META_VALUE_MASK = 4294967295 >>> TASK_FUNCTION_ID_BITS;
-var TASK_FUNCTION_META_PACKED_MASK = ~TASK_FUNCTION_ID_MASK >>> 0;
-var getTaskFunctionMeta = (task) => task[0 /* FunctionID */] >>> TASK_FUNCTION_ID_BITS & TASK_FUNCTION_META_VALUE_MASK;
-var getTaskSlotIndex = (task) => task[6 /* slotBuffer */] & TASK_SLOT_INDEX_MASK;
-var getTaskSlotMeta = (task) => task[6 /* slotBuffer */] >>> TASK_SLOT_INDEX_BITS & TASK_SLOT_META_VALUE_MASK;
-var LOCK_WORD_BYTES = Int32Array.BYTES_PER_ELEMENT;
-var LOCK_HOST_BITS_OFFSET_BYTES = 0 /* paddingLock */;
-var LOCK_WORKER_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES;
-var LOCK_SECTOR_BYTE_LENGTH = LOCK_SECTOR_BYTES;
-var PAYLOAD_LOCK_HOST_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 2;
-var PAYLOAD_LOCK_WORKER_BITS_OFFSET_BYTES = LOCK_CACHE_LINE_BYTES * 3;
-var HEADER_SLOT_STRIDE_U32 = 0 /* header */ + 144 /* TotalBuff */;
-var HEADER_SLOT_STRIDE_BYTES = HEADER_SLOT_STRIDE_U32 * Uint32Array.BYTES_PER_ELEMENT;
-var HEADER_TASK_LINE_U32 = LOCK_CACHE_LINE_BYTES / Uint32Array.BYTES_PER_ELEMENT;
-var HEADER_STATIC_PAYLOAD_U32 = 144 /* TotalBuff */ - HEADER_TASK_LINE_U32;
-var HEADER_TASK_OFFSET_IN_SLOT_U32 = HEADER_STATIC_PAYLOAD_U32;
-var HEADER_U32_LENGTH = 0 /* header */ + HEADER_SLOT_STRIDE_U32 * 32 /* slots */;
-var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
-var INDEX_ID = 0;
-var def = (_) => {};
-var createTaskShell = () => {
-  const task = new Uint32Array(8 /* Size */);
-  task.value = null;
-  task.resolve = def;
-  task.reject = def;
-  return task;
-};
-var makeTask = () => {
-  const task = createTaskShell();
-  task[1 /* ID */] = INDEX_ID++;
-  return task;
-};
-var fillTaskFrom = (task, array, at) => {
-  task[0] = array[at];
-  task[1] = array[at + 1];
-  task[2] = array[at + 2];
-  task[3] = array[at + 3];
-  task[4] = array[at + 4];
-  task[5] = array[at + 5];
-  task[6] = array[at + 6];
-};
-var makeTaskFrom = (array, at) => {
-  const task = createTaskShell();
-  fillTaskFrom(task, array, at);
-  return task;
-};
-var settleTask = (task) => {
-  if (task[0 /* FlagsToHost */] === 0) {
-    task.resolve(task.value);
-  } else {
-    task.reject(task.value);
-    task[0 /* FlagsToHost */] = 0;
-  }
-};
-var lock2 = ({
-  headers,
-  headerSlotStrideU32,
-  LockBoundSector,
-  payload,
-  payloadConfig,
-  payloadSector,
-  textCompat,
-  resultList,
-  toSentList,
-  recycleList
-}) => {
-  const lockSectorRegion = toSharedBufferRegion(LockBoundSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
-  const LockBoundSAB = lockSectorRegion.sab;
-  const hostBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_HOST_BITS_OFFSET_BYTES, 1);
-  const workerBits = new Int32Array(LockBoundSAB, lockSectorRegion.byteOffset + LOCK_WORKER_BITS_OFFSET_BYTES, 1);
-  const headersRegion = toSharedBufferRegion(headers ?? createWasmSharedArrayBuffer(HEADER_BYTE_LENGTH));
-  const headersBuffer = new Uint32Array(headersRegion.sab, headersRegion.byteOffset, headersRegion.byteLength >>> 2);
-  const headersSlotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
-  const resolvedPayloadConfig = resolvePayloadBufferOptions({
-    sab: payload,
-    options: payloadConfig
-  });
-  const payloadSAB = payload ?? (resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes));
-  const payloadLockRegion = toSharedBufferRegion(payloadSector ?? lockSectorRegion);
-  const resolvedTextCompat = textCompat ?? probeLockBufferTextCompat({
-    headers: headersRegion,
-    payload: payloadSAB
-  });
-  let promiseHandler;
-  let trackedDeferredTasks = new WeakSet;
-  const encodeTask = encodePayload({
-    payload: {
-      sab: payloadSAB,
-      config: resolvedPayloadConfig
-    },
-    headersBuffer,
-    headerSlotStrideU32: headersSlotStride,
-    lockSector: payloadLockRegion,
-    textCompat: resolvedTextCompat,
-    onPromise: (task, isRejected, value) => {
-      if (trackedDeferredTasks.delete(task) && pendingPromiseCount > 0) {
-        pendingPromiseCount = pendingPromiseCount - 1 | 0;
-      }
-      promiseHandler(task, isRejected, value);
-    }
-  });
-  const decodeTask = decodePayload({
-    payload: {
-      sab: payloadSAB,
-      config: resolvedPayloadConfig
-    },
-    headersBuffer,
-    headerSlotStrideU32: headersSlotStride,
-    lockSector: payloadLockRegion,
-    textCompat: resolvedTextCompat
-  });
-  let LastLocal = 0 | 0;
-  let LastWorker = 0 | 0;
-  let lastTake = 32 | 0;
-  const toBeSent = toSentList ?? new RingQueue;
-  const recyclecList = recycleList ?? new RingQueue;
-  const resolved = resultList ?? new RingQueue;
-  let deferredCount = 0 | 0;
-  let pendingPromiseCount = 0 | 0;
-  const a_load = Atomics.load;
-  const a_store = Atomics.store;
-  const toBeSentPush = (task) => toBeSent.push(task);
-  const toBeSentShift = () => toBeSent.shiftNoClear();
-  const toBeSentUnshift = (task) => toBeSent.unshift(task);
-  const recycleShift = () => recyclecList.shiftNoClear();
-  const resolvedPush = (task) => resolved.push(task);
-  const clz32 = Math.clz32;
-  const slotOffset = (at) => getStridedSlotOffsetU32({
-    slotIndex: at,
-    slotStrideU32: headersSlotStride,
-    baseU32: 0 /* header */,
-    extraU32: HEADER_TASK_OFFSET_IN_SLOT_U32
-  });
-  const takeTask = ({ queue }) => (at) => {
-    const off = slotOffset(at);
-    const task = queue[headersBuffer[off + 1 /* ID */]];
-    fillTaskFrom(task, headersBuffer, off);
-    return task;
-  };
-  const enlist = (task) => toBeSentPush(task);
-  const trackDeferredTask = (task) => {
-    if (trackedDeferredTasks.has(task))
-      return;
-    trackedDeferredTasks.add(task);
-    pendingPromiseCount = pendingPromiseCount + 1 | 0;
-  };
-  let selectedSlotIndex = 0 | 0, selectedSlotBit = 0 >>> 0;
-  const encodeWithState = (task, state) => {
-    const free = ~state;
-    if (free === 0)
-      return 0;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free)))
-      return 0;
-    encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
-    return selectedSlotBit;
-  };
-  const encodeManyFrom = (list, trackDeferreds = false) => {
-    let state = LastLocal ^ a_load(workerBits, 0) | 0;
-    let encoded = 0 | 0;
-    deferredCount = 0 | 0;
-    if (list === toBeSent) {
-      while (true) {
-        const task = toBeSentShift();
-        if (!task)
-          break;
-        const bit = encodeWithState(task, state) | 0;
-        if (bit === 0) {
-          if (isPromisePayloadPending(task)) {
-            deferredCount = deferredCount + 1 | 0;
-            if (trackDeferreds)
-              trackDeferredTask(task);
-            continue;
-          }
-          toBeSentUnshift(task);
-          break;
-        }
-        state = state ^ bit | 0;
-        encoded = encoded + 1 | 0;
-      }
-    } else {
-      while (true) {
-        const task = list.shiftNoClear();
-        if (!task)
-          break;
-        const bit = encodeWithState(task, state) | 0;
-        if (bit === 0) {
-          if (isPromisePayloadPending(task)) {
-            deferredCount = deferredCount + 1 | 0;
-            if (trackDeferreds)
-              trackDeferredTask(task);
-            continue;
-          }
-          list.unshift(task);
-          break;
-        }
-        state = state ^ bit | 0;
-        encoded = encoded + 1 | 0;
-      }
-    }
-    return encoded;
-  };
-  const encodeAll = () => {
-    if (toBeSent.isEmpty)
-      return true;
-    encodeManyFrom(toBeSent, true);
-    deferredCount = 0 | 0;
-    return toBeSent.isEmpty;
-  };
-  const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
-  const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
-  const encode = (task, state = LastLocal ^ a_load(workerBits, 0) | 0, trackDeferreds = false) => {
-    deferredCount = 0 | 0;
-    const free = ~state;
-    if (free === 0)
-      return false;
-    if (!encodeTask(task, selectedSlotIndex = 31 - clz32(free))) {
-      if (isPromisePayloadPending(task)) {
-        deferredCount = 1;
-        if (trackDeferreds)
-          trackDeferredTask(task);
-      }
-      return false;
-    }
-    return encodeAt(task, selectedSlotIndex, selectedSlotBit = 1 << selectedSlotIndex);
-  };
-  const encodeAt = (task, at, bit) => {
-    const off = slotOffset(at);
-    headersBuffer[off] = task[0];
-    headersBuffer[off + 1] = task[1];
-    headersBuffer[off + 2] = task[2];
-    headersBuffer[off + 3] = task[3];
-    headersBuffer[off + 4] = task[4];
-    headersBuffer[off + 5] = task[5];
-    headersBuffer[off + 6] = task[6];
-    headersBuffer[off + 7] = task[7];
-    storeHost(bit);
-    return true;
-  };
-  const hasSpace = () => (hostBits[0] ^ LastWorker) !== 0;
-  const decode = () => {
-    let diff = a_load(hostBits, 0) ^ LastWorker | 0;
-    if (diff === 0)
-      return false;
-    let last = lastTake;
-    let consumedBits = 0 | 0;
-    try {
-      if (last === 32) {
-        decodeAt(selectedSlotIndex = 31 - clz32(diff));
-        selectedSlotBit = 1 << (last = selectedSlotIndex);
-        diff ^= selectedSlotBit;
-        consumedBits = consumedBits ^ selectedSlotBit | 0;
-      }
-      while (diff !== 0) {
-        let pick = diff & (1 << last) - 1;
-        if (pick === 0)
-          pick = diff;
-        decodeAt(selectedSlotIndex = 31 - clz32(pick));
-        selectedSlotBit = 1 << (last = selectedSlotIndex);
-        diff ^= selectedSlotBit;
-        consumedBits = consumedBits ^ selectedSlotBit | 0;
-      }
-    } finally {
-      if (consumedBits !== 0)
-        storeWorker(consumedBits);
-    }
-    lastTake = last;
-    return true;
-  };
-  const resolveHost = ({
-    queue,
-    onResolved,
-    shouldSettle
-  }) => {
-    const getTask = takeTask({ queue });
-    const HAS_RESOLVE = onResolved ? true : false;
-    const HAS_SHOULD_SETTLE = shouldSettle ? true : false;
-    let lastResolved = 32;
-    return () => {
-      let diff = a_load(hostBits, 0) ^ LastWorker | 0;
-      if (diff === 0)
-        return 0;
-      let modified = 0;
-      let consumedBits = 0 | 0;
-      let last = lastResolved;
-      if (last === 32) {
-        const idx = 31 - clz32(diff);
-        const selectedBit = 1 << idx;
-        const task = getTask(idx);
-        decodeTask(task, idx);
-        consumedBits = consumedBits ^ selectedBit | 0;
-        const CAN_SETTLE = !HAS_SHOULD_SETTLE || shouldSettle(task);
-        if (CAN_SETTLE) {
-          settleTask(task);
-        }
-        if (CAN_SETTLE && HAS_RESOLVE) {
-          onResolved(task);
-        }
-        diff ^= selectedBit;
-        modified++;
-        if ((modified & 7) === 0 && consumedBits !== 0) {
-          LastWorker = LastWorker ^ consumedBits | 0;
-          a_store(workerBits, 0, LastWorker);
-          consumedBits = 0 | 0;
-        }
-        last = idx;
-      }
-      while (diff !== 0) {
-        const lowerMask = last === 31 ? 2147483647 : (1 << last) - 1;
-        let pick = diff & lowerMask;
-        if (pick === 0)
-          pick = diff;
-        const idx = 31 - clz32(pick);
-        const selectedBit = 1 << idx;
-        const task = getTask(idx);
-        decodeTask(task, idx);
-        consumedBits = consumedBits ^ selectedBit | 0;
-        const CAN_SETTLE = !HAS_SHOULD_SETTLE || shouldSettle(task);
-        if (CAN_SETTLE) {
-          settleTask(task);
-        }
-        if (CAN_SETTLE && HAS_RESOLVE) {
-          onResolved(task);
-        }
-        diff ^= selectedBit;
-        modified++;
-        if ((modified & 7) === 0 && consumedBits !== 0) {
-          LastWorker = LastWorker ^ consumedBits | 0;
-          a_store(workerBits, 0, LastWorker);
-          consumedBits = 0 | 0;
-        }
-        last = idx;
-      }
-      if (consumedBits !== 0) {
-        LastWorker = LastWorker ^ consumedBits | 0;
-        a_store(workerBits, 0, LastWorker);
-      }
-      lastResolved = last;
-      return modified;
-    };
-  };
-  const decodeAt = (at) => {
-    const off = slotOffset(at);
-    const recycled = recycleShift();
-    let task;
-    if (recycled) {
-      fillTaskFrom(recycled, headersBuffer, off);
-      recycled.value = null;
-      recycled.resolve = def;
-      recycled.reject = def;
-      task = recycled;
-    } else {
-      task = makeTaskFrom(headersBuffer, off);
-    }
-    decodeTask(task, at);
-    resolvedPush(task);
-    return true;
-  };
-  const publish = (task) => {
-    if (encode(task, undefined, true))
-      return true;
-    if ((deferredCount | 0) !== 0) {
-      deferredCount = 0 | 0;
-      return false;
-    }
-    toBeSentPush(task);
-    return false;
-  };
-  const flushPending = () => {
-    if (toBeSent.isEmpty)
-      return false;
-    const encoded = encodeManyFrom(toBeSent, true) | 0;
-    deferredCount = 0 | 0;
-    return encoded !== 0;
-  };
-  const resetPendingState = () => {
-    toBeSent.clear();
-    deferredCount = 0 | 0;
-    pendingPromiseCount = 0 | 0;
-    trackedDeferredTasks = new WeakSet;
-  };
-  return {
-    enlist,
-    encode,
-    encodeManyFrom,
-    encodeAll,
-    publish,
-    flushPending,
-    decode,
-    hasSpace,
-    resolved,
-    hostBits,
-    workerBits,
-    recyclecList,
-    resolveHost,
-    hasPendingFrames: () => toBeSent.size !== 0,
-    getPendingFrameCount: () => toBeSent.size | 0,
-    getPendingPromiseCount: () => pendingPromiseCount | 0,
-    resetPendingState,
-    takeDeferredCount: () => {
-      const count = deferredCount | 0;
-      deferredCount = 0 | 0;
-      return count;
-    },
-    setPromiseHandler: (handler) => {
-      promiseHandler = handler;
-    }
-  };
-};
-
-// src/worker/composable-runners.ts
-var ABORT_SIGNAL_META_OFFSET = 1;
-var TIMEOUT_KIND_RESOLVE = 1;
-var p_now = performance.now.bind(performance);
-var raceTimeout = (promise, ms, resolveOnTimeout, timeoutValue) => new Promise((resolve, reject) => {
-  let done = false;
-  const timer = setTimeout(() => {
-    if (done)
-      return;
-    done = true;
-    if (resolveOnTimeout)
-      resolve(timeoutValue);
-    else
-      reject(timeoutValue);
-  }, ms);
-  promise.then((value) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    resolve(value);
-  }, (err) => {
-    if (done)
-      return;
-    done = true;
-    clearTimeout(timer);
-    reject(err);
-  });
-});
-var nowStamp = (now) => (Math.floor(now()) & TASK_SLOT_META_VALUE_MASK) >>> 0;
-var applyTimeoutBudget = (promise, slot, spec, now) => {
-  const elapsed = nowStamp(now) - getTaskSlotMeta(slot) & TASK_SLOT_META_VALUE_MASK;
-  const remaining = spec.ms - elapsed;
-  if (!(remaining > 0)) {
-    promise.then(() => {}, () => {});
-    return spec.kind === TIMEOUT_KIND_RESOLVE ? Promise.resolve(spec.value) : Promise.reject(spec.value);
-  }
-  const timeoutMs = Math.max(1, Math.floor(remaining));
-  return raceTimeout(promise, timeoutMs, spec.kind === TIMEOUT_KIND_RESOLVE, spec.value);
-};
-var NO_ABORT_SIGNAL = -1;
-var readSignal = (slot) => {
-  const encodedSignal = getTaskFunctionMeta(slot);
-  if (encodedSignal === 0)
-    return NO_ABORT_SIGNAL;
-  const signal = encodedSignal - ABORT_SIGNAL_META_OFFSET | 0;
-  return signal >= 0 ? signal : NO_ABORT_SIGNAL;
-};
-var throwIfAborted = (signal, hasAborted) => {
-  if (signal === NO_ABORT_SIGNAL)
-    return;
-  if (hasAborted(signal))
-    throw new Error("Task aborted");
-};
-var makeToolkitCache = (hasAborted) => {
-  const bySignal = [];
-  return (signal) => {
-    let toolkit = bySignal[signal];
-    if (toolkit)
-      return toolkit;
-    const hasAbortedMethod = () => hasAborted(signal);
-    toolkit = {
-      hasAborted: hasAbortedMethod
-    };
-    bySignal[signal] = toolkit;
-    return toolkit;
-  };
-};
-var composeWorkerRunner = ({
-  job,
-  timeout,
-  hasAborted,
-  now
-}) => {
-  const nowTime = now ?? p_now;
-  if (!hasAborted) {
-    if (!timeout) {
-      return (slot) => job(slot.value);
-    }
-    return (slot) => {
-      const result = job(slot.value);
-      if (!(result instanceof Promise))
-        return result;
-      return applyTimeoutBudget(result, slot, timeout, nowTime);
-    };
-  }
-  const getToolkit = makeToolkitCache(hasAborted);
-  if (!timeout) {
-    return (slot) => {
-      const signal = readSignal(slot);
-      throwIfAborted(signal, hasAborted);
-      if (signal === NO_ABORT_SIGNAL)
-        return job(slot.value);
-      return job(slot.value, getToolkit(signal));
-    };
-  }
-  return (slot) => {
-    const signal = readSignal(slot);
-    throwIfAborted(signal, hasAborted);
-    const result = signal === NO_ABORT_SIGNAL ? job(slot.value) : job(slot.value, getToolkit(signal));
-    if (!(result instanceof Promise))
-      return result;
-    return applyTimeoutBudget(result, slot, timeout, nowTime);
-  };
-};
-
-// src/worker/rx-queue.ts
-var createWorkerRxQueue = ({
-  listOfFunctions,
-  workerOptions,
-  lock,
-  returnLock,
-  hasAborted,
-  now
-}) => {
-  const PLACE_HOLDER = (_) => {
-    throw "UNREACHABLE FROM PLACE HOLDER (thread)";
-  };
-  let hasAnythingFinished = 0;
-  let awaiting = 0;
-  const jobs = listOfFunctions.reduce((acc, fixed) => (acc.push(fixed.run), acc), []);
-  const toWork = new RingQueue;
-  const pendingFrames = new RingQueue;
-  const toWorkPush = (slot) => toWork.push(slot);
-  const toWorkShift = () => toWork.shiftNoClear();
-  const pendingShift = () => pendingFrames.shiftNoClear();
-  const pendingUnshift = (slot) => pendingFrames.unshift(slot);
-  const pendingPush = (slot) => pendingFrames.push(slot);
-  const recyclePush = (slot) => lock.recyclecList.push(slot);
-  const FUNCTION_ID_MASK = 65535;
-  const IDX_FLAGS = 0 /* FlagsToHost */;
-  const FLAG_REJECT = 1 /* Reject */;
-  const runByIndex = listOfFunctions.reduce((acc, fixed, idx) => {
-    const job = jobs[idx];
-    acc.push(composeWorkerRunner({
-      job,
-      timeout: fixed.timeout,
-      hasAborted,
-      now
-    }));
-    return acc;
-  }, []);
-  const hasCompleted = workerOptions?.resolveAfterFinishingAll === true ? () => hasAnythingFinished !== 0 && toWork.size === 0 : () => hasAnythingFinished !== 0;
-  const { decode, resolved } = lock;
-  const resolvedShift = resolved.shiftNoClear.bind(resolved);
-  const enqueueLock = () => {
-    if (!decode())
-      return false;
-    let task = resolvedShift();
-    while (task) {
-      task.resolve = PLACE_HOLDER;
-      task.reject = PLACE_HOLDER;
-      toWorkPush(task);
-      task = resolvedShift();
-    }
-    return true;
-  };
-  const encodeReturnSafe = (slot) => {
-    if (!returnLock.encode(slot))
-      return false;
-    return true;
-  };
-  const sendReturn = (slot, shouldReject) => {
-    slot[IDX_FLAGS] = shouldReject ? FLAG_REJECT : 0;
-    if (!encodeReturnSafe(slot))
-      return false;
-    hasAnythingFinished--;
-    recyclePush(slot);
-    return true;
-  };
-  const settleNow = (slot, isError, value, wasAwaited) => {
-    slot.value = value;
-    hasAnythingFinished++;
-    if (wasAwaited && awaiting > 0)
-      awaiting--;
-    const shouldReject = isError || slot[IDX_FLAGS] === FLAG_REJECT;
-    if (!sendReturn(slot, shouldReject))
-      pendingPush(slot);
-  };
-  const writeOne = () => {
-    const slot = pendingShift();
-    if (!slot)
-      return false;
-    if (!sendReturn(slot, slot[IDX_FLAGS] === FLAG_REJECT)) {
-      pendingUnshift(slot);
-      return false;
-    }
-    return true;
-  };
-  return {
-    hasCompleted,
-    hasPending: () => toWork.size !== 0,
-    writeBatch: (max) => {
-      let wrote = 0;
-      while (wrote < max) {
-        if (!writeOne())
-          break;
-        wrote++;
-      }
-      return wrote;
-    },
-    serviceBatchImmediate: () => {
-      let processed = 0;
-      while (processed < 5 && toWork.size !== 0) {
-        const slot = toWorkShift();
-        try {
-          const fnIndex = slot[0 /* FunctionID */] & FUNCTION_ID_MASK;
-          const result = runByIndex[fnIndex](slot);
-          slot[IDX_FLAGS] = 0;
-          slot.value = null;
-          if (result instanceof Promise) {
-            awaiting++;
-            result.then((value) => settleNow(slot, false, value, true), (err) => settleNow(slot, true, err, true));
-          } else {
-            settleNow(slot, false, result, false);
-          }
-        } catch (err) {
-          settleNow(slot, true, err, false);
-        }
-        ++processed;
-      }
-      return processed;
-    },
-    enqueueLock,
-    hasAwaiting: () => awaiting > 0,
-    getAwaiting: () => awaiting
-  };
-};
-
-// src/ipc/transport/shared-memory.ts
-var page2 = 1024 * 4;
-var CACHE_LINE_BYTES = 64;
-var SIGNAL_OFFSETS = {
-  op: 0,
-  rxStatus: CACHE_LINE_BYTES,
-  txStatus: CACHE_LINE_BYTES * 2
-};
-var TRANSPORT_SIGNAL_BYTES = CACHE_LINE_BYTES * 3;
-var a_store = Atomics.store;
-var createSharedMemoryTransport = ({ sabObject, isMain, startTime }) => {
-  const toGrow = sabObject?.size ?? page2;
-  const roundedSize = toGrow + (page2 - toGrow % page2) % page2;
-  const signalRegion = toSharedBufferRegion(sabObject?.sharedSab ? sabObject.sharedSab : createSharedArrayBuffer(roundedSize, page2 * page2));
-  const sab = signalRegion.sab;
-  const baseByteOffset = signalRegion.byteOffset;
-  const startAt = startTime ?? performance.now();
-  const opView = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.op, 1);
-  if (isMain)
-    a_store(opView, 0, 0);
-  const rxStatus = new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.rxStatus, 1);
-  a_store(rxStatus, 0, 1);
-  return {
-    sab: signalRegion,
-    op: opView,
-    startAt,
-    opView,
-    rxStatus,
-    txStatus: new Int32Array(sab, baseByteOffset + SIGNAL_OFFSETS.txStatus, 1)
-  };
-};
+registerLockPayloadCodec(encodePayload, decodePayload);
 
 // src/common/task-symbol.ts
 var endpointSymbol = Symbol.for("task");
 
 // src/common/module-url.ts
-var WINDOWS_DRIVE_PATH2 = /^[A-Za-z]:[\\/]/;
-var WINDOWS_UNC_PATH2 = /^\\\\[^\\/?]+\\[^\\/?]+/;
-var encodeFilePath2 = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+var WINDOWS_UNC_PATH = /^\\\\[^\\/?]+\\[^\\/?]+/;
+var encodeFilePath = (path) => encodeURI(path).replace(/\?/g, "%3F").replace(/#/g, "%23");
+var nodePathToFileURL = () => getNodeBuiltinModule("node:url")?.pathToFileURL;
+var pathToFileUrlFallback = (specifier) => {
+  const absolute = specifier.startsWith("/") ? specifier : `/${specifier}`;
+  return `file://${encodeFilePath(absolute)}`;
+};
 var toModuleUrl = (specifier) => {
-  if (WINDOWS_DRIVE_PATH2.test(specifier)) {
+  if (WINDOWS_DRIVE_PATH.test(specifier)) {
     const normalized = specifier.replace(/\\/g, "/");
-    return `file:///${encodeFilePath2(normalized)}`;
+    return `file:///${encodeFilePath(normalized)}`;
   }
-  if (WINDOWS_UNC_PATH2.test(specifier)) {
+  if (WINDOWS_UNC_PATH.test(specifier)) {
     const normalized = specifier.replace(/^\\\\+/, "").replace(/\\/g, "/");
-    return `file://${encodeFilePath2(normalized)}`;
+    return `file://${encodeFilePath(normalized)}`;
   }
   try {
     return new URL(specifier).href;
   } catch {
-    return pathToFileURLCompat(specifier).href;
+    const pathToFileURL = nodePathToFileURL();
+    return pathToFileURL ? pathToFileURL(specifier).href : pathToFileUrlFallback(specifier);
+  }
+};
+var toImportSpecifier = (moduleUrl) => {
+  if (!IS_ANDROMEDA || !moduleUrl.startsWith("file://"))
+    return moduleUrl;
+  const withoutScheme = moduleUrl.slice("file://".length);
+  const path = withoutScheme.startsWith("/") ? withoutScheme : `/${withoutScheme}`;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
   }
 };
 
-// src/worker/get-functions.ts
+// src/worker/task-loader.ts
+var TimeoutKind = {
+  Reject: 0,
+  Resolve: 1
+};
 var normalizeTimeout = (timeout) => {
   if (timeout == null)
     return;
   if (typeof timeout === "number") {
     const ms2 = Math.floor(timeout);
-    return ms2 >= 0 ? { ms: ms2, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return ms2 >= 0 ? { ms: ms2, kind: TimeoutKind.Reject, value: new Error("Task timeout") } : undefined;
   }
   const ms = Math.floor(timeout.time);
   if (!(ms >= 0))
     return;
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: TimeoutKind.Resolve, value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: TimeoutKind.Resolve, value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: TimeoutKind.Reject, value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: TimeoutKind.Reject, value: new Error("Task timeout") };
 };
 var composeWorkerCallable = (fixed, _permission) => {
   return fixed.f;
 };
-var getFunctions = async ({ list, ids, at, permission }) => {
+var getFunctions = async ({ list, ids, names, at, permission }) => {
   const modules = list.map((specifier) => toModuleUrl(specifier));
+  const nameSet = new Set(names);
   const results = await Promise.all(modules.map(async (imports) => {
-    const module = await import(imports);
-    return Object.entries(module).filter(([_, value]) => value != null && typeof value === "object" && value?.[endpointSymbol] === true).map(([name, value]) => ({
+    const module = await import(toImportSpecifier(imports));
+    const fixedTasks = Object.entries(module).filter(([_, value]) => value != null && typeof value === "object" && value?.[endpointSymbol] === true).map(([name, value]) => ({
       ...value,
       name
     }));
+    const functionTasks = Object.entries(module).filter(([name, value]) => nameSet.has(name) && typeof value === "function").map(([name, value]) => ({
+      f: value,
+      id: -1,
+      importedFrom: imports,
+      at: -1,
+      name,
+      [endpointSymbol]: true
+    }));
+    return [...fixedTasks, ...functionTasks];
   }));
   const flattened = results.flat();
   const useAtFilter = modules.length === 1 && at.length > 0;
@@ -3146,9 +4164,12 @@ var getFunctions = async ({ list, ids, at, permission }) => {
 };
 
 // src/worker/timers.ts
+var Comment = {
+  thisIsAHint: 0
+};
 var maybeGc = (() => {
   const host = globalThis;
-  const gc = typeof host.gc === "function" ? host.gc.bind(globalThis) : undefined;
+  const gc = typeof host.gc === "function" ? () => host.gc() : undefined;
   if (gc) {
     try {
       delete host.gc;
@@ -3170,7 +4191,12 @@ var a_load = Atomics.load;
 var a_store2 = Atomics.store;
 var a_wait = typeof Atomics.wait === "function" ? Atomics.wait : undefined;
 var p_now2 = performance.now.bind(performance);
+var waitFallbackView = a_wait === undefined || typeof SharedArrayBuffer !== "function" ? undefined : new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 var a_pause = "pause" in Atomics ? Atomics.pause : undefined;
+var runtimeGlobals = globalThis;
+var isPlainNodeWindows = runtimeGlobals.process?.platform === "win32" && typeof runtimeGlobals.process?.versions?.node === "string" && runtimeGlobals.process?.versions?.bun === undefined && runtimeGlobals.Deno === undefined;
+var nativeWaitTimeoutMs = (parkMs) => isPlainNodeWindows ? 1 : Number.isFinite(parkMs) ? parkMs : Infinity;
+var pollingWaitTimeoutMs = (parkMs) => Number.isFinite(parkMs) ? Math.min(Math.max(parkMs, 0), 1) : 1;
 var whilePausing = ({ pauseInNanoseconds }) => {
   const forNanoseconds = pauseInNanoseconds ?? DEFAULT_PAUSE_TIME;
   if (!a_pause || forNanoseconds <= 0)
@@ -3185,9 +4211,11 @@ var sleepUntilChanged = ({
   rxStatus,
   txStatus,
   enqueueLock,
-  write
+  write,
+  nativeWaitU32,
+  useSharedMemoryWait = true
 }) => {
-  const pause = pauseInNanoseconds !== undefined ? whilePausing({ pauseInNanoseconds }) : pauseGeneric;
+  const pause = pauseInNanoseconds === undefined ? pauseGeneric : whilePausing({ pauseInNanoseconds });
   const tryProgress = () => {
     let progressed = false;
     if (enqueueLock())
@@ -3208,7 +4236,7 @@ var sleepUntilChanged = ({
     maybeGc();
     let spinChecks = 0;
     while (true) {
-      if (a_load(opView, at) !== value || txStatus[0 /* thisIsAHint */] === 1)
+      if (a_load(opView, at) !== value || txStatus[Comment.thisIsAHint] === 1)
         return;
       if (tryProgress())
         return;
@@ -3219,7 +4247,13 @@ var sleepUntilChanged = ({
     if (tryProgress())
       return;
     a_store2(rxStatus, 0, 0);
-    a_wait(opView, at, value, parkMs ?? 60);
+    if (nativeWaitU32 !== undefined) {
+      nativeWaitU32(opView.buffer, opView.byteOffset + at * Int32Array.BYTES_PER_ELEMENT, value >>> 0, nativeWaitTimeoutMs(parkMs));
+    } else if (useSharedMemoryWait && a_wait && opView.buffer instanceof SharedArrayBuffer) {
+      a_wait(opView, at, value, parkMs ?? Infinity);
+    } else if (a_wait && waitFallbackView) {
+      a_wait(waitFallbackView, 0, 0, pollingWaitTimeoutMs(parkMs));
+    }
     a_store2(rxStatus, 0, 1);
   };
 };
@@ -3231,9 +4265,9 @@ var failProcessGuardInstall = (target, reason, cause) => {
   throw new Error(`KNT_ERROR_PROCESS_GUARD_INSTALL: ${target} ${reason}${suffix}`);
 };
 var installTerminationGuard = () => {
-  if (typeof process === "undefined")
+  const proc = getNodeProcess();
+  if (!proc)
     return;
-  const proc = process;
   if (proc.__knittingTerminationGuard === true)
     return;
   const blocked = (name) => {
@@ -3289,14 +4323,14 @@ var installTerminationGuard = () => {
   proc.__knittingTerminationGuard = true;
 };
 var installUnhandledRejectionSilencer = () => {
-  if (typeof process === "undefined" || typeof process.on !== "function") {
+  const proc = getNodeProcess();
+  if (!proc || typeof proc.on !== "function") {
     return;
   }
-  const proc = process;
   if (proc.__knittingUnhandledRejectionSilencer === true)
     return;
   proc.__knittingUnhandledRejectionSilencer = true;
-  process.on("unhandledRejection", () => {});
+  proc.on("unhandledRejection", () => {});
 };
 // src/worker/safety/performance.ts
 var installPerformanceNowGuard = () => {
@@ -3337,7 +4371,7 @@ var scrubWorkerDataSensitiveBuffers = (value) => {
   } catch {}
 };
 // src/worker/safety/startup.ts
-var hasLockBuffers = (value) => isSharedBufferSource(value?.headers) && isSharedBufferSource(value?.lockSector) && value?.payload instanceof SharedArrayBuffer && isSharedBufferSource(value?.payloadSector) && (value?.textCompat === undefined || isLockBufferTextCompat(value.textCompat));
+var hasLockBuffers = (value) => isSharedBufferSource(value?.headers) && isSharedBufferSource(value?.lockSector) && isSharedBufferSource(value?.payload) && isSharedBufferSource(value?.payloadSector) && (value?.textCompat === undefined || isLockBufferTextCompat(value.textCompat));
 var assertWorkerSharedMemoryBootData = ({ sab, lock, returnLock }) => {
   if (!isSharedBufferSource(sab)) {
     throw new Error("worker missing transport SAB");
@@ -3349,14 +4383,13 @@ var assertWorkerSharedMemoryBootData = ({ sab, lock, returnLock }) => {
     throw new Error("worker missing return lock SABs");
   }
 };
-var assertWorkerImportsResolved = ({ debug, list, ids, listOfFunctions }) => {
-  if (debug?.logImportedUrl === true) {
-    console.log(list);
-  }
-  if (listOfFunctions.length > 0)
+var assertWorkerImportsResolved = ({ list, ids, names, listOfFunctions }) => {
+  if (listOfFunctions.length > 0 && (names === undefined || listOfFunctions.length === names.length))
     return;
   console.log(list);
   console.log(ids);
+  if (names !== undefined)
+    console.log(names);
   console.log(listOfFunctions);
   throw new Error("No imports were found.");
 };
@@ -3470,7 +4503,7 @@ var signalAbortFactory = ({
 
 class OneShotDeferred {
   #triggered = false;
-  constructor(deferred, onSettle) {
+  constructor(deferred, onSettle, onEmptyReject) {
     const settleOnce = (fn) => (...args) => {
       if (this.#triggered)
         return;
@@ -3480,25 +4513,165 @@ class OneShotDeferred {
     };
     deferred.resolve = settleOnce(deferred.resolve);
     deferred.reject = settleOnce(deferred.reject);
-    deferred.promise.reject = deferred.reject;
+    deferred.promise.reject = (reason) => {
+      if (this.#triggered)
+        return;
+      if (reason === undefined && onEmptyReject !== undefined) {
+        onEmptyReject();
+        return;
+      }
+      deferred.reject(reason);
+    };
   }
 }
 
+// src/worker/bootstrap.ts
+var DEFAULT_BOOTSTRAP_EXPORT_NAME = "default";
+var isWorkerBootstrapOptions = (value) => {
+  if (!value || typeof value !== "object")
+    return false;
+  const candidate = value;
+  return typeof candidate.href === "string" && candidate.href.length > 0 && (candidate.name === undefined || typeof candidate.name === "string" && candidate.name.length > 0);
+};
+var isProcessSharedBufferMetadata = (value) => {
+  try {
+    ProcessSharedBuffer.fromMetadata(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+var reviveWorkerBootstrapValue = (value, seen = new WeakMap) => {
+  if (isProcessSharedBufferMetadata(value)) {
+    return ProcessSharedBuffer.fromMetadata(value);
+  }
+  if (value === null || typeof value !== "object")
+    return value;
+  const existing = seen.get(value);
+  if (existing !== undefined)
+    return existing;
+  if (Array.isArray(value)) {
+    const out2 = [];
+    seen.set(value, out2);
+    for (const item of value) {
+      out2.push(reviveWorkerBootstrapValue(item, seen));
+    }
+    return out2;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null)
+    return value;
+  const out = {};
+  seen.set(value, out);
+  for (const [key, item] of Object.entries(value)) {
+    out[key] = reviveWorkerBootstrapValue(item, seen);
+  }
+  return out;
+};
+var runWorkerBootstrap = async ({
+  bootstrap,
+  thread,
+  totalNumberOfThread
+}) => {
+  if (bootstrap === undefined)
+    return;
+  if (!isWorkerBootstrapOptions(bootstrap)) {
+    throw new TypeError("worker.bootstrap must include a non-empty href");
+  }
+  const module = await import(toModuleUrl(bootstrap.href));
+  const name = bootstrap.name ?? DEFAULT_BOOTSTRAP_EXPORT_NAME;
+  const selected = module[name];
+  if (typeof selected !== "function") {
+    const available = Object.keys(module).join(", ");
+    throw new TypeError(`worker.bootstrap expected export "${name}" from "${bootstrap.href}" to be a function. Available exports: ${available || "(none)"}`);
+  }
+  const context = Object.freeze({
+    thread,
+    totalNumberOfThread,
+    runtime: RUNTIME
+  });
+  await selected(reviveWorkerBootstrapValue(bootstrap.data), context);
+};
+
+// scripts/browser-stubs/process-worker-bootstrap.ts
+var getProcessWorkerNativeWaitU32 = () => {
+  return;
+};
+var installProcessWorkerBootstrap = () => {};
+
+// src/debug/gate.ts
+var readEnv = (key) => {
+  const denoEnv = globalThis.Deno?.env;
+  if (typeof denoEnv?.get === "function") {
+    try {
+      return denoEnv.get(key);
+    } catch {}
+  }
+  try {
+    return getNodeProcess()?.env?.[key];
+  } catch {
+    return;
+  }
+};
+var raw = readEnv("KNITTING_DEBUG");
+var DEBUG_NAMESPACES = new Set((raw ?? "").split(",").map((part) => part.trim()).filter((part) => part.length > 0));
+var DEBUG_ENABLED = DEBUG_NAMESPACES.size > 0;
+var resolveDebugNamespaces = (debug) => {
+  const namespaces = new Set(DEBUG_NAMESPACES);
+  if (debug === true) {
+    namespaces.add("*");
+  } else if (debug !== undefined && debug !== false) {
+    for (const [key, value] of Object.entries(debug)) {
+      if (value === true)
+        namespaces.add(key);
+    }
+  }
+  return namespaces;
+};
+
 // src/worker/loop.ts
-var jsrIsGreatAndWorkWithoutBugs = () => null;
 var WORKER_FATAL_MESSAGE_KEY = "__knittingWorkerFatal";
 var reportWorkerStartupFatal = (error) => {
   const message = String(error?.message ?? error);
   const payload = {
     [WORKER_FATAL_MESSAGE_KEY]: message
   };
+  let reported = false;
   try {
     RUNTIME_PARENT_PORT?.postMessage?.(payload);
+    reported = RUNTIME_PARENT_PORT !== undefined;
+  } catch {}
+  if (!reported) {
+    try {
+      globalThis.postMessage(payload);
+      reported = true;
+    } catch {}
+  }
+  if (!reported) {
+    try {
+      console.error(`Worker startup failed: ${message}`);
+    } catch {}
+    if (RUNTIME_IS_PROCESS_WORKER) {
+      try {
+        getNodeProcess()?.exit?.(1);
+      } catch {}
+    }
+  }
+};
+var installBufferReferenceReleaseListener = (releaseReturnedBufferReference) => {
+  const handleMessage = (message) => {
+    const token = readBufferReferenceReturnReleaseMessage(message);
+    if (token !== undefined)
+      releaseReturnedBufferReference(token);
+  };
+  if (RUNTIME_PARENT_PORT !== undefined) {
+    addRuntimeDataListener(RUNTIME_PARENT_PORT, handleMessage);
     return;
-  } catch {}
-  try {
-    globalThis.postMessage(payload);
-  } catch {}
+  }
+  const scope = globalThis;
+  scope.addEventListener?.("message", (event) => {
+    handleMessage(event?.data);
+  });
 };
 var workerMainLoop = async (startupData) => {
   installTerminationGuard();
@@ -3515,25 +4688,31 @@ var workerMainLoop = async (startupData) => {
     abortSignalSAB,
     abortSignalMax,
     payloadConfig,
+    bufferReferenceReturn,
     permission,
     totalNumberOfThread,
     list,
     ids,
+    names,
     at
   } = startupData;
   scrubWorkerDataSensitiveBuffers(startupData);
   assertWorkerSharedMemoryBootData({ sab, lock, returnLock });
-  var Comment;
-  ((Comment2) => {
-    Comment2[Comment2["thisIsAHint"] = 0] = "thisIsAHint";
-  })(Comment ||= {});
+  const debugNamespaces = resolveDebugNamespaces(debug);
+  const dbg = debugNamespaces.size > 0 ? await Promise.resolve().then(() => (init_handle(), exports_handle)).then((module) => module.initDebug({
+    name: `w${thread}`,
+    runtime: RUNTIME,
+    namespaces: debugNamespaces
+  })) : undefined;
+  const Comment2 = {
+    thisIsAHint: 0
+  };
   const signals = createSharedMemoryTransport({
     sabObject: {
       sharedSab: sab
     },
     isMain: false,
     thread,
-    debug,
     startTime: startAt
   });
   const lockState = lock2({
@@ -3543,7 +4722,8 @@ var workerMainLoop = async (startupData) => {
     payload: lock.payload,
     payloadSector: lock.payloadSector,
     payloadConfig,
-    textCompat: lock.textCompat
+    textCompat: lock.textCompat,
+    processBoundary: RUNTIME_IS_PROCESS_WORKER
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
@@ -3552,11 +4732,12 @@ var workerMainLoop = async (startupData) => {
     payload: returnLock.payload,
     payloadSector: returnLock.payloadSector,
     payloadConfig,
-    textCompat: returnLock.textCompat
+    textCompat: returnLock.textCompat,
+    processBoundary: RUNTIME_IS_PROCESS_WORKER
   });
   const timers = workerOptions?.timers;
   const spinMicroseconds = timers?.spinMicroseconds ?? Math.max(1, totalNumberOfThread) * 50;
-  const parkMs = timers?.parkMs ?? Math.max(1, totalNumberOfThread) * 50;
+  const parkMs = dbg !== undefined ? Number.POSITIVE_INFINITY : timers?.parkMs ?? Math.max(1, totalNumberOfThread) * 50;
   const pauseSpin = (() => {
     const fn = typeof timers?.pauseNanoseconds === "number" ? whilePausing({ pauseInNanoseconds: timers.pauseNanoseconds }) : pauseGeneric;
     return () => fn();
@@ -3564,14 +4745,24 @@ var workerMainLoop = async (startupData) => {
   const { opView, rxStatus, txStatus } = signals;
   const a_store3 = Atomics.store;
   const a_load2 = Atomics.load;
+  const nativeWaitU32 = getProcessWorkerNativeWaitU32();
+  await runWorkerBootstrap({
+    bootstrap: workerOptions?.bootstrap,
+    thread,
+    totalNumberOfThread
+  });
+  dbg?.envPhase("bootstrap");
   const listOfFunctions = await getFunctions({
     list,
     isWorker: true,
     ids,
+    names,
     at,
     permission
   });
-  assertWorkerImportsResolved({ debug, list, ids, listOfFunctions });
+  dbg?.envPhase("tasks");
+  dbg?.log("imports", `${listOfFunctions.length} task(s) from ${list.map((spec) => spec.split(/[\\/]/).pop() || spec).join(", ")}`);
+  assertWorkerImportsResolved({ list, ids, names, listOfFunctions });
   const abortSignals = abortSignalSAB ? signalAbortFactory({
     sab: abortSignalSAB,
     maxSignals: abortSignalMax
@@ -3582,14 +4773,18 @@ var workerMainLoop = async (startupData) => {
     hasCompleted,
     writeBatch,
     hasPending,
-    getAwaiting
+    getAwaiting,
+    drainReturnReleases,
+    releaseReturnedBufferReference
   } = createWorkerRxQueue({
     listOfFunctions,
     workerOptions,
     lock: lockState,
     returnLock: returnLockState,
+    borrowReturnedBufferReferences: bufferReferenceReturn === "borrow",
     hasAborted: abortSignals?.hasAborted
   });
+  installBufferReferenceReleaseListener(releaseReturnedBufferReference);
   a_store3(rxStatus, 0, 1);
   const WRITE_MAX = 64;
   const pauseUntil = sleepUntilChanged({
@@ -3599,17 +4794,19 @@ var workerMainLoop = async (startupData) => {
     txStatus,
     pauseInNanoseconds: timers?.pauseNanoseconds,
     enqueueLock,
-    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0
+    write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0,
+    nativeWaitU32,
+    useSharedMemoryWait: !(RUNTIME_IS_PROCESS_WORKER && RUNTIME === "node" && nativeWaitU32 === undefined)
   });
   const channel = createRuntimeMessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
-  const post2 = port2.postMessage.bind(port2);
+  const post2 = (message) => port2.postMessage(message);
   let isInMacro = false;
   let awaitingSpins = 0;
   let lastAwaiting = 0;
   const MAX_AWAITING_MS = 10;
-  let wakeSeq = a_load2(opView, 0);
+  let wakeToken = a_load2(opView, 0);
   const scheduleMacro = () => {
     if (isInMacro)
       return;
@@ -3634,14 +4831,35 @@ var workerMainLoop = async (startupData) => {
     }
     post2(null);
   };
-  const _enqueueLock = enqueueLock;
+  const traceSignals = dbg?.enabled("signals") === true;
   const _hasCompleted = hasCompleted;
-  const _writeBatch = writeBatch;
   const _hasPending = hasPending;
-  const _serviceBatchImmediate = serviceBatchImmediate;
   const _getAwaiting = getAwaiting;
+  const _drainReturnReleases = drainReturnReleases;
   const _pauseSpin = pauseSpin;
-  const _pauseUntil = pauseUntil;
+  const _enqueueLock = traceSignals ? () => {
+    const progressed = enqueueLock();
+    if (progressed) {
+      dbg.log("signals", "work from=host");
+    }
+    return progressed;
+  } : enqueueLock;
+  const _writeBatch = traceSignals ? (max) => {
+    const wrote = writeBatch(max);
+    if (wrote > 0)
+      dbg.log("signals", `result count=${wrote}`);
+    return wrote;
+  } : writeBatch;
+  const _serviceBatchImmediate = traceSignals ? () => {
+    const ran = serviceBatchImmediate();
+    if (ran > 0)
+      dbg.log("signals", `run count=${ran}`);
+    return ran;
+  } : serviceBatchImmediate;
+  const _pauseUntil = traceSignals ? (value, spinMicroseconds2, parkMs2) => {
+    dbg.log("signals", `idle token=${value}`);
+    pauseUntil(value, spinMicroseconds2, parkMs2);
+  } : pauseUntil;
   const loop = () => {
     isInMacro = false;
     let progressed = true;
@@ -3652,6 +4870,7 @@ var workerMainLoop = async (startupData) => {
         if (_writeBatch(WRITE_MAX) > 0)
           progressed = true;
       }
+      _drainReturnReleases();
       if (_hasPending()) {
         if (_serviceBatchImmediate() > 0)
           progressed = true;
@@ -3667,12 +4886,12 @@ var workerMainLoop = async (startupData) => {
       }
       awaitingSpins = lastAwaiting = 0;
       if (!progressed) {
-        if (txStatus[0 /* thisIsAHint */] === 1) {
+        if (txStatus[Comment2.thisIsAHint] === 1) {
           _pauseSpin();
           continue;
         }
-        _pauseUntil(wakeSeq, spinMicroseconds, parkMs);
-        wakeSeq = a_load2(opView, 0);
+        _pauseUntil(wakeToken, spinMicroseconds, parkMs);
+        wakeToken = a_load2(opView, 0);
       }
     }
   };
@@ -3684,31 +4903,36 @@ var workerMainLoop = async (startupData) => {
   }
   port1Any.start?.();
   port2.start?.();
+  dbg?.log("lifecycle", `ready: ${listOfFunctions.length} task(s) on thread ${thread}/${totalNumberOfThread}, entering dispatch loop`);
   scheduleMacro();
 };
-var isWebWorkerScope2 = () => {
+var isWorkerGlobalScope2 = () => {
   const scopeCtor = globalThis.WorkerGlobalScope;
-  if (typeof scopeCtor !== "function")
-    return false;
-  try {
-    return globalThis instanceof scopeCtor;
-  } catch {
-    return false;
+  if (typeof scopeCtor === "function") {
+    try {
+      if (globalThis instanceof scopeCtor) {
+        return true;
+      }
+    } catch {}
   }
+  if (IS_ANDROMEDA && typeof globalThis.self !== "undefined") {
+    return true;
+  }
+  return false;
 };
 var isLockBuffers = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return isSharedBufferSource(candidate.headers) && isSharedBufferSource(candidate.lockSector) && candidate.payload instanceof SharedArrayBuffer && isSharedBufferSource(candidate.payloadSector) && (candidate.textCompat === undefined || isLockBufferTextCompat(candidate.textCompat));
+  return isSharedBufferSource(candidate.headers) && isSharedBufferSource(candidate.lockSector) && isSharedBufferSource(candidate.payload) && isSharedBufferSource(candidate.payloadSector) && (candidate.textCompat === undefined || isLockBufferTextCompat(candidate.textCompat));
 };
 var isWorkerBootPayload = (value) => {
   if (!value || typeof value !== "object")
     return false;
   const candidate = value;
-  return isSharedBufferSource(candidate.sab) && Array.isArray(candidate.list) && Array.isArray(candidate.ids) && Array.isArray(candidate.at) && typeof candidate.thread === "number" && typeof candidate.totalNumberOfThread === "number" && typeof candidate.startAt === "number" && (candidate.abortSignalSAB === undefined || isSharedBufferSource(candidate.abortSignalSAB)) && isLockBuffers(candidate.lock) && isLockBuffers(candidate.returnLock);
+  return isSharedBufferSource(candidate.sab) && Array.isArray(candidate.list) && Array.isArray(candidate.ids) && Array.isArray(candidate.names) && Array.isArray(candidate.at) && typeof candidate.thread === "number" && typeof candidate.totalNumberOfThread === "number" && typeof candidate.startAt === "number" && (candidate.abortSignalSAB === undefined || isSharedBufferSource(candidate.abortSignalSAB)) && isLockBuffers(candidate.lock) && isLockBuffers(candidate.returnLock);
 };
-var installWebWorkerBootstrap = () => {
+var installWorkerGlobalBootstrap = () => {
   const g = globalThis;
   const start = (data) => {
     if (!isWorkerBootPayload(data))
@@ -3738,17 +4962,29 @@ var installWebWorkerBootstrap = () => {
 };
 if (RUNTIME_IS_MAIN_THREAD === false && isWorkerBootPayload(RUNTIME_WORKER_DATA)) {
   workerMainLoop(RUNTIME_WORKER_DATA).catch(reportWorkerStartupFatal);
-} else if (isWebWorkerScope2()) {
-  installWebWorkerBootstrap();
+} else if (RUNTIME_IS_PROCESS_WORKER) {
+  installProcessWorkerBootstrap({
+    isWorkerBootPayload,
+    reportWorkerStartupFatal,
+    startWorker: (data) => {
+      workerMainLoop(data).catch(reportWorkerStartupFatal);
+    }
+  });
+} else if (isWorkerGlobalScope2()) {
+  installWorkerGlobalBootstrap();
 }
 
-// src/common/others.ts
+// src/common/task-source.ts
 var genTaskID = ((counter) => () => counter++)(0);
 var INTERNAL_CALLER_HINTS = [
-  "/src/common/others.ts",
-  "\\src\\common\\others.ts",
+  "/src/common/task-source.ts",
+  "/src/common/task-source.js",
+  "\\src\\common\\task-source.ts",
+  "\\src\\common\\task-source.js",
   "/src/api.ts",
-  "\\src\\api.ts"
+  "/src/api.js",
+  "\\src\\api.ts",
+  "\\src\\api.js"
 ];
 var INTERNAL_CALLER_FUNCTIONS = new Set([
   "collectStackFrames",
@@ -3760,18 +4996,6 @@ var INTERNAL_CALLER_FUNCTIONS = new Set([
   "importTask"
 ]);
 var isDefined = (value) => value !== undefined;
-var looksLikeStackFile = (value) => value.startsWith("file:") || value.startsWith("http:") || value.startsWith("https:") || value.startsWith("blob:") || value.startsWith("webpack-internal:") || value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(value);
-var extractStackFile = (line) => {
-  const trimmed = line.trim();
-  if (trimmed.length === 0)
-    return;
-  const candidates = [
-    trimmed.match(/\((.+?):\d+:\d+\)$/)?.[1],
-    trimmed.match(/at (.+?):\d+:\d+$/)?.[1],
-    trimmed.match(/^(?:.+@)?(.+?):\d+:\d+$/)?.[1]
-  ];
-  return candidates.find((value) => typeof value === "string" && looksLikeStackFile(value));
-};
 var isInternalCallerFrame = (file) => INTERNAL_CALLER_HINTS.some((hint) => file.includes(hint));
 var isRuntimeInternalFrame = (file) => file.startsWith("node:") || file.startsWith("native:") || file.startsWith("bun:") || file.startsWith("internal/");
 var isInternalCallerFunction = (functionName, methodName) => functionName !== undefined && INTERNAL_CALLER_FUNCTIONS.has(functionName) || methodName !== undefined && INTERNAL_CALLER_FUNCTIONS.has(methodName);
@@ -3781,17 +5005,6 @@ var collectStackFrames = () => {
   try {
     ErrorCtor.prepareStackTrace = (_error, stack2) => stack2;
     const stack = new Error().stack;
-    if (typeof stack === "string") {
-      return stack.split(`
-`).map((line) => {
-        const file = extractStackFile(line);
-        return file ? {
-          file,
-          functionName: undefined,
-          methodName: undefined
-        } : undefined;
-      }).filter(isDefined);
-    }
     if (!Array.isArray(stack))
       return [];
     const frames = stack.map((site) => {
@@ -3814,16 +5027,23 @@ var collectStackFrames = () => {
   }
 };
 var isInternalFrame = (frame) => isRuntimeInternalFrame(frame.file) || isInternalCallerFrame(frame.file) || isInternalCallerFunction(frame.functionName, frame.methodName);
+var moduleUrlOverride;
+var setModuleUrl = (url) => {
+  moduleUrlOverride = typeof url === "string" && url.length > 0 ? toModuleUrl(url) : undefined;
+};
 var resolveCallerHref = (offset) => {
+  if (moduleUrlOverride !== undefined)
+    return moduleUrlOverride;
   const frames = collectStackFrames();
   const direct = frames[offset];
   const caller = (direct && !isInternalFrame(direct) ? direct.file : undefined) ?? frames.find((frame) => !isInternalFrame(frame))?.file ?? frames.find((frame) => !isRuntimeInternalFrame(frame.file))?.file;
   if (!caller) {
-    throw new Error("Unable to determine caller file.");
+    throw new Error("Unable to determine caller file. This runtime exposes no stack traces " + "(e.g. Andromeda); call setModuleUrl(import.meta.url) at the top of " + "the module that defines your tasks before creating a pool.");
   }
   return toModuleUrl(caller);
 };
 var linkingMap = new Map;
+var getCallerHref = (offset = 3) => resolveCallerHref(offset);
 var getCallerFilePath = (offset = 3) => {
   const href = resolveCallerHref(offset);
   const at = linkingMap.get(href) ?? 0;
@@ -3832,17 +5052,27 @@ var getCallerFilePath = (offset = 3) => {
 };
 
 // src/common/with-resolvers.ts
+var attachReject = (promise, reject) => {
+  const deferredPromise = promise;
+  deferredPromise.reject = reject;
+  return deferredPromise;
+};
 var withResolvers = () => {
   const native = Promise.withResolvers;
   if (typeof native === "function") {
-    return native.call(Promise);
+    const deferred = native.call(Promise);
+    return {
+      promise: attachReject(deferred.promise, deferred.reject),
+      resolve: deferred.resolve,
+      reject: deferred.reject
+    };
   }
   let resolve;
   let reject;
-  const promise = new Promise((res, rej) => {
+  const promise = attachReject(new Promise((res, rej) => {
     resolve = res;
     reject = rej;
-  });
+  }), reject);
   return { promise, resolve, reject };
 };
 
@@ -3859,6 +5089,7 @@ function createHostTxQueue({
   max,
   lock,
   returnLock,
+  releaseBufferReferenceReturn,
   abortSignals,
   now
 }) {
@@ -3867,8 +5098,8 @@ function createHostTxQueue({
   };
   const newSlot = (id) => {
     const task = makeTask();
-    task[1 /* ID */] = id;
-    task[0 /* FunctionID */] = 0;
+    task[TaskIndex.ID] = id;
+    task[TaskIndex.FunctionID] = 0;
     task.value = null;
     task.resolve = PLACE_HOLDER;
     task.reject = PLACE_HOLDER;
@@ -3893,16 +5124,23 @@ function createHostTxQueue({
   const nowTime = now ?? p_now3;
   const resolveReturn = returnLock.resolveHost({
     queue,
-    shouldSettle: (task) => task.reject !== PLACE_HOLDER,
+    activeRejectPlaceholder: PLACE_HOLDER,
     onResolved: (task) => {
       inUsed = inUsed - 1 | 0;
+      resetTaskLocalFlags(task);
+      runTaskFinalizers(task);
       task.value = null;
       task.resolve = PLACE_HOLDER;
       task.reject = PLACE_HOLDER;
-      freePush(task[1 /* ID */]);
+      freePush(task[TaskIndex.ID]);
     }
   });
-  const txIdle = () => getPendingFrameCount() === 0 && inUsed === getPendingPromiseCount();
+  const completeFrame = releaseBufferReferenceReturn === undefined ? resolveReturn : () => withBufferReferenceReturnReleaser(releaseBufferReferenceReturn, resolveReturn);
+  const hasActiveTasks = () => {
+    const count = inUsed - getPendingPromiseCount() | 0;
+    return count > 0;
+  };
+  const txIdle = () => getPendingFrameCount() === 0 && !hasActiveTasks();
   const rejectAll = (reason) => {
     for (let index = 0;index < queue.length; index++) {
       const slot = queue[index];
@@ -3910,6 +5148,7 @@ function createHostTxQueue({
         try {
           slot.reject(reason);
         } catch {}
+        runTaskFinalizers(slot);
         slot.resolve = PLACE_HOLDER;
         slot.reject = PLACE_HOLDER;
         queue[index] = newSlot(index);
@@ -3926,7 +5165,7 @@ function createHostTxQueue({
     rejectAll,
     hasPendingFrames,
     txIdle,
-    completeFrame: resolveReturn,
+    completeFrame,
     enqueue: (functionID, timeout, abortSignal) => {
       const HAS_TIMER = timeout !== undefined;
       const functionIDMasked = functionID & FUNCTION_ID_MASK;
@@ -3944,22 +5183,24 @@ function createHostTxQueue({
         const index = freePop();
         const slot = queue[index];
         const deferred = withResolvers();
-        slot[0 /* FunctionID */] = functionIDMasked;
+        slot[TaskIndex.FunctionID] = functionIDMasked;
         if (USE_SIGNAL) {
           const maybeSignal = abortSignals.getSignal();
           if (maybeSignal === abortSignals.closeNow) {
             return Promise.reject(AbortSignalPoolExhausted);
           }
-          new OneShotDeferred(deferred, () => resetSignal(maybeSignal));
+          new OneShotDeferred(deferred, () => resetSignal(maybeSignal), () => {
+            abortSignals.setSignal(maybeSignal);
+          });
           const encodedSignalMeta = (maybeSignal + ABORT_SIGNAL_META_OFFSET2 & FUNCTION_META_MASK) >>> 0;
-          slot[0 /* FunctionID */] = (encodedSignalMeta << FUNCTION_META_SHIFT | functionIDMasked) >>> 0;
+          slot[TaskIndex.FunctionID] = (encodedSignalMeta << FUNCTION_META_SHIFT | functionIDMasked) >>> 0;
         }
         slot.value = rawArgs;
-        slot[1 /* ID */] = index;
+        slot[TaskIndex.ID] = index;
         slot.resolve = deferred.resolve;
         slot.reject = deferred.reject;
         if (HAS_TIMER) {
-          slot[6 /* slotBuffer */] = (slot[6 /* slotBuffer */] & SLOT_INDEX_MASK | (nowTime() >>> 0 & SLOT_META_MASK) << SLOT_META_SHIFT >>> 0) >>> 0;
+          slot[TaskIndex.slotBuffer] = (slot[TaskIndex.slotBuffer] & SLOT_INDEX_MASK | (nowTime() >>> 0 & SLOT_META_MASK) << SLOT_META_SHIFT >>> 0) >>> 0;
         }
         publish(slot);
         inUsed = inUsed + 1 | 0;
@@ -3969,15 +5210,19 @@ function createHostTxQueue({
     flushToWorker,
     enqueueKnown,
     settlePromisePayload: (task, isRejected, value) => {
+      if (task.reject === PLACE_HOLDER)
+        return false;
       if (isRejected) {
         try {
           task.reject(value);
         } catch {}
+        resetTaskLocalFlags(task);
+        runTaskFinalizers(task);
         task.value = null;
         task.resolve = PLACE_HOLDER;
         task.reject = PLACE_HOLDER;
         inUsed = inUsed - 1 | 0;
-        freePush(task[1 /* ID */]);
+        freePush(task[TaskIndex.ID]);
         return false;
       }
       task.value = value;
@@ -3985,6 +5230,120 @@ function createHostTxQueue({
     }
   };
 }
+
+// scripts/browser-stubs/process-worker.ts
+var createProcessSharedMemoryAllocator = () => {
+  return;
+};
+var createProcessWorkerNativeSignalNotifier = () => {
+  return;
+};
+var cleanupProcessWorkerMemoryQuietly = () => {};
+var unavailable3 = () => {
+  throw new Error("process workers are unavailable in the browser build");
+};
+var createProcessWorkerMemoryLayout = unavailable3;
+var readProcessSharedMemorySettings = unavailable3;
+var readProcessWorkerCommandPrefix = unavailable3;
+var readProcessWorkerRuntime = unavailable3;
+var spawnProcessWorker = unavailable3;
+var toProcessWorkerBootPayload = unavailable3;
+
+// src/runtime/worker-common.ts
+var execFlagKey = (flag) => flag.split("=", 1)[0];
+var NODE_PERMISSION_EXEC_FLAGS = new Set([
+  "--permission",
+  "--experimental-permission",
+  "--allow-fs-read",
+  "--allow-fs-write",
+  "--allow-worker",
+  "--allow-child-process",
+  "--allow-net",
+  "--allow-addons",
+  "--allow-ffi",
+  "--allow-wasi"
+]);
+var NODE_WORKER_SAFE_EXEC_FLAGS = new Set([
+  "--experimental-ffi",
+  "--experimental-transform-types",
+  "--expose-gc",
+  "--no-warnings",
+  ...NODE_PERMISSION_EXEC_FLAGS
+]);
+var isNodeWorkerSafeExecFlag = (flag) => NODE_WORKER_SAFE_EXEC_FLAGS.has(execFlagKey(flag));
+var isNodePermissionExecFlag = (flag) => NODE_PERMISSION_EXEC_FLAGS.has(execFlagKey(flag));
+var toWorkerSafeExecArgv = (flags) => {
+  if (!flags || flags.length === 0)
+    return;
+  const filtered = flags.filter(isNodeWorkerSafeExecFlag);
+  if (filtered.length === 0)
+    return;
+  const seen = new Set;
+  const deduped = [];
+  for (const flag of filtered) {
+    if (seen.has(flag))
+      continue;
+    seen.add(flag);
+    deduped.push(flag);
+  }
+  return deduped;
+};
+var toWorkerCompatExecArgv = (flags) => {
+  const safe = toWorkerSafeExecArgv(flags);
+  if (!safe || safe.length === 0)
+    return;
+  const compat = safe.filter((flag) => !isNodePermissionExecFlag(flag));
+  return compat.length > 0 ? compat : undefined;
+};
+var isPlainRecord = (value) => {
+  if (value === null || typeof value !== "object")
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+var serializeWorkerBootstrapValue = (value, seen = new WeakMap) => {
+  if (value instanceof ProcessSharedBuffer)
+    return value.toMetadata();
+  if (value === null || typeof value !== "object")
+    return value;
+  const existing = seen.get(value);
+  if (existing !== undefined)
+    return existing;
+  if (Array.isArray(value)) {
+    const out2 = [];
+    seen.set(value, out2);
+    for (const item of value) {
+      out2.push(serializeWorkerBootstrapValue(item, seen));
+    }
+    return out2;
+  }
+  if (!isPlainRecord(value))
+    return value;
+  const out = {};
+  seen.set(value, out);
+  for (const [key, item] of Object.entries(value)) {
+    out[key] = serializeWorkerBootstrapValue(item, seen);
+  }
+  return out;
+};
+var serializeWorkerBootstrapData = (options) => {
+  const bootstrap = options.bootstrap;
+  if (bootstrap === undefined || bootstrap.data === undefined)
+    return options;
+  return {
+    ...options,
+    bootstrap: {
+      ...bootstrap,
+      data: serializeWorkerBootstrapValue(bootstrap.data)
+    }
+  };
+};
+var terminateWorkerQuietly = (worker) => {
+  try {
+    worker.unref?.();
+    Promise.resolve(worker.terminate()).catch(() => {});
+  } catch {}
+};
 
 // src/runtime/dispatcher.ts
 var hostDispatcherLoop = ({
@@ -4000,12 +5359,18 @@ var hostDispatcherLoop = ({
     txIdle
   },
   channelHandler,
-  dispatcherOptions
+  dispatcherOptions,
+  notifySignal
 }) => {
   const a_load2 = Atomics.load;
   const a_store3 = Atomics.store;
   const a_notify = Atomics.notify;
-  const notify = channelHandler.notify.bind(channelHandler);
+  const canNotifySignal = opView.buffer instanceof SharedArrayBuffer;
+  const wakeSignal = notifySignal ?? (() => {
+    if (canNotifySignal)
+      a_notify(opView, 0, 1);
+  });
+  const notify = () => channelHandler.notify();
   let stallCount = 0 | 0;
   const STALL_FREE_LOOPS = Math.max(0, (dispatcherOptions?.stallFreeLoops ?? 128) | 0);
   const MAX_BACKOFF_MS = Math.max(0, (dispatcherOptions?.maxBackoffMs ?? 10) | 0);
@@ -4026,7 +5391,7 @@ var hostDispatcherLoop = ({
       txStatus[0] = 1;
       if (a_load2(rxStatus, 0) === 0) {
         a_store3(opView, 0, 1);
-        a_notify(opView, 0, 1);
+        wakeSignal();
       }
       let anyProgressed = false;
       let progressed = true;
@@ -4094,7 +5459,7 @@ class ChannelHandler {
     this.channel = createRuntimeMessageChannel();
     this.port1 = this.channel.port1;
     this.port2 = this.channel.port2;
-    this.#post2 = this.port2.postMessage.bind(this.port2);
+    this.#post2 = (message) => this.port2.postMessage(message);
   }
   notify() {
     this.#post2(null);
@@ -4117,79 +5482,40 @@ class ChannelHandler {
   }
 }
 
+// scripts/browser-stubs/compiled-worker.ts
+var spawnCompiledWorkerContext = () => {
+  throw new Error("compiled workers are unavailable in the browser build");
+};
+
 // src/runtime/pool.ts
 var WORKER_FATAL_MESSAGE_KEY2 = "__knittingWorkerFatal";
-var execFlagKey = (flag) => flag.split("=", 1)[0];
-var NODE_PERMISSION_EXEC_FLAGS = new Set([
-  "--permission",
-  "--experimental-permission",
-  "--allow-fs-read",
-  "--allow-fs-write",
-  "--allow-worker",
-  "--allow-child-process",
-  "--allow-addons",
-  "--allow-wasi"
-]);
-var NODE_WORKER_SAFE_EXEC_FLAGS = new Set([
-  "--experimental-transform-types",
-  "--expose-gc",
-  "--no-warnings",
-  ...NODE_PERMISSION_EXEC_FLAGS
-]);
 var isWorkerFatalMessage = (value) => !!value && typeof value === "object" && typeof value[WORKER_FATAL_MESSAGE_KEY2] === "string";
-var isNodeWorkerSafeExecFlag = (flag) => NODE_WORKER_SAFE_EXEC_FLAGS.has(execFlagKey(flag));
-var isNodePermissionExecFlag = (flag) => NODE_PERMISSION_EXEC_FLAGS.has(execFlagKey(flag));
-var toWorkerSafeExecArgv = (flags) => {
-  if (!flags || flags.length === 0)
-    return;
-  const filtered = flags.filter(isNodeWorkerSafeExecFlag);
-  if (filtered.length === 0)
-    return;
-  const seen = new Set;
-  const deduped = [];
-  for (const flag of filtered) {
-    if (seen.has(flag))
-      continue;
-    seen.add(flag);
-    deduped.push(flag);
-  }
-  return deduped;
-};
-var toWorkerCompatExecArgv = (flags) => {
-  const safe = toWorkerSafeExecArgv(flags);
-  if (!safe || safe.length === 0)
-    return;
-  const compat = safe.filter((flag) => !isNodePermissionExecFlag(flag));
-  return compat.length > 0 ? compat : undefined;
-};
-var toPositiveInteger2 = (value) => {
-  if (!Number.isFinite(value))
-    return;
-  const int = Math.floor(value);
-  return int > 0 ? int : undefined;
-};
-var toNodeWorkerResourceLimits = (limits) => {
-  if (!limits)
-    return;
-  const out = {
-    maxOldGenerationSizeMb: toPositiveInteger2(limits.maxOldGenerationSizeMb),
-    maxYoungGenerationSizeMb: toPositiveInteger2(limits.maxYoungGenerationSizeMb),
-    codeRangeSizeMb: toPositiveInteger2(limits.codeRangeSizeMb),
-    stackSizeMb: toPositiveInteger2(limits.stackSizeMb)
+var DEFAULT_WORKER_PARK_MS = 1;
+var withDefaultWorkerTimers = (options) => {
+  const parkMs = options?.timers?.parkMs ?? DEFAULT_WORKER_PARK_MS;
+  if (options === undefined)
+    return { timers: { parkMs } };
+  return {
+    ...options,
+    timers: {
+      ...options.timers,
+      parkMs
+    }
   };
-  return Object.values(out).some((value) => value !== undefined) ? out : undefined;
 };
-var terminateWorkerQuietly = (worker) => {
-  try {
-    Promise.resolve(worker.terminate()).catch(() => {});
-  } catch {}
-};
+var withFixedPayloadConfig = (config) => ({
+  ...config,
+  mode: "fixed",
+  payloadInitialBytes: config.payloadMaxByteLength
+});
 var spawnWorkerContext = ({
   list,
   ids,
+  names,
   sab,
   thread,
   debug,
+  hostDebug,
   totalNumberOfThread,
   source,
   at,
@@ -4198,59 +5524,80 @@ var spawnWorkerContext = ({
   permission,
   host,
   payload,
-  payloadInitialBytes,
-  payloadMaxBytes,
-  bufferMode,
-  maxPayloadBytes,
+  bufferReferenceReturn,
   abortSignalCapacity,
-  usesAbortSignal
+  usesAbortSignal,
+  sharedChannelHandler
 }) => {
+  if (workerOptions?.runtime === "compiled") {
+    return spawnCompiledWorkerContext({
+      list,
+      names,
+      workerOptions,
+      hostDebug,
+      abortSignalCapacity,
+      usesAbortSignal
+    });
+  }
   const tsFileUrl = new URL(import.meta.url);
   const poliWorker = RUNTIME_WORKER;
-  if (debug?.logHref === true) {
-    console.log(tsFileUrl);
-    jsrIsGreatAndWorkWithoutBugs();
-  }
-  if (typeof poliWorker !== "function") {
+  const resolvedWorkerOptions = serializeWorkerBootstrapData(withDefaultWorkerTimers(workerOptions));
+  const useProcessWorkerRuntime = resolvedWorkerOptions.runtime === "process";
+  const processWorkerRuntime = useProcessWorkerRuntime ? readProcessWorkerRuntime(resolvedWorkerOptions) : undefined;
+  const processWorkerCommandPrefix = useProcessWorkerRuntime ? readProcessWorkerCommandPrefix(resolvedWorkerOptions) : undefined;
+  const processSharedMemorySettings = useProcessWorkerRuntime ? readProcessSharedMemorySettings(resolvedWorkerOptions) : undefined;
+  if (!useProcessWorkerRuntime && typeof poliWorker !== "function") {
     throw new Error("Worker is not available in this runtime");
   }
+  if (IS_BROWSER && typeof SharedArrayBuffer !== "function") {
+    throw new Error("SharedArrayBuffer is unavailable: serve the page cross-origin isolated " + "(Cross-Origin-Opener-Policy: same-origin, " + "Cross-Origin-Embedder-Policy: require-corp).");
+  }
+  const WorkerCtor = poliWorker;
   const sanitizeBytes = (value) => {
     if (!Number.isFinite(value))
       return;
     const bytes = Math.floor(value);
     return bytes > 0 ? bytes : undefined;
   };
-  const resolvedPayloadConfig = resolvePayloadBufferOptions({
-    options: {
-      ...payload,
-      mode: payload?.mode ?? bufferMode,
-      maxPayloadBytes: payload?.maxPayloadBytes ?? maxPayloadBytes,
-      payloadInitialBytes: payload?.payloadInitialBytes ?? sanitizeBytes(payloadInitialBytes),
-      payloadMaxByteLength: payload?.payloadMaxByteLength ?? sanitizeBytes(payloadMaxBytes)
-    }
+  const basePayloadConfig = resolvePayloadBufferOptions({
+    options: payload
   });
-  const makePayloadBuffer = () => resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes);
+  const resolvedPayloadConfig = useProcessWorkerRuntime ? withFixedPayloadConfig(basePayloadConfig) : basePayloadConfig;
   const defaultAbortSignalCapacity = 258;
   const requestedAbortSignalCapacity = sanitizeBytes(abortSignalCapacity);
   const resolvedAbortSignalCapacity = requestedAbortSignalCapacity ?? defaultAbortSignalCapacity;
   const abortSignalWords = Math.max(1, Math.ceil(resolvedAbortSignalCapacity / 32));
   const requestedSignalBytes = sanitizeBytes(sab?.size);
   const externalSignalSab = sab?.sharedSab;
+  if (useProcessWorkerRuntime && externalSignalSab != null) {
+    throw new Error("process worker runtime cannot use an external signal buffer");
+  }
+  const signalBytes = Math.max(TRANSPORT_SIGNAL_BYTES, requestedSignalBytes ?? TRANSPORT_SIGNAL_BYTES);
+  const abortBytes = abortSignalWords * Uint32Array.BYTES_PER_ELEMENT;
+  const processWorkerMemory = useProcessWorkerRuntime ? createProcessWorkerMemoryLayout({
+    signalBytes,
+    abortBytes,
+    payloadBytes: resolvedPayloadConfig.payloadMaxByteLength,
+    thread,
+    sharedMemory: processSharedMemorySettings
+  }) : undefined;
+  const processSharedMemory = processWorkerMemory === undefined ? createProcessSharedMemoryAllocator(debug) : undefined;
+  const createControlBuffer = processSharedMemory?.createBuffer ?? createWasmSharedArrayBuffer;
+  const createPayloadBuffer = processSharedMemory?.createBuffer;
+  const makePayloadBuffer = () => createPayloadBuffer ? createPayloadBuffer(resolvedPayloadConfig.payloadMaxByteLength) : resolvedPayloadConfig.mode === "growable" ? createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes, resolvedPayloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(resolvedPayloadConfig.payloadInitialBytes);
   const makeLockControlLayout = () => {
-    const signalBytes = Math.max(TRANSPORT_SIGNAL_BYTES, requestedSignalBytes ?? TRANSPORT_SIGNAL_BYTES);
-    const abortBytes = abortSignalWords * Uint32Array.BYTES_PER_ELEMENT;
     return createLockControlCarpet({
       signalBytes,
       abortBytes,
       lockSectorBytes: LOCK_SECTOR_BYTE_LENGTH,
       headerSlotStrideU32: HEADER_SLOT_STRIDE_U32,
-      slotCount: 32 /* slots */,
+      slotCount: LockBound.slots,
       headerLayout: "split",
-      createBuffer: createWasmSharedArrayBuffer
+      createBuffer: createControlBuffer
     });
   };
-  const controlLayout = makeLockControlLayout();
-  const lockPayload = makePayloadBuffer();
+  const controlLayout = processWorkerMemory?.controlLayout ?? makeLockControlLayout();
+  const lockPayload = processWorkerMemory?.lockPayload ?? makePayloadBuffer();
   const lockBuffers = {
     ...controlLayout.lock,
     payload: lockPayload,
@@ -4259,7 +5606,7 @@ var spawnWorkerContext = ({
       payload: lockPayload
     })
   };
-  const returnPayload = makePayloadBuffer();
+  const returnPayload = processWorkerMemory?.returnPayload ?? makePayloadBuffer();
   const returnLockBuffers = {
     ...controlLayout.returnLock,
     payload: returnPayload,
@@ -4275,7 +5622,8 @@ var spawnWorkerContext = ({
     payload: lockBuffers.payload,
     payloadSector: lockBuffers.payloadSector,
     payloadConfig: resolvedPayloadConfig,
-    textCompat: lockBuffers.textCompat
+    textCompat: lockBuffers.textCompat,
+    processBoundary: useProcessWorkerRuntime
   });
   const returnLock = lock2({
     headers: returnLockBuffers.headers,
@@ -4284,7 +5632,8 @@ var spawnWorkerContext = ({
     payload: returnLockBuffers.payload,
     payloadSector: returnLockBuffers.payloadSector,
     payloadConfig: resolvedPayloadConfig,
-    textCompat: returnLockBuffers.textCompat
+    textCompat: returnLockBuffers.textCompat,
+    processBoundary: useProcessWorkerRuntime
   });
   const abortSignalSAB = usesAbortSignal === true ? controlLayout.abortSignals : undefined;
   const abortSignals = abortSignalSAB ? signalAbortFactory({
@@ -4297,104 +5646,188 @@ var spawnWorkerContext = ({
       sharedSab: controlLayout.signals
     } : sab,
     isMain: true,
-    thread,
-    debug
+    thread
   });
   const signalBox = signals;
+  const nativeNotifySignal = createProcessWorkerNativeSignalNotifier({
+    processRuntime: processWorkerRuntime,
+    signal: signalBox.opView
+  });
+  const outstandingBorrowedReturns = bufferReferenceReturn === "borrow" && typeof WeakRef === "function" ? new Map : undefined;
+  const releaseBorrowedReturnToken = (token) => {
+    outstandingBorrowedReturns?.delete(token);
+    worker?.postMessage?.(createBufferReferenceReturnReleaseMessage(token));
+  };
+  const revokeOutstandingBorrowedReturns = (copyBytes) => {
+    if (outstandingBorrowedReturns === undefined)
+      return;
+    for (const [token, record] of outstandingBorrowedReturns) {
+      try {
+        const ref = record.ref.deref();
+        if (ref !== undefined) {
+          ref.revokeBorrow(copyBytes);
+          continue;
+        }
+        const aliasBuffer = record.aliasBuffer?.deref();
+        if (aliasBuffer !== undefined && detachArrayBufferBestEffort(record.runtime, aliasBuffer) && copyBytes) {
+          releaseBorrowedReturnToken(token);
+        }
+      } catch {}
+    }
+    outstandingBorrowedReturns.clear();
+  };
   const queue = createHostTxQueue({
     lock,
     returnLock,
-    abortSignals
+    abortSignals,
+    releaseBufferReferenceReturn: bufferReferenceReturn === "borrow" ? {
+      release: releaseBorrowedReturnToken,
+      track: (ref, token, aliasBuffer) => {
+        if (outstandingBorrowedReturns === undefined)
+          return;
+        const record = outstandingBorrowedReturns.get(token);
+        if (record !== undefined) {
+          if (aliasBuffer !== undefined) {
+            record.aliasBuffer = new WeakRef(aliasBuffer);
+          }
+          return;
+        }
+        outstandingBorrowedReturns.set(token, {
+          ref: new WeakRef(ref),
+          aliasBuffer: aliasBuffer === undefined ? undefined : new WeakRef(aliasBuffer),
+          runtime: ref.runtime
+        });
+      }
+    } : undefined
   });
   const {
     enqueue,
     rejectAll,
     txIdle
   } = queue;
-  const channelHandler = new ChannelHandler;
-  const { check } = hostDispatcherLoop({
+  const thisSignal = signalBox.opView;
+  const a_add = Atomics.add;
+  const a_load2 = Atomics.load;
+  const a_notify = Atomics.notify;
+  const canNotifySignal = thisSignal.buffer instanceof SharedArrayBuffer;
+  const notifySignal = nativeNotifySignal ?? (canNotifySignal ? () => a_notify(thisSignal, 0, 1) : undefined);
+  const laneWake = () => {
+    if (a_load2(signalBox.rxStatus, 0) === 0) {
+      a_add(thisSignal, 0, 1);
+      notifySignal?.();
+    }
+  };
+  let dispatchSend = () => {};
+  const send = () => dispatchSend();
+  let channelHandler;
+  const ownsChannel = sharedChannelHandler === undefined;
+  const ownChannel = sharedChannelHandler ?? new ChannelHandler;
+  const { check: dispatcherCheck } = hostDispatcherLoop({
     signalBox,
     queue,
-    channelHandler,
-    dispatcherOptions: host
+    channelHandler: ownChannel,
+    dispatcherOptions: host,
+    notifySignal: nativeNotifySignal
   });
-  channelHandler.open(check);
+  if (ownsChannel) {
+    ownChannel.open(dispatcherCheck);
+    channelHandler = ownChannel;
+    dispatchSend = () => {
+      if (dispatcherCheck.isRunning === true)
+        return;
+      dispatcherCheck.isRunning = true;
+      Promise.resolve().then(dispatcherCheck);
+      laneWake();
+    };
+  }
   let worker;
   const workerUrl = source ?? tsFileUrl;
+  const workerMode = useProcessWorkerRuntime ? "process" : HAS_NODE_WORKER_THREADS ? "worker_threads" : "worker";
+  hostDebug?.(`worker thread=${thread} mode=${workerMode}` + `${processWorkerRuntime ? ` runtime=${processWorkerRuntime}` : ""}` + ` url=${String(workerUrl)}`);
   const workerDataPayload = {
     sab: signals.sab,
     abortSignalSAB,
     abortSignalMax: usesAbortSignal === true ? resolvedAbortSignalCapacity : undefined,
     list,
     ids,
+    names,
     at,
     thread,
     debug,
-    workerOptions,
+    workerOptions: resolvedWorkerOptions,
     totalNumberOfThread,
     startAt: signalBox.startAt,
     lock: lockBuffers,
     returnLock: returnLockBuffers,
     payloadConfig: resolvedPayloadConfig,
+    bufferReferenceReturn,
     permission
   };
   const baseWorkerOptions = {
     type: "module",
     workerData: workerDataPayload
   };
-  const nodeResourceLimits = toNodeWorkerResourceLimits(workerOptions?.resourceLimits);
-  const baseNodeWorkerOptions = nodeResourceLimits ? { ...baseWorkerOptions, resourceLimits: nodeResourceLimits } : baseWorkerOptions;
-  const withExecArgv = workerExecArgv && workerExecArgv.length > 0 ? { ...baseNodeWorkerOptions, execArgv: workerExecArgv } : baseNodeWorkerOptions;
-  if (HAS_NODE_WORKER_THREADS) {
+  const withExecArgv = workerExecArgv && workerExecArgv.length > 0 ? { ...baseWorkerOptions, execArgv: workerExecArgv } : baseWorkerOptions;
+  if (processWorkerMemory !== undefined) {
+    worker = spawnProcessWorker({
+      workerUrl,
+      bootPayload: toProcessWorkerBootPayload(workerDataPayload, processWorkerMemory),
+      memory: processWorkerMemory,
+      processRuntime: processWorkerRuntime,
+      commandPrefix: processWorkerCommandPrefix,
+      permission
+    });
+  } else if (HAS_NODE_WORKER_THREADS) {
     try {
-      worker = new poliWorker(workerUrl, withExecArgv);
+      worker = new WorkerCtor(workerUrl, withExecArgv);
     } catch (error) {
       if (error?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
         const fallbackExecArgv = toWorkerSafeExecArgv(withExecArgv.execArgv);
         if (fallbackExecArgv && fallbackExecArgv.length > 0) {
           try {
-            worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: fallbackExecArgv });
+            worker = new WorkerCtor(workerUrl, { ...baseWorkerOptions, execArgv: fallbackExecArgv });
           } catch (fallbackError) {
             if (fallbackError?.code === "ERR_WORKER_INVALID_EXEC_ARGV") {
               const compatExecArgv = toWorkerCompatExecArgv(fallbackExecArgv);
               if (compatExecArgv && compatExecArgv.length > 0) {
                 try {
-                  worker = new poliWorker(workerUrl, { ...baseNodeWorkerOptions, execArgv: compatExecArgv });
+                  worker = new WorkerCtor(workerUrl, { ...baseWorkerOptions, execArgv: compatExecArgv });
                 } catch {
-                  worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+                  worker = new WorkerCtor(workerUrl, baseWorkerOptions);
                 }
               } else {
-                worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+                worker = new WorkerCtor(workerUrl, baseWorkerOptions);
               }
             } else {
               throw fallbackError;
             }
           }
         } else {
-          worker = new poliWorker(workerUrl, baseNodeWorkerOptions);
+          worker = new WorkerCtor(workerUrl, baseWorkerOptions);
         }
       } else {
         throw error;
       }
     }
   } else {
-    worker = new poliWorker(workerUrl, {
+    worker = new WorkerCtor(workerUrl, {
       type: "module"
     });
     worker.postMessage?.(workerDataPayload);
   }
   let closedReason;
-  const markWorkerClosed = (reason) => {
+  const markWorkerClosed = (reason, workerBytesReadable = false) => {
     if (closedReason)
       return;
     closedReason = reason;
+    revokeOutstandingBorrowedReturns(workerBytesReadable);
     rejectAll(reason);
-    channelHandler.close();
+    channelHandler?.close();
   };
   const onWorkerMessage = (message) => {
     if (!isWorkerFatalMessage(message))
       return;
-    markWorkerClosed(`Worker startup failed: ${message[WORKER_FATAL_MESSAGE_KEY2]}`);
+    markWorkerClosed(`Worker startup failed: ${message[WORKER_FATAL_MESSAGE_KEY2]}`, true);
     terminateWorkerQuietly(worker);
   };
   const onWorkerError = (error) => {
@@ -4412,37 +5845,23 @@ var spawnWorkerContext = ({
       markWorkerClosed(`Worker exited with code ${normalized}`);
     });
   } else {
-    const webWorker = worker;
-    if (typeof webWorker.addEventListener === "function") {
-      webWorker.addEventListener("message", (event) => {
+    const eventWorker = worker;
+    if (typeof eventWorker.addEventListener === "function") {
+      eventWorker.addEventListener("message", (event) => {
         onWorkerMessage(event?.data);
       });
-      webWorker.addEventListener("error", (event) => {
+      eventWorker.addEventListener("error", (event) => {
         onWorkerError(event?.error ?? event?.message ?? event);
       });
     } else {
-      webWorker.onmessage = (event) => {
+      eventWorker.onmessage = (event) => {
         onWorkerMessage(event?.data);
       };
-      webWorker.onerror = (event) => {
+      eventWorker.onerror = (event) => {
         onWorkerError(event);
       };
     }
   }
-  const thisSignal = signalBox.opView;
-  const a_add = Atomics.add;
-  const a_load2 = Atomics.load;
-  const a_notify = Atomics.notify;
-  const send = () => {
-    if (check.isRunning === true)
-      return;
-    check.isRunning = true;
-    Promise.resolve().then(check);
-    if (a_load2(signalBox.rxStatus, 0) === 0) {
-      a_add(thisSignal, 0, 1);
-      a_notify(thisSignal, 0, 1);
-    }
-  };
   lock.setPromiseHandler((task, isRejected, value) => {
     queue.settlePromisePayload(task, isRejected, value);
     send();
@@ -4459,665 +5878,30 @@ var spawnWorkerContext = ({
     txIdle,
     call,
     kills: async () => {
-      markWorkerClosed("Thread closed");
-      try {
-        Promise.resolve(worker.terminate()).catch(() => {});
-      } catch {}
+      markWorkerClosed("Thread closed", true);
+      terminateWorkerQuietly(worker);
+      cleanupProcessWorkerMemoryQuietly(processWorkerMemory);
     },
-    lock
+    lock,
+    processSharedMemoryBackings: processSharedMemory?.backings,
+    dispatcherCheck,
+    laneWake: sharedChannelHandler !== undefined ? laneWake : undefined,
+    bindSend: sharedChannelHandler !== undefined ? (fn) => void (dispatchSend = fn) : undefined
   };
   return context;
 };
 
-// src/common/path-canonical.ts
-var toCanonicalPath = (candidate, fsApi = {
-  existsSync: existsSyncCompat,
-  realpathSync: realpathSyncCompat
-}) => {
-  const absolute = pathResolve(candidate);
-  const { existsSync, realpathSync } = fsApi;
-  if (typeof realpathSync === "function") {
-    try {
-      return pathResolve(realpathSync(absolute));
-    } catch {}
-  } else {
-    return absolute;
-  }
-  if (typeof existsSync !== "function")
-    return absolute;
-  const missingSegments = [];
-  let cursor = absolute;
-  while (!existsSync(cursor)) {
-    const parent = pathDirname(cursor);
-    if (parent === cursor)
-      return absolute;
-    missingSegments.push(pathBasename(cursor));
-    cursor = parent;
-  }
-  let base = cursor;
-  try {
-    base = realpathSync(cursor);
-  } catch {}
-  let rebuilt = base;
-  for (let i = missingSegments.length - 1;i >= 0; i--) {
-    rebuilt = pathJoin(rebuilt, missingSegments[i]);
-  }
-  return pathResolve(rebuilt);
-};
-
-// src/permission/protocol.ts
-var DEFAULT_ENV_FILE = ".env";
-var DEFAULT_DENO_LOCK_FILE = "deno.lock";
-var NODE_MODULES_DIR = "node_modules";
-var DEFAULT_DENY_RELATIVE = [
-  ".env",
-  ".git",
-  ".npmrc",
-  ".docker",
-  ".secrets"
-];
-var DEFAULT_ALLOW_IMPORT_HOSTS = ["deno.land", "esm.sh", "jsr.io"];
-var SUPPORTED_SYS_API_NAMES = [
-  "hostname",
-  "osRelease",
-  "osUptime",
-  "loadavg",
-  "networkInterfaces",
-  "systemMemoryInfo",
-  "uid",
-  "gid"
-];
-var SUPPORTED_SYS_API_NAME_SET = new Set(SUPPORTED_SYS_API_NAMES);
-var L3_KEYS = {
-  deno: [],
-  node: [
-    "denyRead",
-    "denyWrite",
-    "net",
-    "denyNet",
-    "env.allow",
-    "env.deny",
-    "denyRun",
-    "denyFfi",
-    "sys",
-    "denySys",
-    "allowImport"
-  ]
-};
-var cloneL3Keys = () => ({
-  deno: [...L3_KEYS.deno],
-  node: [...L3_KEYS.node]
-});
-var DEFAULT_DENY_HOME = [
-  ".ssh",
-  ".gnupg",
-  ".aws",
-  ".azure",
-  ".config/gcloud",
-  ".kube"
-];
-var DEFAULT_DENY_ABSOLUTE_POSIX = [
-  "/proc",
-  "/proc/self",
-  "/proc/self/environ",
-  "/proc/self/mem",
-  "/sys",
-  "/dev",
-  "/etc"
-];
-var normalizeList = (values) => {
-  const out = [];
-  const seen = new Set;
-  for (const value of values) {
-    if (seen.has(value))
-      continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-};
-var normalizeStringList = (values) => {
-  if (!values || values.length === 0)
-    return [];
-  const cleaned = [];
-  for (const value of values) {
-    if (typeof value !== "string")
-      continue;
-    const trimmed = value.trim();
-    if (trimmed.length === 0)
-      continue;
-    cleaned.push(trimmed);
-  }
-  return normalizeList(cleaned);
-};
-var normalizeSysApiList = (values) => {
-  if (!values || values.length === 0)
-    return [];
-  const out = [];
-  const seen = new Set;
-  for (const raw of values) {
-    if (typeof raw !== "string")
-      continue;
-    const value = raw.trim();
-    if (value.length === 0 || seen.has(value))
-      continue;
-    if (!SUPPORTED_SYS_API_NAME_SET.has(value))
-      continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-};
-var hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-var normalizeProtocolInput = (input) => !input ? undefined : typeof input === "string" ? { mode: input } : input;
-var isWindows = () => {
-  if (typeof process !== "undefined")
-    return process.platform === "win32";
-  const g = globalThis;
-  return g.Deno?.build?.os === "windows";
-};
-var getCwd = () => {
-  try {
-    if (typeof process !== "undefined" && typeof process.cwd === "function") {
-      return process.cwd();
-    }
-  } catch {}
-  const g = globalThis;
-  try {
-    if (typeof g.Deno?.cwd === "function")
-      return g.Deno.cwd();
-  } catch {}
-  return ".";
-};
-var getHome = () => {
-  try {
-    if (typeof process !== "undefined" && typeof process.env === "object") {
-      const home = process.env.HOME ?? process.env.USERPROFILE;
-      if (typeof home === "string" && home.length > 0)
-        return home;
-    }
-  } catch {}
-  const g = globalThis;
-  try {
-    const home = g.Deno?.env?.get?.("HOME") ?? g.Deno?.env?.get?.("USERPROFILE");
-    if (typeof home === "string" && home.length > 0)
-      return home;
-  } catch {}
+// scripts/browser-stubs/permission.ts
+var resolvePermissionProtocol = () => {
   return;
 };
-var expandHomePath = (value, home) => {
-  if (!home)
-    return value;
-  if (value === "~")
-    return home;
-  if (value.startsWith("~/") || value.startsWith("~\\")) {
-    return pathResolve(home, value.slice(2));
-  }
-  return value;
+var toRuntimePermissionFlags = () => [];
+var unavailable4 = () => {
+  throw new Error("process workers are unavailable in the browser build");
 };
-var toAbsolutePath = (value, cwd, home) => {
-  if (value instanceof URL) {
-    if (value.protocol !== "file:")
-      return;
-    return pathResolve(fileURLToPathCompat(value));
-  }
-  const expanded = expandHomePath(value, home);
-  if (pathIsAbsolute(expanded)) {
-    return pathResolve(expanded);
-  }
-  try {
-    const parsed = new URL(expanded);
-    if (parsed.protocol !== "file:")
-      return;
-    return pathResolve(fileURLToPathCompat(parsed));
-  } catch {
-    return pathResolve(cwd, expanded);
-  }
-};
-var toPath = (value, cwd, home) => value == null ? undefined : toAbsolutePath(value, cwd, home);
-var toPathList = (values, cwd, home) => {
-  if (!values?.length)
-    return [];
-  const out = [];
-  for (const value of values) {
-    const resolved = toPath(value, cwd, home);
-    if (resolved)
-      out.push(resolved);
-  }
-  return out;
-};
-var toUniquePathList = (values, cwd, home) => normalizeList(toPathList(values, cwd, home));
-var toEnvFiles = (input, cwd, home) => {
-  const values = Array.isArray(input) ? input : input ? [input] : [DEFAULT_ENV_FILE];
-  return toUniquePathList(values, cwd, home);
-};
-var rawRealpathSync = realpathSyncCompat;
-var toCanonicalPath2 = (candidate) => {
-  return toCanonicalPath(candidate, {
-    existsSync: existsSyncCompat,
-    realpathSync: rawRealpathSync
-  });
-};
-var isPathWithin = (base, candidate) => {
-  const canonicalBase = toCanonicalPath2(base);
-  const canonicalCandidate = toCanonicalPath2(candidate);
-  const relative = pathRelative(canonicalBase, canonicalCandidate);
-  return relative === "" || !relative.startsWith("..") && !pathIsAbsolute(relative);
-};
-var defaultSensitiveProjectAndHomePaths = (cwd, home) => {
-  const projectSensitive = DEFAULT_DENY_RELATIVE.map((entry) => pathResolve(cwd, entry));
-  const homeSensitive = home ? DEFAULT_DENY_HOME.map((entry) => pathResolve(home, entry)) : [];
-  return normalizeList([...projectSensitive, ...homeSensitive]);
-};
-var defaultSensitiveReadDenyPaths = (cwd, home) => {
-  const projectAndHome = defaultSensitiveProjectAndHomePaths(cwd, home);
-  const osSensitive = isWindows() ? [] : DEFAULT_DENY_ABSOLUTE_POSIX.map((entry) => pathResolve(entry));
-  return normalizeList([...projectAndHome, ...osSensitive]);
-};
-var collectWritePaths = (cwd, values) => {
-  const out = normalizeList(values.length > 0 ? values : [cwd]);
-  if (!out.some((entry) => isPathWithin(entry, cwd) || isPathWithin(cwd, entry))) {
-    out.unshift(cwd);
-  }
-  return normalizeList(out);
-};
-var collectReadPaths = ({
-  cwd,
-  read,
-  moduleFiles,
-  envFiles,
-  denoLock
-}) => {
-  const out = [
-    cwd,
-    pathResolve(cwd, NODE_MODULES_DIR),
-    ...read,
-    ...moduleFiles,
-    ...envFiles
-  ];
-  if (denoLock)
-    out.push(denoLock);
-  return normalizeList(out);
-};
-var resolveDenoLock = (input, cwd, home) => {
-  if (input === false)
-    return;
-  if (input && input !== true) {
-    return toPath(input, cwd, home);
-  }
-  return pathResolve(cwd, DEFAULT_DENO_LOCK_FILE);
-};
-var resolveNodePermissionActivationFlag = () => {
-  try {
-    if (typeof process !== "undefined") {
-      const raw = process.versions?.node;
-      const major = Number.parseInt(String(raw).split(".", 1)[0] ?? "", 10);
-      if (Number.isFinite(major) && major > 0 && major < 22) {
-        return "--experimental-permission";
-      }
-    }
-  } catch {}
-  return "--permission";
-};
-var toNodeFlags = ({
-  read,
-  readAll,
-  write,
-  writeAll,
-  envFiles,
-  node
-}) => {
-  const modelFlags = [];
-  if (readAll) {
-    modelFlags.push("--allow-fs-read=*");
-  } else if (read.length > 0) {
-    modelFlags.push(`--allow-fs-read=${read.join(",")}`);
-  }
-  if (writeAll) {
-    modelFlags.push("--allow-fs-write=*");
-  } else if (write.length > 0) {
-    modelFlags.push(`--allow-fs-write=${write.join(",")}`);
-  }
-  if (node.allowWorker)
-    modelFlags.push("--allow-worker");
-  if (node.allowChildProcess)
-    modelFlags.push("--allow-child-process");
-  if (node.allowAddons)
-    modelFlags.push("--allow-addons");
-  if (node.allowWasi)
-    modelFlags.push("--allow-wasi");
-  const flags = [];
-  if (modelFlags.length > 0) {
-    flags.push(resolveNodePermissionActivationFlag(), ...modelFlags);
-  }
-  for (const file of envFiles) {
-    flags.push(`--env-file-if-exists=${file}`);
-  }
-  return flags;
-};
-var toDenoFlags = ({
-  read,
-  readAll,
-  write,
-  writeAll,
-  denyRead,
-  denyWrite,
-  net,
-  netAll,
-  denyNet,
-  allowImport,
-  allowImportAll,
-  envAllow,
-  envAllowAll,
-  envDeny,
-  envFiles,
-  run,
-  runAll,
-  denyRun,
-  ffi,
-  ffiAll,
-  denyFfi,
-  sys,
-  sysAll,
-  denySys,
-  denoLock,
-  denoLockEnabled,
-  frozen
-}) => {
-  const flags = [];
-  if (readAll) {
-    flags.push("--allow-read");
-  } else if (read.length > 0) {
-    flags.push(`--allow-read=${read.join(",")}`);
-  }
-  if (writeAll) {
-    flags.push("--allow-write");
-  } else if (write.length > 0) {
-    flags.push(`--allow-write=${write.join(",")}`);
-  }
-  if (denyRead.length > 0) {
-    flags.push(`--deny-read=${denyRead.join(",")}`);
-  }
-  if (denyWrite.length > 0) {
-    flags.push(`--deny-write=${denyWrite.join(",")}`);
-  }
-  if (netAll) {
-    flags.push("--allow-net");
-  } else if (net.length > 0) {
-    flags.push(`--allow-net=${net.join(",")}`);
-  }
-  if (denyNet.length > 0) {
-    flags.push(`--deny-net=${denyNet.join(",")}`);
-  }
-  if (allowImportAll) {
-    flags.push("--allow-import");
-  } else if (allowImport.length > 0) {
-    flags.push(`--allow-import=${allowImport.join(",")}`);
-  }
-  if (envAllowAll) {
-    flags.push("--allow-env");
-  } else if (envAllow.length > 0) {
-    flags.push(`--allow-env=${envAllow.join(",")}`);
-  }
-  if (envDeny.length > 0) {
-    flags.push(`--deny-env=${envDeny.join(",")}`);
-  }
-  for (const file of envFiles) {
-    flags.push(`--env-file=${file}`);
-  }
-  if (runAll) {
-    flags.push("--allow-run");
-  } else if (run.length > 0) {
-    flags.push(`--allow-run=${run.join(",")}`);
-  }
-  if (denyRun.length > 0) {
-    flags.push(`--deny-run=${denyRun.join(",")}`);
-  }
-  if (ffiAll) {
-    flags.push("--allow-ffi");
-  } else if (ffi.length > 0) {
-    flags.push(`--allow-ffi=${ffi.join(",")}`);
-  }
-  if (denyFfi.length > 0) {
-    flags.push(`--deny-ffi=${denyFfi.join(",")}`);
-  }
-  if (sysAll) {
-    flags.push("--allow-sys");
-  } else if (sys.length > 0) {
-    flags.push(`--allow-sys=${sys.join(",")}`);
-  }
-  if (denySys.length > 0) {
-    flags.push(`--deny-sys=${denySys.join(",")}`);
-  }
-  if (!denoLockEnabled) {
-    flags.push("--no-lock");
-  } else if (denoLock) {
-    flags.push(`--lock=${denoLock}`);
-    if (frozen)
-      flags.push("--frozen=true");
-  }
-  return flags;
-};
-var resolvePermissionProtocol = ({
-  permission,
-  modules
-}) => {
-  const input = normalizeProtocolInput(permission);
-  if (!input)
-    return;
-  const rawMode = input.mode;
-  const mode = rawMode === "unsafe" || rawMode === "off" ? "unsafe" : rawMode === "custom" ? "custom" : "strict";
-  const unsafe = mode === "unsafe";
-  const allowConsole = input.console ?? unsafe;
-  const cwd = pathResolve(input.cwd ?? getCwd());
-  const home = getHome();
-  const envFiles = toEnvFiles(input.env?.files, cwd, home);
-  const moduleFiles = toUniquePathList(modules, cwd, home);
-  const denoLockInput = input.deno?.lock;
-  const denoLockEnabled = denoLockInput !== false;
-  const denoLock = resolveDenoLock(denoLockInput, cwd, home);
-  if (unsafe) {
-    return {
-      enabled: true,
-      mode,
-      unsafe: true,
-      allowConsole,
-      cwd,
-      read: [],
-      readAll: true,
-      write: [],
-      writeAll: true,
-      denyRead: [],
-      denyWrite: [],
-      net: [],
-      netAll: true,
-      denyNet: [],
-      allowImport: [],
-      allowImportAll: true,
-      env: {
-        allow: [],
-        allowAll: true,
-        deny: [],
-        files: envFiles
-      },
-      envFiles,
-      run: [],
-      runAll: true,
-      denyRun: [],
-      workers: true,
-      ffi: [],
-      ffiAll: true,
-      denyFfi: [],
-      sys: [],
-      sysAll: true,
-      denySys: [],
-      wasi: true,
-      lockFiles: {
-        deno: denoLock
-      },
-      node: {
-        allowWorker: true,
-        allowChildProcess: true,
-        allowAddons: true,
-        allowWasi: true,
-        flags: []
-      },
-      deno: {
-        frozen: false,
-        allowRun: true,
-        flags: []
-      },
-      l3: cloneL3Keys()
-    };
-  }
-  const nodeModulesPath = pathResolve(cwd, NODE_MODULES_DIR);
-  const hasExplicitDenyRead = hasOwn(input, "denyRead");
-  const hasExplicitDenyWrite = hasOwn(input, "denyWrite");
-  const hasExplicitRead = hasOwn(input, "read");
-  const hasExplicitWrite = hasOwn(input, "write");
-  const denyReadDefaults = defaultSensitiveReadDenyPaths(cwd, home);
-  const denyWriteDefaults = normalizeList([
-    ...defaultSensitiveProjectAndHomePaths(cwd, home),
-    nodeModulesPath
-  ]);
-  const denyRead = normalizeList([
-    ...toPathList(input.denyRead, cwd, home),
-    ...mode === "custom" && hasExplicitDenyRead ? [] : denyReadDefaults
-  ]);
-  const denyWrite = normalizeList([
-    ...toPathList(input.denyWrite, cwd, home),
-    ...mode === "custom" && hasExplicitDenyWrite ? [] : denyWriteDefaults
-  ]);
-  const readAll = input.read === true;
-  const writeAll = input.write === true;
-  const configuredRead = readAll ? [] : toPathList(Array.isArray(input.read) ? input.read : undefined, cwd, home);
-  const configuredWrite = writeAll ? [] : toPathList(Array.isArray(input.write) ? input.write : undefined, cwd, home);
-  const resolvedRead = readAll ? [] : hasExplicitRead ? normalizeList(configuredRead) : collectReadPaths({
-    cwd,
-    read: configuredRead,
-    moduleFiles,
-    envFiles,
-    denoLock
-  });
-  const resolvedWrite = writeAll ? [] : hasExplicitWrite ? normalizeList(configuredWrite) : collectWritePaths(cwd, configuredWrite);
-  const netAll = input.net === true;
-  const net = netAll ? [] : normalizeStringList(Array.isArray(input.net) ? input.net : []);
-  const denyNet = normalizeStringList(input.denyNet);
-  const allowImportAll = input.allowImport === true;
-  const allowImport = allowImportAll ? [] : normalizeStringList(Array.isArray(input.allowImport) ? input.allowImport : [...DEFAULT_ALLOW_IMPORT_HOSTS]);
-  const envAllowAll = input.env?.allow === true;
-  const envAllow = envAllowAll ? [] : normalizeStringList(Array.isArray(input.env?.allow) ? input.env.allow : []);
-  const envDeny = normalizeStringList(input.env?.deny);
-  const legacyRunEnabled = input.node?.allowChildProcess === true || input.deno?.allowRun === true;
-  const runSource = hasOwn(input, "run") ? input.run : legacyRunEnabled ? true : [];
-  const runAll = runSource === true;
-  const run = runAll ? [] : normalizeStringList(Array.isArray(runSource) ? runSource : []);
-  const denyRun = normalizeStringList(input.denyRun);
-  const workers = hasOwn(input, "workers") ? input.workers === true : input.node?.allowWorker === true;
-  const ffiSource = hasOwn(input, "ffi") ? input.ffi : input.node?.allowAddons === true ? true : false;
-  const ffiAll = ffiSource === true;
-  const ffi = ffiAll ? [] : toUniquePathList(Array.isArray(ffiSource) ? ffiSource : undefined, cwd, home);
-  const denyFfi = toUniquePathList(input.denyFfi, cwd, home);
-  const sysSource = input.sys;
-  const sysAll = sysSource === true;
-  const sys = sysAll ? [] : normalizeSysApiList(Array.isArray(sysSource) ? sysSource : []);
-  const denySys = normalizeSysApiList(input.denySys);
-  const wasi = hasOwn(input, "wasi") ? input.wasi === true : input.node?.allowWasi === true;
-  const nodeSettings = {
-    allowWorker: workers,
-    allowChildProcess: runAll || run.length > 0,
-    allowAddons: ffiAll || ffi.length > 0,
-    allowWasi: wasi
-  };
-  const denoSettings = {
-    frozen: input.deno?.frozen !== false,
-    allowRun: runAll || run.length > 0
-  };
-  return {
-    enabled: true,
-    mode,
-    unsafe: false,
-    allowConsole,
-    cwd,
-    read: resolvedRead,
-    readAll,
-    write: resolvedWrite,
-    writeAll,
-    denyRead,
-    denyWrite,
-    net,
-    netAll,
-    denyNet,
-    allowImport,
-    allowImportAll,
-    env: {
-      allow: envAllow,
-      allowAll: envAllowAll,
-      deny: envDeny,
-      files: envFiles
-    },
-    envFiles,
-    run,
-    runAll,
-    denyRun,
-    workers,
-    ffi,
-    ffiAll,
-    denyFfi,
-    sys,
-    sysAll,
-    denySys,
-    wasi,
-    lockFiles: {
-      deno: denoLock
-    },
-    node: {
-      ...nodeSettings,
-      flags: toNodeFlags({
-        read: resolvedRead,
-        readAll,
-        write: resolvedWrite,
-        writeAll,
-        envFiles,
-        node: nodeSettings
-      })
-    },
-    deno: {
-      ...denoSettings,
-      flags: toDenoFlags({
-        read: resolvedRead,
-        readAll,
-        write: resolvedWrite,
-        writeAll,
-        denyRead,
-        denyWrite,
-        net,
-        netAll,
-        denyNet,
-        allowImport,
-        allowImportAll,
-        envAllow,
-        envAllowAll,
-        envDeny,
-        envFiles,
-        run,
-        runAll,
-        denyRun,
-        ffi,
-        ffiAll,
-        denyFfi,
-        sys,
-        sysAll,
-        denySys,
-        denoLock,
-        denoLockEnabled,
-        frozen: denoSettings.frozen
-      })
-    },
-    l3: cloneL3Keys()
-  };
-};
-var toRuntimePermissionFlags = (protocol) => protocol?.enabled === true && protocol.unsafe !== true ? RUNTIME === "node" ? protocol.node.flags : RUNTIME === "deno" ? protocol.deno.flags : [] : [];
+var classifyProcessPermissionCompatibility = unavailable4;
+var enforceProcessPermissionCompatibility = unavailable4;
+
 // src/runtime/balancer.ts
 var selectStrategy = (contexts, handlers, strategy) => {
   switch (strategy ?? "roundRobin") {
@@ -5267,25 +6051,33 @@ function firstIdleRandom(contexts) {
 }
 
 // src/runtime/inline-executor.ts
+var SlotStateMacro = {
+  Free: -1,
+  Pending: 0
+};
+var TimeoutKind2 = {
+  Reject: 0,
+  Resolve: 1
+};
 var normalizeTimeout2 = (timeout) => {
   if (timeout == null)
     return;
   if (typeof timeout === "number") {
-    return timeout >= 0 ? { ms: timeout, kind: 0 /* Reject */, value: new Error("Task timeout") } : undefined;
+    return timeout >= 0 ? { ms: timeout, kind: TimeoutKind2.Reject, value: new Error("Task timeout") } : undefined;
   }
   const ms = timeout.time;
   if (!(ms >= 0))
     return;
   if ("default" in timeout) {
-    return { ms, kind: 1 /* Resolve */, value: timeout.default };
+    return { ms, kind: TimeoutKind2.Resolve, value: timeout.default };
   }
   if (timeout.maybe === true) {
-    return { ms, kind: 1 /* Resolve */, value: undefined };
+    return { ms, kind: TimeoutKind2.Resolve, value: undefined };
   }
   if ("error" in timeout) {
-    return { ms, kind: 0 /* Reject */, value: timeout.error };
+    return { ms, kind: TimeoutKind2.Reject, value: timeout.error };
   }
-  return { ms, kind: 0 /* Reject */, value: new Error("Task timeout") };
+  return { ms, kind: TimeoutKind2.Reject, value: new Error("Task timeout") };
 };
 var raceTimeout2 = (promise, spec) => new Promise((resolve, reject) => {
   let done = false;
@@ -5293,7 +6085,7 @@ var raceTimeout2 = (promise, spec) => new Promise((resolve, reject) => {
     if (done)
       return;
     done = true;
-    if (spec.kind === 1 /* Resolve */) {
+    if (spec.kind === TimeoutKind2.Resolve) {
       resolve(spec.value);
     } else {
       reject(spec.value);
@@ -5315,8 +6107,10 @@ var raceTimeout2 = (promise, spec) => new Promise((resolve, reject) => {
 });
 var INLINE_ABORT_TOOLKIT = (() => {
   const hasAborted = () => false;
+  const now = () => performance.now();
   return {
-    hasAborted
+    hasAborted,
+    now
   };
 })();
 var composeInlineCallable = (fn, timeout, useAbortToolkit = false) => {
@@ -5334,11 +6128,18 @@ var createInlineExecutor = ({
   genTaskID: genTaskID2,
   batchSize
 }) => {
-  const entries = Object.values(tasks).sort((a, b) => a.id - b.id);
-  const runners = entries.map((entry) => composeInlineCallable(entry.f, entry.timeout, entry.abortSignal !== undefined));
+  const entries = Array.isArray(tasks) ? tasks : Object.values(tasks).sort((a, b) => a.id - b.id);
+  const runners = entries.map((entry) => {
+    if (entry.imported === true) {
+      return () => {
+        throw new Error("Imported task cannot run on the host inline lane");
+      };
+    }
+    return composeInlineCallable(entry.f, entry.timeout, entry.abortSignal !== undefined);
+  });
   const initCap = 16;
   let fnByIndex = new Int32Array(initCap);
-  let stateByIndex = new Int8Array(initCap).fill(-1 /* Free */);
+  let stateByIndex = new Int8Array(initCap).fill(SlotStateMacro.Free);
   let argsByIndex = new Array(initCap);
   let taskIdByIndex = new Array(initCap).fill(-1);
   let deferredByIndex = new Array(initCap);
@@ -5354,7 +6155,7 @@ var createInlineExecutor = ({
   const channel = createRuntimeMessageChannel();
   const port1 = channel.port1;
   const port2 = channel.port2;
-  const post2 = port2.postMessage.bind(port2);
+  const post2 = (message) => port2.postMessage(message);
   const hasPending = () => pendingQueue.isEmpty === false;
   const queueMicro = typeof queueMicrotask === "function" ? queueMicrotask : (callback) => Promise.resolve().then(callback);
   const scheduleMacro = () => {
@@ -5374,12 +6175,12 @@ var createInlineExecutor = ({
     send();
   };
   const enqueueIfCurrent = (index, taskID) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (stateByIndex[index] !== SlotStateMacro.Pending || taskIdByIndex[index] !== taskID)
       return;
     enqueue(index);
   };
   const settleIfCurrent = (index, taskID, isError, value) => {
-    if (stateByIndex[index] !== 0 /* Pending */ || taskIdByIndex[index] !== taskID)
+    if (stateByIndex[index] !== SlotStateMacro.Pending || taskIdByIndex[index] !== taskID)
       return;
     const deferred = deferredByIndex[index];
     if (deferred) {
@@ -5399,7 +6200,7 @@ var createInlineExecutor = ({
     nextFnByIndex.set(fnByIndex);
     fnByIndex = nextFnByIndex;
     const nextStateByIndex = new Int8Array(newCap);
-    nextStateByIndex.fill(-1 /* Free */);
+    nextStateByIndex.fill(SlotStateMacro.Free);
     nextStateByIndex.set(stateByIndex);
     stateByIndex = nextStateByIndex;
     argsByIndex.length = newCap;
@@ -5418,7 +6219,7 @@ var createInlineExecutor = ({
       if (maybeIndex === undefined)
         break;
       const index = maybeIndex | 0;
-      if (stateByIndex[index] !== 0 /* Pending */)
+      if (stateByIndex[index] !== SlotStateMacro.Pending)
         continue;
       const taskID = taskIdByIndex[index];
       try {
@@ -5457,7 +6258,7 @@ var createInlineExecutor = ({
   }
   function cleanup(index) {
     working--;
-    stateByIndex[index] = -1 /* Free */;
+    stateByIndex[index] = SlotStateMacro.Free;
     fnByIndex[index] = 0;
     taskIdByIndex[index] = -1;
     argsByIndex[index] = undefined;
@@ -5474,7 +6275,7 @@ var createInlineExecutor = ({
     argsByIndex[index] = args;
     fnByIndex[index] = fnNumber | 0;
     deferredByIndex[index] = deferred;
-    stateByIndex[index] = 0 /* Pending */;
+    stateByIndex[index] = SlotStateMacro.Pending;
     working++;
     if (args instanceof Promise) {
       args.then((value) => {
@@ -5492,16 +6293,16 @@ var createInlineExecutor = ({
   return {
     kills: async () => {
       for (let index = 0;index < stateByIndex.length; index++) {
-        if (stateByIndex[index] !== 0 /* Pending */)
+        if (stateByIndex[index] !== SlotStateMacro.Pending)
           continue;
         try {
           deferredByIndex[index]?.reject("Thread closed");
         } catch {}
       }
       port1.onmessage = null;
-      port1.close();
+      port1.close?.();
       port2.onmessage = null;
-      port2.close();
+      port2.close?.();
       pendingQueue.clear();
       freeTop = 0;
       freeStack.length = 0;
@@ -5509,7 +6310,7 @@ var createInlineExecutor = ({
       taskIdByIndex.fill(-1);
       deferredByIndex.fill(undefined);
       fnByIndex.fill(0);
-      stateByIndex.fill(-1 /* Free */);
+      stateByIndex.fill(SlotStateMacro.Free);
       working = 0;
       isInMacro = false;
       isInMicro = false;
@@ -5520,41 +6321,174 @@ var createInlineExecutor = ({
 };
 
 // src/api.ts
+var hasDebugNamespace = (namespaces, namespace) => namespaces.has("*") || namespaces.has(namespace);
+var createHostDebug = (namespaces) => {
+  const enabled = (namespace) => hasDebugNamespace(namespaces, namespace);
+  if (!enabled("host"))
+    return;
+  const base = performance.now();
+  const tag = `host·${RUNTIME}`;
+  const log = (message) => {
+    const elapsed = (performance.now() - base).toFixed(1);
+    console.error(`[${tag}·+${elapsed}ms] host: ${message}`);
+  };
+  return { log };
+};
+var readHostCwd = () => {
+  const denoCwd = globalThis.Deno?.cwd;
+  if (typeof denoCwd === "function") {
+    try {
+      return denoCwd();
+    } catch {}
+  }
+  const nodeProcess4 = getNodeProcess();
+  if (typeof nodeProcess4?.cwd === "function") {
+    try {
+      return nodeProcess4.cwd();
+    } catch {
+      return;
+    }
+  }
+  return;
+};
+var readKnownProcessWorkerNodeMajor = (worker) => {
+  if (RUNTIME !== "node")
+    return;
+  if (readProcessWorkerCommandPrefix(worker) !== undefined)
+    return;
+  const nodeProcess4 = getNodeProcess();
+  if (nodeProcess4?.env?.NODE_BINARY !== undefined)
+    return;
+  const raw2 = nodeProcess4?.versions?.node;
+  const major = Number.parseInt(String(raw2).split(".", 1)[0] ?? "", 10);
+  return Number.isInteger(major) && major > 0 ? major : undefined;
+};
+var formatDebugList = (values, empty = "(none)") => values && values.length > 0 ? values.join(",") : empty;
 var MAX_FUNCTION_ID = 65535;
 var MAX_FUNCTION_COUNT = MAX_FUNCTION_ID + 1;
+var DEFAULT_IMPORT_EXPORT_NAME = "default";
 var isMain = RUNTIME_IS_MAIN_THREAD;
 var toListAndIds = (args) => {
-  const result = Object.values(args).reduce((acc, v) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc), [
+  const result = args.reduce((acc, v) => (acc[0].add(v.importedFrom), acc[1].add(v.id), acc[2].add(v.at), acc[3].push(v.name), acc), [
     new Set,
     new Set,
-    new Set
+    new Set,
+    []
   ]);
   return {
     list: [...result[0]],
     ids: [...result[1]],
-    at: [...result[2]]
+    at: [...result[2]],
+    names: result[3]
   };
 };
+var resolveImportHref = (href, callerHref) => {
+  try {
+    return new URL(href, callerHref).href;
+  } catch {
+    return toModuleUrl(href);
+  }
+};
+var resolveWorkerSettings = (worker, callerHref) => {
+  if (worker === undefined)
+    return;
+  const usingPorffor = worker.processRuntime === "porffor";
+  if (usingPorffor && worker.runtime !== undefined && worker.runtime !== "compiled") {
+    throw new Error('worker.processRuntime "porffor" requires worker.runtime to be compiled or omitted');
+  }
+  const forcePorfforBuild = usingPorffor && worker.runtime === undefined;
+  let resolved = usingPorffor ? {
+    ...worker,
+    runtime: "compiled",
+    processRuntime: undefined,
+    compiled: forcePorfforBuild ? { ...worker.compiled, build: "always" } : worker.compiled
+  } : worker;
+  const bootstrap = resolved.bootstrap;
+  if (bootstrap !== undefined) {
+    const name = bootstrap.name ?? DEFAULT_IMPORT_EXPORT_NAME;
+    if (typeof bootstrap.href !== "string" || bootstrap.href.length === 0) {
+      throw new TypeError("worker.bootstrap.href must be a non-empty string");
+    }
+    if (typeof name !== "string" || name.length === 0) {
+      throw new TypeError("worker.bootstrap.name must be a non-empty string");
+    }
+    resolved = {
+      ...resolved,
+      bootstrap: {
+        ...bootstrap,
+        href: resolveImportHref(bootstrap.href, callerHref),
+        name
+      }
+    };
+  }
+  const compiled = resolved.compiled;
+  if (compiled !== undefined) {
+    if (compiled.build !== undefined && typeof compiled.build !== "boolean" && compiled.build !== "always") {
+      throw new TypeError('worker.compiled.build must be a boolean or "always"');
+    }
+    for (const [name, value] of Object.entries({
+      artifact: compiled.artifact,
+      manifest: compiled.manifest,
+      compiler: compiled.compiler
+    })) {
+      if (value !== undefined && (typeof value !== "string" || value.length === 0)) {
+        throw new TypeError("worker.compiled." + name + " must be a non-empty string");
+      }
+    }
+    resolved = {
+      ...resolved,
+      compiled: {
+        build: compiled.build,
+        compiler: compiled.compiler === undefined ? undefined : compiled.compiler.startsWith(".") || compiled.compiler.startsWith("/") || compiled.compiler.startsWith("file:") || /^[A-Za-z]:[\\/]/.test(compiled.compiler) ? resolveImportHref(compiled.compiler, callerHref) : compiled.compiler,
+        artifact: compiled.artifact === undefined ? undefined : resolveImportHref(compiled.artifact, callerHref),
+        manifest: compiled.manifest === undefined ? undefined : resolveImportHref(compiled.manifest, callerHref)
+      }
+    };
+  }
+  return resolved;
+};
+var isTaskDefinition = (value) => value != null && typeof value === "object" && typeof value.f === "function";
+var toPoolTaskEntries = (input, callerHref) => Object.entries(input).map(([name, value]) => {
+  if (isTaskDefinition(value)) {
+    return {
+      ...value,
+      name
+    };
+  }
+  if (typeof value === "function") {
+    return {
+      f: value,
+      id: -1,
+      importedFrom: new URL(callerHref).href,
+      at: -1,
+      name,
+      [endpointSymbol]: true
+    };
+  }
+  throw new TypeError(`createPool task "${name}" must be a task definition or exported function`);
+});
 var createPool = ({
   threads,
   debug,
   inliner,
   balancer,
   payload,
-  payloadInitialBytes,
-  payloadMaxBytes,
-  bufferMode,
-  maxPayloadBytes,
+  unsafe,
   abortSignalCapacity,
   source,
   worker,
   workerExecArgv,
   permission,
-  dispatcher,
   host
 }) => (tasks) => {
+  const bufferReferenceReturn = unsafe?.BufferReferenceReturn;
+  const debugRequested = DEBUG_ENABLED || debug !== undefined && debug !== false;
+  let debugNamespaces;
+  const getDebugNamespaces = () => debugNamespaces ??= resolveDebugNamespaces(debug);
+  const hostDebug = debugRequested ? createHostDebug(getDebugNamespaces()) : undefined;
+  const debugEnabled = (namespace) => debugRequested && hasDebugNamespace(getDebugNamespaces(), namespace);
   if (RUNTIME_IS_MAIN_THREAD === false) {
-    if (debug?.extras === true) {
+    if (debugEnabled("lifecycle")) {
       console.warn("createPool has been called with : " + JSON.stringify(RUNTIME_WORKER_DATA));
     }
     const notMainThreadError = () => {
@@ -5571,13 +6505,17 @@ var createPool = ({
     const mainThreadOnlyProxy = new Proxy(throwingProxyTarget, throwingProxyHandler);
     return {
       shutdown: mainThreadOnlyProxy,
+      [Symbol.dispose]: () => {},
       call: mainThreadOnlyProxy
     };
   }
-  const { list, ids, at } = toListAndIds(tasks), listOfFunctions = Object.entries(tasks).map(([k, v]) => ({
-    ...v,
-    name: k
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  const callerHref = getCallerHref(3);
+  const listOfFunctions = toPoolTaskEntries(tasks, callerHref).sort((a, b) => a.name.localeCompare(b.name));
+  const { list, ids, names, at } = toListAndIds(listOfFunctions);
+  hostDebug?.log(`cwd=${readHostCwd() ?? "(unknown)"} caller=${callerHref}`);
+  listOfFunctions.forEach((fn) => {
+    hostDebug?.log(`task name=${fn.name} id=${fn.id} from=${fn.importedFrom}`);
+  });
   if (listOfFunctions.length > MAX_FUNCTION_COUNT) {
     throw new RangeError(`Too many tasks: received ${listOfFunctions.length}. ` + `Maximum is ${MAX_FUNCTION_COUNT} (Uint16 function IDs: 0..${MAX_FUNCTION_ID}).`);
   }
@@ -5591,10 +6529,11 @@ var createPool = ({
     modules: list
   });
   const permissionExecArgv = toRuntimePermissionFlags(permissionProtocol);
-  const allowedFlags = typeof process !== "undefined" && process.allowedNodeEnvironmentFlags ? process.allowedNodeEnvironmentFlags : null;
+  const nodeProcess4 = getNodeProcess();
+  const allowedFlags = nodeProcess4?.allowedNodeEnvironmentFlags ?? null;
   const isNodePermissionFlag = (flag) => {
     const key = flag.split("=", 1)[0];
-    return key === "--permission" || key === "--experimental-permission" || key === "--allow-fs-read" || key === "--allow-fs-write" || key === "--allow-worker" || key === "--allow-child-process" || key === "--allow-addons" || key === "--allow-wasi";
+    return key === "--permission" || key === "--experimental-permission" || key === "--allow-fs-read" || key === "--allow-fs-write" || key === "--allow-worker" || key === "--allow-child-process" || key === "--allow-net" || key === "--allow-addons" || key === "--allow-ffi" || key === "--allow-wasi";
   };
   const stripNodePermissionFlags = (flags) => flags?.filter((flag) => !isNodePermissionFlag(flag));
   const dedupeFlags = (flags) => {
@@ -5619,41 +6558,171 @@ var createPool = ({
     });
     return filtered.length > 0 ? filtered : undefined;
   };
-  const defaultExecArgvCandidate = workerExecArgv ?? (typeof process !== "undefined" && Array.isArray(process.execArgv) ? allowedFlags?.has("--expose-gc") === true ? process.execArgv.includes("--expose-gc") ? process.execArgv : [...process.execArgv, "--expose-gc"] : process.execArgv : undefined);
+  const inheritedExecArgv = Array.isArray(nodeProcess4?.execArgv) ? nodeProcess4.execArgv : undefined;
+  const defaultExecArgvCandidate = workerExecArgv ?? (inheritedExecArgv ? allowedFlags?.has("--expose-gc") === true ? inheritedExecArgv.includes("--expose-gc") ? inheritedExecArgv : [...inheritedExecArgv, "--expose-gc"] : inheritedExecArgv : undefined);
   const defaultExecArgv = permissionProtocol?.unsafe === true ? stripNodePermissionFlags(defaultExecArgvCandidate) : defaultExecArgvCandidate;
   const combinedExecArgv = dedupeFlags([
     ...permissionExecArgv,
     ...defaultExecArgv ?? []
   ]);
   const execArgv = sanitizeExecArgv(combinedExecArgv.length > 0 ? combinedExecArgv : undefined);
-  const hostDispatcher = host ?? dispatcher;
+  hostDebug?.log(`pool runtime=${RUNTIME} workers=${threads ?? 1}` + ` lanes=${totalNumberOfThread} inliner=${usingInliner ? "on" : "off"}`);
+  hostDebug?.log(`modules=${formatDebugList(list)}`);
+  hostDebug?.log(`permission=${permissionProtocol?.mode ?? "off"} execArgv=${formatDebugList(execArgv)}`);
   const usesAbortSignal = listOfFunctions.some((fn) => fn.abortSignal !== undefined);
-  const hardTimeoutMs = Number.isFinite(worker?.hardTimeoutMs) ? Math.max(1, Math.floor(worker?.hardTimeoutMs)) : undefined;
+  const resolvedWorker = resolveWorkerSettings(worker, callerHref);
+  const usingCompiledWorker = resolvedWorker?.runtime === "compiled";
+  if (resolvedWorker?.compiled !== undefined && !usingCompiledWorker) {
+    throw new Error("worker.compiled requires worker.runtime to be compiled");
+  }
+  if (usingCompiledWorker) {
+    const unsupported = [];
+    if (usingInliner)
+      unsupported.push("inliner");
+    if (payload !== undefined)
+      unsupported.push("payload");
+    if (unsafe !== undefined)
+      unsupported.push("unsafe");
+    if (source !== undefined)
+      unsupported.push("source");
+    if (workerExecArgv !== undefined)
+      unsupported.push("workerExecArgv");
+    if (permission !== undefined)
+      unsupported.push("permission");
+    if (host !== undefined)
+      unsupported.push("host");
+    if (resolvedWorker.bootstrap !== undefined) {
+      unsupported.push("worker.bootstrap");
+    }
+    if (resolvedWorker.timers !== undefined)
+      unsupported.push("worker.timers");
+    if (resolvedWorker.processRuntime !== undefined) {
+      unsupported.push("worker.processRuntime");
+    }
+    if (resolvedWorker.processCommandPrefix !== undefined) {
+      unsupported.push("worker.processCommandPrefix");
+    }
+    if (resolvedWorker.processSharedMemory !== undefined) {
+      unsupported.push("worker.processSharedMemory");
+    }
+    if (resolvedWorker.resolveAfterFinishingAll !== undefined) {
+      unsupported.push("worker.resolveAfterFinishingAll");
+    }
+    if (listOfFunctions.some((fn) => fn.timeout !== undefined)) {
+      unsupported.push("task timeout");
+    }
+    if (listOfFunctions.some((fn) => fn.imported === true)) {
+      unsupported.push("importTask");
+    }
+    if (unsupported.length > 0) {
+      throw new Error("Compiled workers do not support: " + unsupported.join(", "));
+    }
+  }
+  if (resolvedWorker?.bootstrap !== undefined) {
+    hostDebug?.log(`bootstrap href=${resolvedWorker.bootstrap.href}` + ` name=${resolvedWorker.bootstrap.name}`);
+  }
+  if (usingInliner && resolvedWorker?.bootstrap !== undefined) {
+    throw new Error("worker.bootstrap cannot be used with the inliner");
+  }
+  if (resolvedWorker?.runtime === "process") {
+    const processRuntime = readProcessWorkerRuntime(resolvedWorker);
+    enforceProcessPermissionCompatibility(classifyProcessPermissionCompatibility({
+      permission,
+      resolved: permissionProtocol,
+      target: {
+        runtime: processRuntime,
+        nodeMajor: processRuntime === "node" ? readKnownProcessWorkerNodeMajor(resolvedWorker) : undefined
+      }
+    }));
+  }
+  const hardTimeoutMs = Number.isFinite(resolvedWorker?.hardTimeoutMs) ? Math.max(1, Math.floor(resolvedWorker?.hardTimeoutMs)) : undefined;
+  if (RUNTIME_POOL_DEPTH >= 1) {
+    throw new Error(`createPool() tried to spawn workers from inside a worker process ` + `(pool depth ${RUNTIME_POOL_DEPTH}). This usually means a pool is ` + `created at module scope in a module your workers import, so every ` + `worker spawns its own pool recursively. Is your createPool protected ` + `by isMain? Guard pool creation behind \`if (isMain) { ... }\` ` + `(import { isMain } from "knitting") so only the main program starts ` + `the pool.`);
+  }
+  const dispatcherEnv = nodeProcess4?.env?.KNITTING_DISPATCHER;
+  const explicitDispatcher = host?.dispatcher ?? (dispatcherEnv === "serial-channel" || dispatcherEnv === "per-thread" ? dispatcherEnv : undefined);
+  const autoDispatcher = (() => {
+    if (RUNTIME === "bun")
+      return "per-thread";
+    if ((threads ?? 1) <= 1)
+      return "per-thread";
+    return "serial-channel";
+  })();
+  const dispatcher = explicitDispatcher ?? autoDispatcher;
+  const serialChannel = !usingCompiledWorker && dispatcher === "serial-channel";
+  const serialDispatcherChannel = serialChannel ? new ChannelHandler : undefined;
   let workers = Array.from({
     length: threads ?? 1
   }).map((_, thread) => spawnWorkerContext({
     list,
     ids,
+    names,
     at,
     thread,
     debug,
+    hostDebug: hostDebug?.log,
     totalNumberOfThread,
     source,
-    workerOptions: worker,
+    workerOptions: resolvedWorker,
     workerExecArgv: execArgv,
-    host: hostDispatcher,
+    host,
     payload,
-    payloadInitialBytes,
-    payloadMaxBytes,
-    bufferMode,
-    maxPayloadBytes,
+    bufferReferenceReturn,
     abortSignalCapacity,
     usesAbortSignal,
-    permission: permissionProtocol
+    permission: permissionProtocol,
+    sharedChannelHandler: serialDispatcherChannel
   }));
+  const sharedDispatcherChannel = serialDispatcherChannel;
+  if (serialChannel) {
+    const channel = serialDispatcherChannel;
+    const checks = workers.map((context) => context.dispatcherCheck);
+    let serialScheduled = false;
+    let serialInFlight = false;
+    let serialRerun = false;
+    const runSerialChecks = () => {
+      if (serialInFlight) {
+        serialRerun = true;
+        return;
+      }
+      serialInFlight = true;
+      do {
+        serialRerun = false;
+        serialScheduled = false;
+        for (let index = 0;index < checks.length; index++) {
+          const check = checks[index];
+          if (check.isRunning !== true)
+            check.isRunning = true;
+          check();
+        }
+      } while (serialRerun);
+      serialInFlight = false;
+    };
+    const scheduleSerialCheck = () => {
+      if (serialInFlight) {
+        serialRerun = true;
+        return;
+      }
+      if (serialScheduled)
+        return;
+      serialScheduled = true;
+      Promise.resolve().then(runSerialChecks);
+    };
+    channel.open(runSerialChecks);
+    workers.forEach((context) => {
+      const wake = context.laneWake;
+      context.bindSend(() => {
+        scheduleSerialCheck();
+        wake();
+      });
+    });
+    hostDebug?.log(`dispatcher=serial-channel lanes=${checks.length}`);
+  } else {
+    hostDebug?.log(`dispatcher=per-thread lanes=${workers.length}`);
+  }
   if (usingInliner) {
     const mainThread = createInlineExecutor({
-      tasks,
+      tasks: listOfFunctions,
       genTaskID,
       batchSize: inliner?.batchSize ?? 1
     });
@@ -5676,7 +6745,7 @@ var createPool = ({
       return closePromise;
     closing = true;
     closePromise = Promise.allSettled(workers.map((context) => context.kills())).then(() => {
-      return;
+      sharedDispatcherChannel?.close();
     });
     return closePromise;
   };
@@ -5732,11 +6801,15 @@ var createPool = ({
     })();
     return shutdownPromise;
   };
+  const disposePool = () => {
+    shutdownWithDelay();
+  };
   const indexedFunctions = listOfFunctions.map((fn, index) => ({
     name: fn.name,
     index,
     timeout: fn.timeout,
-    abortSignal: fn.abortSignal
+    abortSignal: fn.abortSignal,
+    imported: fn.imported === true
   }));
   const callHandlers = new Map;
   for (const { name } of indexedFunctions) {
@@ -5755,39 +6828,72 @@ var createPool = ({
     }
   }
   const useDirectHandler = (threads ?? 1) === 1 && !usingInliner;
-  const buildInvoker = (handlers) => useDirectHandler ? handlers[0] : managerMethod({
-    contexts: workers,
-    balancer,
-    handlers,
-    inlinerGate: usingInliner ? {
-      index: inlinerIndex,
-      threshold: inlinerDispatchThreshold
-    } : undefined
-  });
-  const callEntries = Array.from(callHandlers.entries(), ([name, handlers]) => [name, buildInvoker(handlers)]);
+  const buildImportedInvoker = (handlers) => {
+    const workerHandlers = [];
+    const workerContexts = [];
+    for (let lane = 0;lane < handlers.length; lane += 1) {
+      if (lane === inlinerIndex)
+        continue;
+      workerHandlers.push(handlers[lane]);
+      workerContexts.push(workers[lane]);
+    }
+    if (workerHandlers.length === 0) {
+      throw new Error("Imported task has no worker lane to run on: the pool only has the " + "host inliner. Imported tasks are never inlined on the host; add at " + "least one worker thread.");
+    }
+    if (workerHandlers.length === 1)
+      return workerHandlers[0];
+    return managerMethod({
+      contexts: workerContexts,
+      balancer,
+      handlers: workerHandlers
+    });
+  };
+  const buildInvoker = (handlers, imported) => {
+    if (imported && usingInliner) {
+      return buildImportedInvoker(handlers);
+    }
+    return useDirectHandler ? handlers[0] : managerMethod({
+      contexts: workers,
+      balancer,
+      handlers,
+      inlinerGate: usingInliner ? {
+        index: inlinerIndex,
+        threshold: inlinerDispatchThreshold
+      } : undefined
+    });
+  };
+  let callEntries;
+  try {
+    callEntries = indexedFunctions.map(({ name, imported }) => [name, buildInvoker(callHandlers.get(name), imported)]);
+  } catch (error) {
+    closePoolNow();
+    throw error;
+  }
   return {
     shutdown: shutdownWithDelay,
+    [Symbol.dispose]: disposePool,
     call: Object.fromEntries(callEntries)
   };
 };
 var SINGLE_TASK_KEY = "__task__";
-var DEFAULT_IMPORT_EXPORT_NAME = "default";
 var createSingleTaskPool = (single, options) => {
   const pool = createPool(options ?? {})({
     [SINGLE_TASK_KEY]: single
   });
   return {
     call: pool.call[SINGLE_TASK_KEY],
-    shutdown: pool.shutdown
+    shutdown: pool.shutdown,
+    [Symbol.dispose]: pool[Symbol.dispose]
   };
 };
-var buildTaskDefinitionFromCaller = (input, callerHref, at) => {
+var buildTaskDefinitionFromCaller = (input, callerHref, at, imported = false) => {
   const importedFrom = new URL(callerHref).href;
   const out = {
     ...input,
     id: genTaskID(),
     importedFrom,
     at,
+    imported,
     [endpointSymbol]: true
   };
   out.createPool = (options) => {
@@ -5801,13 +6907,6 @@ var buildTaskDefinitionFromCaller = (input, callerHref, at) => {
 var buildTaskDefinition = (input, callerOffset) => {
   const [href, at] = getCallerFilePath(callerOffset);
   return buildTaskDefinitionFromCaller(input, href, at);
-};
-var resolveImportHref = (href, callerHref) => {
-  try {
-    return new URL(href, callerHref).href;
-  } catch {
-    return toModuleUrl(href);
-  }
 };
 var createImportedTaskFn = (href, exportName) => {
   let cachedFn;
@@ -5848,13 +6947,16 @@ function importTask(options) {
   return buildTaskDefinitionFromCaller({
     ...rest,
     f: createImportedTaskFn(resolvedHref, name)
-  }, callerHref, at);
+  }, callerHref, at, true);
 }
 export {
   workerMainLoop,
   task,
+  setModuleUrl,
+  isNumericArray,
   isMain,
   importTask,
   createPool,
+  NumericArray,
   Envelope
 };
