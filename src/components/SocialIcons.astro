@@ -17,6 +17,29 @@ const docsHref = `${normalizedBase}start/installation/`;
   )
 }
 
+<style is:global>
+  /* Starlight hides the header's right group below its nav breakpoint, which
+     takes the Docs shortcut with it. A splash page has no sidebar and no menu
+     button, so on a phone that leaves the home page with no route into the
+     docs tree at all. Bring back the shortcut alone, unlayered so it outranks
+     the `sl-hidden` utility. */
+  @media (max-width: 49.9375rem) {
+    html:has([data-knit-home-marker]) .page > header .right-group {
+      display: flex;
+    }
+
+    html:has([data-knit-home-marker]) .page > header .right-group > *:not(.social-icons),
+    html:has([data-knit-home-marker]) .page > header .social-icons > *:not(.docs-shortcut) {
+      display: none;
+    }
+
+    /* The group's trailing divider only makes sense beside the icons it split. */
+    html:has([data-knit-home-marker]) .page > header .social-icons::after {
+      content: none;
+    }
+  }
+</style>
+
 <style>
   @layer starlight.core {
     .docs-shortcut {

@@ -1,6 +1,6 @@
 ---
 title: Creating pools
-description: Every createPool option in one place — threads, balancer strategies, the inliner lane, payload buffers, permissions, debug namespaces, and how a pool shuts down.
+description: Every createPool option in one place — threads, balancer strategies, native work stealing, the inliner lane, payload buffers, permissions, debug namespaces, and how a pool shuts down.
 sidebar:
   order: 2
 ---
@@ -88,8 +88,12 @@ createPool({
   },
   abortSignalCapacity?: number,
   host?: {
+    steal?: boolean,
+    stealRegionLanes?: number,
+    doorbell?: boolean,
     stallFreeLoops?: number,
     maxBackoffMs?: number,
+    dispatcher?: "per-thread" | "serial-channel",
   },
   workerExecArgv?: string[],
   permission?: "strict" | "unsafe" | PermissionProtocol,
@@ -318,16 +322,68 @@ and global `performance` is left alone for your own code to use.
 
 ## host
 
-How the host dispatcher backs off when there is nothing to do.
+Controls host-side scheduling and completion handling. The defaults select
+native work stealing for compatible multi-worker pools and use the best
+completion waiter available on the runtime. These options affect the host
+dispatcher, not task arguments or worker code.
+
+See [Work stealing](/guides/work-stealing/) for the topology, runtime support,
+and tuning guidance.
+
+```ts
+using pool = createPool({
+  threads: 4,
+  host: {
+    steal: true,
+    doorbell: true,
+  },
+})({ task });
+```
+
+### steal
+
+When enabled, workers claim tasks from one shared submit region instead of
+waiting behind private request lanes. Each worker keeps a private return lane,
+so the worker that claims a task also owns its response. The pool's pending
+registry still resolves the correct promise.
+
+For compatible pools with more than one worker, native work stealing is selected
+automatically. A one-worker pool has nothing to steal from. An explicit
+`balancer`, private-lane dispatcher, inliner, compiled worker, or an unsupported
+worker count can change that compatibility decision.
+
+Set `host.steal: false` to measure or use private request lanes. The task API,
+payload types, and completion semantics stay the same in either topology.
+
+### stealRegionLanes
+
+Controls how many submit slots one stealing handshake claims. It must be a
+positive power of two; the default is the widest valid region for the worker
+count. Wider regions reduce arbitration overhead for many cheap, similarly
+sized calls. Smaller regions expose more independent work for expensive or
+uneven tasks. Start with `1` when task durations vary substantially, then
+benchmark the real workload.
+
+### doorbell
+
+Requests an asynchronous host completion waiter instead of repeated response
+mailbox polling. It is enabled by default when Node.js or Bun thread workers
+provide `Atomics.waitAsync`. It is disabled for Deno, process workers, compiled
+workers, and browsers, where polling is used instead. Setting it to `true`
+cannot override a runtime limitation; set it to `false` for a polling baseline.
 
 ### stallFreeLoops
 
-How many notify loops run before backoff kicks in (default `128`).
+How many immediate dispatcher turns run before escalation. The default is `1`
+when the doorbell is active and `128` when the dispatcher must poll.
 
 ### maxBackoffMs
 
 The longest the dispatcher will wait between polls once it starts stalling, in
 milliseconds (default `10`).
+
+`maxBackoffMs` affects only the polling fallback; it does not change the
+doorbell's asynchronous wait.
 
 ## dispatcher
 

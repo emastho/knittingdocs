@@ -681,6 +681,11 @@ var HEADER_SLOT_STRIDE_BYTES = HEADER_SLOT_STRIDE_U32 * Uint32Array.BYTES_PER_EL
 var HEADER_TASK_LINE_U32 = LOCK_CACHE_LINE_BYTES / Uint32Array.BYTES_PER_ELEMENT;
 var HEADER_STATIC_PAYLOAD_U32 = TaskIndex.TotalBuff - HEADER_TASK_LINE_U32;
 var HEADER_TASK_OFFSET_IN_SLOT_U32 = HEADER_STATIC_PAYLOAD_U32;
+var STEAL_ACK_SLOT_OFFSET_U32 = HEADER_TASK_OFFSET_IN_SLOT_U32 + TaskIndex.Size;
+var STEAL_WANT_SLOT_OFFSET_U32 = STEAL_ACK_SLOT_OFFSET_U32 + 1;
+var STEAL_PAYLOAD_ACK_SLOT_OFFSET_U32 = STEAL_ACK_SLOT_OFFSET_U32 + 2;
+var STEAL_LIVE_SLOT_OFFSET_U32 = STEAL_PAYLOAD_ACK_SLOT_OFFSET_U32 + 1;
+var DOORBELL_ARMED_SLOT_OFFSET_U32 = STEAL_LIVE_SLOT_OFFSET_U32 + 1;
 var HEADER_U32_LENGTH = LockBound.header + HEADER_SLOT_STRIDE_U32 * LockBound.slots;
 var HEADER_BYTE_LENGTH = HEADER_U32_LENGTH * Uint32Array.BYTES_PER_ELEMENT;
 var INDEX_ID = 0;
@@ -734,7 +739,11 @@ var lock2 = ({
   resultList,
   toSentList,
   recycleList,
-  processBoundary
+  processBoundary,
+  consumers,
+  consumerId,
+  regionLanes,
+  notifyOnHostPublish
 }) => {
   const lockSectorRegion = toSharedBufferRegion(LockBoundSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
   const LockBoundSAB = lockSectorRegion.sab;
@@ -743,6 +752,7 @@ var lock2 = ({
   const headersRegion = toSharedBufferRegion(headers ?? createWasmSharedArrayBuffer(HEADER_BYTE_LENGTH));
   const headersBuffer = new Uint32Array(headersRegion.sab, headersRegion.byteOffset, headersRegion.byteLength >>> 2);
   const headersSlotStride = headerSlotStrideU32 ?? HEADER_SLOT_STRIDE_U32;
+  const doorbellArmed = new Int32Array(headersRegion.sab, headersRegion.byteOffset + DOORBELL_ARMED_SLOT_OFFSET_U32 * Uint32Array.BYTES_PER_ELEMENT, 1);
   const resolvedPayloadConfig = resolvePayloadBufferOptions({
     sab: payload,
     options: payloadConfig
@@ -753,6 +763,44 @@ var lock2 = ({
     headers: headersRegion,
     payload: payloadSAB
   });
+  const stealConsumers = Math.max(1, (consumers ?? 1) | 0);
+  const stealEnabled = stealConsumers > 1;
+  const stealIsProducer = consumerId === undefined;
+  const stealId = (consumerId ?? 0) | 0;
+  const stealRegionLanes = (regionLanes ?? 8) | 0;
+  const stealRegions = LockBound.slots / stealRegionLanes | 0;
+  if (stealEnabled) {
+    if (stealRegionLanes < 1 || (stealRegionLanes & stealRegionLanes - 1) !== 0) {
+      throw new RangeError("regionLanes must be a power of two");
+    }
+    if (stealRegions < stealConsumers) {
+      throw new RangeError(`regionLanes=${stealRegionLanes} yields ${stealRegions} regions, ` + `too few for ${stealConsumers} consumers`);
+    }
+    if (stealId < 0 || stealId >= stealConsumers) {
+      throw new RangeError(`consumerId ${stealId} out of range`);
+    }
+  }
+  const stealView = new Int32Array(headersRegion.sab, headersRegion.byteOffset, headersRegion.byteLength >>> 2);
+  const stealAckIndex = new Int32Array(stealConsumers);
+  const stealWantIndex = new Int32Array(stealConsumers);
+  for (let c = 0;c < stealConsumers; c++) {
+    const slotBase = c * headersSlotStride + LockBound.header;
+    stealAckIndex[c] = slotBase + STEAL_ACK_SLOT_OFFSET_U32;
+    stealWantIndex[c] = slotBase + STEAL_WANT_SLOT_OFFSET_U32;
+  }
+  const stealLiveIndex = LockBound.header + STEAL_LIVE_SLOT_OFFSET_U32;
+  const stealAllLiveMask = stealConsumers === 32 ? -1 : (1 << stealConsumers) - 1 | 0;
+  if (stealEnabled && stealIsProducer) {
+    Atomics.store(stealView, stealLiveIndex, stealAllLiveMask);
+  }
+  const stealIsLive = (mask, consumer) => (mask & 1 << consumer) !== 0;
+  const stealAckXorAll = () => {
+    let x = 0 | 0;
+    for (let c = 0;c < stealConsumers; c++) {
+      x = x ^ a_load(stealView, stealAckIndex[c]) | 0;
+    }
+    return x;
+  };
   let promiseHandler;
   if (registeredEncodePayload === undefined || registeredDecodePayload === undefined) {
     throw new Error("Payload codec not registered before lock2(). Ensure the module that " + 'builds locks imports "./payloadCodec.ts" (it self-registers on load).');
@@ -796,8 +844,12 @@ var lock2 = ({
   let pendingPromiseCount = 0 | 0;
   const a_load = Atomics.load;
   const a_store = Atomics.store;
-  let workerShadow = a_load(workerBits, 0) | 0;
-  const refreshWorkerShadow = () => workerShadow = a_load(workerBits, 0) | 0;
+  const a_notify = Atomics.notify;
+  const shouldNotifyHostPublish = notifyOnHostPublish === true;
+  const a_waitAsync = typeof Atomics.waitAsync === "function" ? Atomics.waitAsync.bind(Atomics) : undefined;
+  let workerShadow = 0 | 0;
+  const refreshWorkerShadow = stealEnabled ? () => workerShadow = stealAckXorAll() : () => workerShadow = a_load(workerBits, 0) | 0;
+  refreshWorkerShadow();
   const ensureSenderStateHasFree = (state) => ~state !== 0 ? state : LastLocal ^ refreshWorkerShadow() | 0;
   const toBeSentPush = (task) => toBeSent.push(task);
   const toBeSentShift = () => toBeSent.shiftNoClear();
@@ -917,7 +969,12 @@ var lock2 = ({
     deferredCount = 0 | 0;
     return toBeSent.isEmpty;
   };
-  const storeHost = (bit) => a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
+  const storeHost = (bit) => {
+    a_store(hostBits, 0, LastLocal = LastLocal ^ bit | 0);
+    if (shouldNotifyHostPublish && a_load(doorbellArmed, 0) !== 0) {
+      a_notify(hostBits, 0, 1);
+    }
+  };
   const storeWorker = (bit) => a_store(workerBits, 0, LastWorker = LastWorker ^ bit | 0);
   const encode = (task, state = LastLocal ^ workerShadow | 0) => {
     state = ensureSenderStateHasFree(state);
@@ -985,6 +1042,102 @@ var lock2 = ({
         storeWorker(consumedBits);
     }
     lastTake = last;
+    return true;
+  };
+  const stealLaneMask = (region) => stealRegionLanes === 32 ? -1 : (1 << stealRegionLanes) - 1 << region * stealRegionLanes | 0;
+  const stealPeerAcks = () => {
+    let x = 0 | 0;
+    for (let c = 0;c < stealConsumers; c++) {
+      if (c !== stealId)
+        x = x ^ a_load(stealView, stealAckIndex[c]) | 0;
+    }
+    return x;
+  };
+  const stealJuniorWants = (intent) => {
+    const live = a_load(stealView, stealLiveIndex) | 0;
+    for (let c = stealId + 1;c < stealConsumers; c++) {
+      if (!stealIsLive(live, c))
+        continue;
+      if ((a_load(stealView, stealWantIndex[c]) & intent) !== 0)
+        return true;
+    }
+    return false;
+  };
+  let stealCursor = stealRegions * stealId / stealConsumers | 0;
+  const decodeSteal = () => {
+    const pending = a_load(hostBits, 0) ^ LastWorker ^ stealPeerAcks() | 0;
+    if (pending === 0)
+      return false;
+    let pendingRegions = 0 | 0;
+    if (stealRegions === 1)
+      pendingRegions = 1;
+    else {
+      for (let r = 0;r < stealRegions; r++) {
+        if ((pending & stealLaneMask(r)) !== 0)
+          pendingRegions |= 1 << r;
+      }
+    }
+    const liveBeforeClaim = a_load(stealView, stealLiveIndex) | 0;
+    let peerIntent = 0 | 0;
+    let seniorIntent = 0 | 0;
+    for (let c = 0;c < stealConsumers; c++) {
+      if (c === stealId || !stealIsLive(liveBeforeClaim, c))
+        continue;
+      const value = a_load(stealView, stealWantIndex[c]) | 0;
+      peerIntent |= value;
+      if (c < stealId)
+        seniorIntent |= value;
+    }
+    const notSenior = pendingRegions & ~seniorIntent;
+    if (notSenior === 0)
+      return false;
+    const clean = pendingRegions & ~peerIntent;
+    const candidates = clean !== 0 ? clean : notSenior;
+    let region = -1;
+    for (let step = 0;step < stealRegions; step++) {
+      const candidate = (stealCursor + step) % stealRegions;
+      if ((candidates & 1 << candidate) !== 0) {
+        region = candidate;
+        break;
+      }
+    }
+    if (region < 0)
+      return false;
+    const intent = 1 << region | 0;
+    a_store(stealView, stealWantIndex[stealId], intent);
+    let seniorConflict = false;
+    let juniorConflict = false;
+    for (let c = 0;c < stealConsumers; c++) {
+      if (c === stealId || !stealIsLive(liveBeforeClaim, c))
+        continue;
+      if ((a_load(stealView, stealWantIndex[c]) & intent) === 0)
+        continue;
+      if (c < stealId)
+        seniorConflict = true;
+      else
+        juniorConflict = true;
+    }
+    if (seniorConflict) {
+      a_store(stealView, stealWantIndex[stealId], 0);
+      return false;
+    }
+    if (juniorConflict) {
+      while (stealJuniorWants(intent)) {}
+    }
+    const take = (a_load(hostBits, 0) ^ LastWorker ^ stealPeerAcks()) & stealLaneMask(region) | 0;
+    if (take === 0) {
+      a_store(stealView, stealWantIndex[stealId], 0);
+      return false;
+    }
+    let lanes = take;
+    while (lanes !== 0) {
+      decodeAt(31 - clz32((lanes & -lanes) >>> 0));
+      lanes = lanes & lanes - 1 | 0;
+    }
+    LastWorker = LastWorker ^ take | 0;
+    a_store(stealView, stealAckIndex[stealId], LastWorker);
+    a_store(stealView, stealWantIndex[stealId], 0);
+    stealCursor = (region + 1) % stealRegions;
     return true;
   };
   const resolveHost = ({
@@ -1117,6 +1270,22 @@ var lock2 = ({
       return modified;
     };
   };
+  const waitForHostChange = (timeoutMs) => {
+    if (a_waitAsync === undefined) {
+      a_store(doorbellArmed, 0, 0);
+      return;
+    }
+    a_store(doorbellArmed, 0, 1);
+    try {
+      const wait = a_waitAsync(hostBits, 0, LastWorker | 0, timeoutMs);
+      if (!wait.async)
+        a_store(doorbellArmed, 0, 0);
+      return wait;
+    } catch {
+      a_store(doorbellArmed, 0, 0);
+      return;
+    }
+  };
   const decodeAt = (at) => {
     const off = at * headersSlotStride + slotBaseU32;
     const recycled = recycleShift();
@@ -1157,6 +1326,16 @@ var lock2 = ({
     deferredCount = 0 | 0;
     pendingPromiseCount = 0 | 0;
   };
+  const deactivateStealConsumer = (id) => {
+    if (!stealEnabled || !stealIsProducer)
+      return false;
+    if (!Number.isInteger(id) || id < 0 || id >= stealConsumers) {
+      throw new RangeError(`consumerId ${id} out of range`);
+    }
+    const bit = 1 << id;
+    const previous = Atomics.and(stealView, stealLiveIndex, ~bit);
+    return (previous & bit) !== 0;
+  };
   return {
     enlist,
     encode,
@@ -1164,17 +1343,22 @@ var lock2 = ({
     encodeAll,
     publish,
     flushPending,
-    decode,
+    decode: stealEnabled ? decodeSteal : decode,
     hasSpace,
     resolved,
     hostBits,
     workerBits,
     recyclecList,
     resolveHost,
+    waitForHostChange,
+    setHostWaiterArmed: (armed) => {
+      a_store(doorbellArmed, 0, armed ? 1 : 0);
+    },
     hasPendingFrames: () => toBeSent.size !== 0,
     getPendingFrameCount: () => toBeSent.size | 0,
     getPendingPromiseCount: () => pendingPromiseCount | 0,
     resetPendingState,
+    deactivateStealConsumer,
     takeDeferredCount: () => {
       const count = deferredCount | 0;
       deferredCount = 0 | 0;
@@ -1314,7 +1498,8 @@ var createWorkerRxQueue = ({
   returnLock,
   borrowReturnedBufferReferences,
   hasAborted,
-  now
+  now,
+  stealing
 }) => {
   const PLACE_HOLDER = (_) => {
     throw "UNREACHABLE FROM PLACE HOLDER (thread)";
@@ -1374,6 +1559,8 @@ var createWorkerRxQueue = ({
   const { decode, resolved } = lock;
   const resolvedShift = () => resolved.shiftNoClear();
   const enqueueLock = () => {
+    if (stealing && toWork.size !== 0)
+      return false;
     if (!decode())
       return false;
     let task = resolvedShift();
@@ -1505,8 +1692,7 @@ var createSharedMemoryTransport = ({ sabObject, isMain, startTime }) => {
 // src/memory/regionRegistry.ts
 var SLOT_META_PACKED_MASK = 4294967264;
 var register = ({
-  lockSector,
-  publishMode = "plain"
+  lockSector
 }) => {
   const lockRegion = toSharedBufferRegion(lockSector ?? createWasmSharedArrayBuffer(LOCK_SECTOR_BYTE_LENGTH));
   const lockSAB = lockRegion.sab;
@@ -1517,7 +1703,7 @@ var register = ({
   const clz32 = Math.clz32;
   const a_load = Atomics.load;
   const a_store2 = Atomics.store;
-  const useAtomicPublish = publishMode === "atomic";
+  const a_xor = Atomics.xor;
   const EMPTY = 4294967295 >>> 0;
   const SLOT_MASK = TASK_SLOT_INDEX_MASK;
   const START_MASK = ~SLOT_MASK >>> 0;
@@ -1525,7 +1711,6 @@ var register = ({
   let tableLength = 0;
   let usedBits = 0 | 0;
   let hostLast = 0 | 0;
-  let workerLast = 0 | 0;
   const startAndIndexToArray = (length) => startAndIndex.slice(0, length);
   const compactFreeBitsStable = (b, freeBits) => {
     const sai = startAndIndex;
@@ -1587,10 +1772,11 @@ var register = ({
       let freeBits = ~(hostLast ^ w) >>> 0;
       if (freeBits !== 0)
         freeBits &= usedBits;
-      if (freeBits === EMPTY) {
+      if (freeBits === usedBits >>> 0) {
         tableLength = 0;
         usedBits = 0 | 0;
         tl = 0;
+        freeBits = 0 >>> 0;
       } else if (freeBits !== 0) {
         for (let i = 0;i < tl; i++) {
           const v = sai[i];
@@ -1728,10 +1914,7 @@ var register = ({
     const slotIndex = findAndInsert(task, size);
     if (slotIndex === -1)
       return -1;
-    if (useAtomicPublish)
-      a_store2(hostBits, 0, hostLast);
-    else
-      hostBits[0] = hostLast;
+    a_store2(hostBits, 0, hostLast);
     return slotIndex;
   };
   const setSlotLength = (slotIndex, payloadLen) => {
@@ -1741,12 +1924,7 @@ var register = ({
     return true;
   };
   const free = (index) => {
-    index = index & TASK_SLOT_INDEX_MASK;
-    workerLast ^= 1 << index;
-    if (useAtomicPublish)
-      a_store2(workerBits, 0, workerLast);
-    else
-      workerBits[0] = workerLast;
+    a_xor(workerBits, 0, 1 << (index & TASK_SLOT_INDEX_MASK));
   };
   return {
     allocTask,
@@ -2939,9 +3117,7 @@ var encodePayload = ({
     options: payload?.config ?? payloadConfig
   });
   const maxPayloadBytes = resolvedPayloadConfig.maxPayloadBytes;
-  const { allocTask, setSlotLength, free } = register({
-    lockSector
-  });
+  const { allocTask, setSlotLength, free } = register({ lockSector });
   const {
     writeBinary: writeDynamicBinary,
     writeBuffer: writeDynamicBuffer,
@@ -3816,9 +3992,7 @@ var decodePayload = ({
     sab: payloadSab,
     options: payload?.config ?? payloadConfig
   });
-  const { free } = register({
-    lockSector
-  });
+  const { free } = register({ lockSector });
   const freeTaskSlot = (task) => free(getTaskSlotIndex(task));
   const {
     readUtf8: readDynamicUtf8,
@@ -4213,23 +4387,24 @@ var sleepUntilChanged = ({
   enqueueLock,
   write,
   nativeWaitU32,
-  useSharedMemoryWait = true
+  useSharedMemoryWait = true,
+  flushBeforeClaim = false
 }) => {
   const pause = pauseInNanoseconds === undefined ? pauseGeneric : whilePausing({ pauseInNanoseconds });
-  const tryProgress = () => {
-    let progressed = false;
-    if (enqueueLock())
-      progressed = true;
-    if (write) {
-      const wrote = write();
-      if (typeof wrote === "number") {
-        if (wrote > 0)
-          progressed = true;
-      } else if (wrote === true) {
-        progressed = true;
-      }
-    }
-    return progressed;
+  const flushWrite = () => {
+    if (!write)
+      return false;
+    const wrote = write();
+    if (typeof wrote === "number")
+      return wrote > 0;
+    return wrote === true;
+  };
+  const tryProgress = flushBeforeClaim ? () => {
+    const wrote = flushWrite();
+    return enqueueLock() || wrote;
+  } : () => {
+    const claimed = enqueueLock();
+    return flushWrite() || claimed;
   };
   return (value, spinMicroseconds, parkMs) => {
     const until = p_now2() + spinMicroseconds / 1000;
@@ -4690,11 +4865,13 @@ var workerMainLoop = async (startupData) => {
     payloadConfig,
     bufferReferenceReturn,
     permission,
+    notifyOnHostPublish,
     totalNumberOfThread,
     list,
     ids,
     names,
-    at
+    at,
+    steal
   } = startupData;
   scrubWorkerDataSensitiveBuffers(startupData);
   assertWorkerSharedMemoryBootData({ sab, lock, returnLock });
@@ -4723,7 +4900,10 @@ var workerMainLoop = async (startupData) => {
     payloadSector: lock.payloadSector,
     payloadConfig,
     textCompat: lock.textCompat,
-    processBoundary: RUNTIME_IS_PROCESS_WORKER
+    processBoundary: RUNTIME_IS_PROCESS_WORKER,
+    consumers: steal?.consumers,
+    consumerId: steal?.consumerId,
+    regionLanes: steal?.regionLanes
   });
   const returnLockState = lock2({
     headers: returnLock.headers,
@@ -4733,7 +4913,8 @@ var workerMainLoop = async (startupData) => {
     payloadSector: returnLock.payloadSector,
     payloadConfig,
     textCompat: returnLock.textCompat,
-    processBoundary: RUNTIME_IS_PROCESS_WORKER
+    processBoundary: RUNTIME_IS_PROCESS_WORKER,
+    notifyOnHostPublish
   });
   const timers = workerOptions?.timers;
   const spinMicroseconds = timers?.spinMicroseconds ?? Math.max(1, totalNumberOfThread) * 50;
@@ -4782,7 +4963,8 @@ var workerMainLoop = async (startupData) => {
     lock: lockState,
     returnLock: returnLockState,
     borrowReturnedBufferReferences: bufferReferenceReturn === "borrow",
-    hasAborted: abortSignals?.hasAborted
+    hasAborted: abortSignals?.hasAborted,
+    stealing: steal !== undefined
   });
   installBufferReferenceReleaseListener(releaseReturnedBufferReference);
   a_store3(rxStatus, 0, 1);
@@ -4795,6 +4977,7 @@ var workerMainLoop = async (startupData) => {
     pauseInNanoseconds: timers?.pauseNanoseconds,
     enqueueLock,
     write: () => hasCompleted() ? writeBatch(WRITE_MAX) : 0,
+    flushBeforeClaim: steal !== undefined,
     nativeWaitU32,
     useSharedMemoryWait: !(RUNTIME_IS_PROCESS_WORKER && RUNTIME === "node" && nativeWaitU32 === undefined)
   });
@@ -4860,15 +5043,25 @@ var workerMainLoop = async (startupData) => {
     dbg.log("signals", `idle token=${value}`);
     pauseUntil(value, spinMicroseconds2, parkMs2);
   } : pauseUntil;
+  const flushBeforeClaim = steal !== undefined;
   const loop = () => {
     isInMacro = false;
     let progressed = true;
     let awaiting = 0;
     while (true) {
-      progressed = _enqueueLock();
-      if (_hasCompleted()) {
-        if (_writeBatch(WRITE_MAX) > 0)
-          progressed = true;
+      if (flushBeforeClaim) {
+        progressed = false;
+        if (_hasCompleted()) {
+          if (_writeBatch(WRITE_MAX) > 0)
+            progressed = true;
+        }
+        progressed = _enqueueLock() || progressed;
+      } else {
+        progressed = _enqueueLock();
+        if (_hasCompleted()) {
+          if (_writeBatch(WRITE_MAX) > 0)
+            progressed = true;
+        }
       }
       _drainReturnReleases();
       if (_hasPending()) {
@@ -4976,6 +5169,13 @@ if (RUNTIME_IS_MAIN_THREAD === false && isWorkerBootPayload(RUNTIME_WORKER_DATA)
 
 // src/common/task-source.ts
 var genTaskID = ((counter) => () => counter++)(0);
+var stableTaskID = (href, at) => {
+  let hash = 2166136261;
+  for (let index = 0;index < href.length; index++) {
+    hash = Math.imul(hash ^ href.charCodeAt(index), 16777619);
+  }
+  return Math.imul(hash ^ at, 16777619) >>> 0;
+};
 var INTERNAL_CALLER_HINTS = [
   "/src/common/task-source.ts",
   "/src/common/task-source.js",
@@ -5089,6 +5289,7 @@ function createHostTxQueue({
   max,
   lock,
   returnLock,
+  extraReturnLocks,
   releaseBufferReferenceReturn,
   abortSignals,
   now
@@ -5122,20 +5323,96 @@ function createHostTxQueue({
   let inUsed = 0 | 0;
   const resetSignal = abortSignals?.resetSignal;
   const nowTime = now ?? p_now3;
-  const resolveReturn = returnLock.resolveHost({
+  const onReturnResolved = (task) => {
+    inUsed = inUsed - 1 | 0;
+    resetTaskLocalFlags(task);
+    runTaskFinalizers(task);
+    task.value = null;
+    task.resolve = PLACE_HOLDER;
+    task.reject = PLACE_HOLDER;
+    freePush(task[TaskIndex.ID]);
+  };
+  const returnResolvers = [
+    returnLock,
+    ...extraReturnLocks ?? []
+  ].map((each) => each.resolveHost({
     queue,
     activeRejectPlaceholder: PLACE_HOLDER,
-    onResolved: (task) => {
-      inUsed = inUsed - 1 | 0;
-      resetTaskLocalFlags(task);
-      runTaskFinalizers(task);
-      task.value = null;
-      task.resolve = PLACE_HOLDER;
-      task.reject = PLACE_HOLDER;
-      freePush(task[TaskIndex.ID]);
-    }
+    onResolved: onReturnResolved
+  }));
+  const returnWaiters = [
+    returnLock,
+    ...extraReturnLocks ?? []
+  ].map((each) => typeof each.waitForHostChange === "function" ? each.waitForHostChange : () => {
+    return;
   });
-  const completeFrame = releaseBufferReferenceReturn === undefined ? resolveReturn : () => withBufferReferenceReturnReleaser(releaseBufferReferenceReturn, resolveReturn);
+  const returnArmers = [
+    returnLock,
+    ...extraReturnLocks ?? []
+  ].map((each) => typeof each.setHostWaiterArmed === "function" ? each.setHostWaiterArmed : (_armed) => {});
+  const returnHooks = new Array(returnResolvers.length);
+  if (releaseBufferReferenceReturn !== undefined) {
+    returnHooks[0] = releaseBufferReferenceReturn;
+  }
+  const resolveReturnAt = (index) => {
+    const resolve = returnResolvers[index];
+    const hooks = returnHooks[index];
+    return hooks === undefined ? resolve() : withBufferReferenceReturnReleaser(hooks, resolve);
+  };
+  const completeFrame = returnResolvers.length === 1 ? releaseBufferReferenceReturn === undefined ? returnResolvers[0] : () => withBufferReferenceReturnReleaser(releaseBufferReferenceReturn, returnResolvers[0]) : () => {
+    let resolved = 0 | 0;
+    for (let i = 0;i < returnResolvers.length; i++) {
+      resolved = resolved + resolveReturnAt(i) | 0;
+    }
+    return resolved;
+  };
+  const completionArmed = new Uint8Array(returnWaiters.length);
+  let completionWake;
+  let completionGeneration = 0 | 0;
+  const setCompletionWaiterArmed = (armed) => {
+    for (const setArmed of returnArmers)
+      setArmed(armed);
+  };
+  const waitForCompletion = (onWake, timeoutMs) => {
+    completionWake = onWake;
+    setCompletionWaiterArmed(true);
+    let supported = true;
+    for (let index = 0;index < returnWaiters.length; index++) {
+      if (completionArmed[index] !== 0)
+        continue;
+      let wait;
+      try {
+        wait = returnWaiters[index](timeoutMs);
+      } catch {
+        wait = undefined;
+      }
+      if (wait === undefined) {
+        supported = false;
+        break;
+      }
+      completionArmed[index] = 1;
+      const generation = completionGeneration;
+      const wakeLane = () => {
+        if (completionArmed[index] === 0)
+          return;
+        completionArmed[index] = 0;
+        returnArmers[index](false);
+        if (generation !== completionGeneration)
+          return;
+        completionWake?.();
+      };
+      if (!wait.async)
+        wakeLane();
+      else
+        Promise.resolve(wait.value).then(wakeLane, wakeLane);
+    }
+    if (!supported) {
+      completionWake = undefined;
+      setCompletionWaiterArmed(false);
+      completionGeneration = completionGeneration + 1 | 0;
+    }
+    return supported;
+  };
   const hasActiveTasks = () => {
     const count = inUsed - getPendingPromiseCount() | 0;
     return count > 0;
@@ -5166,6 +5443,14 @@ function createHostTxQueue({
     hasPendingFrames,
     txIdle,
     completeFrame,
+    waitForCompletion,
+    setCompletionWaiterArmed,
+    setReturnHooks: (lane, hooks) => {
+      if (!Number.isInteger(lane) || lane < 0 || lane >= returnHooks.length) {
+        throw new RangeError(`return lane ${lane} out of range`);
+      }
+      returnHooks[lane] = hooks;
+    },
     enqueue: (functionID, timeout, abortSignal) => {
       const HAS_TIMER = timeout !== undefined;
       const functionIDMasked = functionID & FUNCTION_ID_MASK;
@@ -5243,8 +5528,10 @@ var unavailable3 = () => {
   throw new Error("process workers are unavailable in the browser build");
 };
 var createProcessWorkerMemoryLayout = unavailable3;
+var createProcessStealMemoryLayout = unavailable3;
 var readProcessSharedMemorySettings = unavailable3;
 var readProcessWorkerCommandPrefix = unavailable3;
+var readProcessWorkerNodeMajor = unavailable3;
 var readProcessWorkerRuntime = unavailable3;
 var spawnProcessWorker = unavailable3;
 var toProcessWorkerBootPayload = unavailable3;
@@ -5341,11 +5628,16 @@ var serializeWorkerBootstrapData = (options) => {
 var terminateWorkerQuietly = (worker) => {
   try {
     worker.unref?.();
-    Promise.resolve(worker.terminate()).catch(() => {});
-  } catch {}
+    return Promise.resolve(worker.terminate()).then(() => {}, () => {});
+  } catch {
+    return Promise.resolve();
+  }
 };
 
 // src/runtime/dispatcher.ts
+var IMMEDIATE_PUMP = RUNTIME === "deno" || RUNTIME === "node" ? SET_IMMEDIATE : undefined;
+var POLL_STALL_FREE_LOOPS = 128;
+var DOORBELL_STALL_FREE_LOOPS = 1;
 var hostDispatcherLoop = ({
   signalBox: {
     opView,
@@ -5356,11 +5648,14 @@ var hostDispatcherLoop = ({
     completeFrame,
     hasPendingFrames,
     flushToWorker,
-    txIdle
+    txIdle,
+    waitForCompletion,
+    setCompletionWaiterArmed
   },
   channelHandler,
   dispatcherOptions,
-  notifySignal
+  notifySignal,
+  crossProcess
 }) => {
   const a_load2 = Atomics.load;
   const a_store3 = Atomics.store;
@@ -5371,14 +5666,68 @@ var hostDispatcherLoop = ({
       a_notify(opView, 0, 1);
   });
   const notify = () => channelHandler.notify();
+  const canUseDoorbell = crossProcess !== true && (dispatcherOptions?.doorbell ?? true) && (RUNTIME === "bun" || RUNTIME === "node") && typeof Atomics.waitAsync === "function";
+  let doorbellEnabled = canUseDoorbell;
+  let doorbellArmed = false;
+  let doorbellEpoch = 0 | 0;
+  const DOORBELL_WATCHDOG_MS = 1000;
   let stallCount = 0 | 0;
-  const STALL_FREE_LOOPS = Math.max(0, (dispatcherOptions?.stallFreeLoops ?? 128) | 0);
+  const requestedStallFreeLoops = dispatcherOptions?.stallFreeLoops;
+  let stallFreeLoops = requestedStallFreeLoops !== undefined ? Math.max(0, requestedStallFreeLoops | 0) : canUseDoorbell ? DOORBELL_STALL_FREE_LOOPS : POLL_STALL_FREE_LOOPS;
   const MAX_BACKOFF_MS = Math.max(0, (dispatcherOptions?.maxBackoffMs ?? 10) | 0);
   let backoffTimer;
   let inFlight = false;
+  const cancelDoorbell = () => {
+    if (!doorbellArmed)
+      return;
+    doorbellEpoch = doorbellEpoch + 1 | 0;
+    doorbellArmed = false;
+    setCompletionWaiterArmed(false);
+  };
+  const armDoorbell = () => {
+    if (!doorbellEnabled || doorbellArmed === true) {
+      if (!doorbellEnabled)
+        notify();
+      return;
+    }
+    const token = doorbellEpoch + 1 | 0;
+    doorbellEpoch = token;
+    doorbellArmed = true;
+    let woke = false;
+    const wake = () => {
+      if (!doorbellArmed || doorbellEpoch !== token || woke)
+        return;
+      woke = true;
+      doorbellArmed = false;
+      doorbellEpoch = doorbellEpoch + 1 | 0;
+      setCompletionWaiterArmed(false);
+      notify();
+    };
+    let supported = false;
+    try {
+      supported = waitForCompletion(wake, DOORBELL_WATCHDOG_MS);
+    } catch {
+      supported = false;
+    }
+    if (!supported) {
+      doorbellEnabled = false;
+      if (requestedStallFreeLoops === undefined) {
+        stallFreeLoops = POLL_STALL_FREE_LOOPS;
+      }
+      doorbellArmed = false;
+      doorbellEpoch = doorbellEpoch + 1 | 0;
+      setCompletionWaiterArmed(false);
+      notify();
+    }
+  };
   const check = () => {
     if (inFlight) {
       check.rerun = true;
+      return;
+    }
+    cancelDoorbell();
+    if (txIdle()) {
+      check.isRunning = false;
       return;
     }
     inFlight = true;
@@ -5393,24 +5742,23 @@ var hostDispatcherLoop = ({
         a_store3(opView, 0, 1);
         wakeSignal();
       }
-      let anyProgressed = false;
+      let completed = false;
       let progressed = true;
       while (progressed) {
         progressed = false;
         if (completeFrame() > 0) {
           progressed = true;
-          anyProgressed = true;
+          completed = true;
         }
         while (hasPendingFrames()) {
           if (!flushToWorker())
             break;
           progressed = true;
-          anyProgressed = true;
         }
       }
       txStatus[0] = 0;
       if (!txIdle()) {
-        if (anyProgressed || hasPendingFrames()) {
+        if (completed || hasPendingFrames()) {
           stallCount = 0 | 0;
         } else {
           stallCount = stallCount + 1 | 0;
@@ -5427,13 +5775,18 @@ var hostDispatcherLoop = ({
   check.isRunning = false;
   check.rerun = false;
   const scheduleNotify = () => {
-    if (stallCount <= STALL_FREE_LOOPS) {
+    if (stallCount <= stallFreeLoops) {
       notify();
+      return;
+    }
+    if (doorbellEnabled) {
+      check.isRunning = false;
+      armDoorbell();
       return;
     }
     if (backoffTimer !== undefined)
       return;
-    let delay = stallCount - STALL_FREE_LOOPS - 1 | 0;
+    let delay = stallCount - stallFreeLoops - 1 | 0;
     if (delay < 0)
       delay = 0;
     else if (delay > MAX_BACKOFF_MS)
@@ -5454,27 +5807,48 @@ class ChannelHandler {
   channel;
   port1;
   port2;
-  #post2;
-  constructor() {
-    this.channel = createRuntimeMessageChannel();
-    this.port1 = this.channel.port1;
-    this.port2 = this.channel.port2;
-    this.#post2 = (message) => this.port2.postMessage(message);
+  #handler;
+  #notify;
+  constructor(pump = "auto") {
+    if (pump === "auto" && IMMEDIATE_PUMP !== undefined) {
+      const immediate = IMMEDIATE_PUMP;
+      const run = () => {
+        this.#handler?.();
+      };
+      this.#notify = () => {
+        immediate(run);
+      };
+      return;
+    }
+    const channel = createRuntimeMessageChannel();
+    const port2 = channel.port2;
+    this.channel = channel;
+    this.port1 = channel.port1;
+    this.port2 = port2;
+    this.#notify = () => {
+      port2.postMessage(null);
+    };
   }
   notify() {
-    this.#post2(null);
+    this.#notify();
   }
   open(f) {
+    this.#handler = f;
     const port1 = this.port1;
+    if (port1 === undefined)
+      return;
     if (typeof port1.on === "function") {
       port1.on("message", f);
     } else {
       port1.onmessage = f;
     }
-    this.port1.start?.();
-    this.port2.start?.();
+    this.port1?.start?.();
+    this.port2?.start?.();
   }
   close() {
+    this.#handler = undefined;
+    if (this.port1 === undefined || this.port2 === undefined)
+      return;
     this.port1.onmessage = null;
     this.port2.onmessage = null;
     this.port1.close?.();
@@ -5491,6 +5865,15 @@ var spawnCompiledWorkerContext = () => {
 var WORKER_FATAL_MESSAGE_KEY2 = "__knittingWorkerFatal";
 var isWorkerFatalMessage = (value) => !!value && typeof value === "object" && typeof value[WORKER_FATAL_MESSAGE_KEY2] === "string";
 var DEFAULT_WORKER_PARK_MS = 1;
+var DEFAULT_ABORT_SIGNAL_CAPACITY = 258;
+var sanitizePositiveInteger = (value) => {
+  if (!Number.isFinite(value))
+    return;
+  const parsed = Math.floor(value);
+  return parsed > 0 ? parsed : undefined;
+};
+var resolveAbortSignalCapacity = (value) => sanitizePositiveInteger(value) ?? DEFAULT_ABORT_SIGNAL_CAPACITY;
+var abortSignalByteLength = (capacity) => Math.max(1, Math.ceil(capacity / 32)) * Uint32Array.BYTES_PER_ELEMENT;
 var withDefaultWorkerTimers = (options) => {
   const parkMs = options?.timers?.parkMs ?? DEFAULT_WORKER_PARK_MS;
   if (options === undefined)
@@ -5508,6 +5891,107 @@ var withFixedPayloadConfig = (config) => ({
   mode: "fixed",
   payloadInitialBytes: config.payloadMaxByteLength
 });
+var resolveStealRegionLanes = (consumers) => {
+  for (let lanes = LockBound.slots;lanes >= 1; lanes >>= 1) {
+    if (LockBound.slots / lanes >= consumers + 1)
+      return lanes;
+  }
+  throw new RangeError(`${consumers} stealing workers need more than ${LockBound.slots} lanes`);
+};
+var MAX_STEAL_CONSUMERS = LockBound.slots - 1;
+var createStealPoolBuffers = ({
+  threads,
+  payload,
+  regionLanes,
+  abortSignalCapacity,
+  usesAbortSignal,
+  processWorker
+}) => {
+  const basePayloadConfig = resolvePayloadBufferOptions({ options: payload });
+  const payloadConfig = processWorker === undefined ? basePayloadConfig : withFixedPayloadConfig(basePayloadConfig);
+  const makePayload = () => payloadConfig.mode === "growable" ? createSharedArrayBuffer(payloadConfig.payloadInitialBytes, payloadConfig.payloadMaxByteLength) : createSharedArrayBuffer(payloadConfig.payloadInitialBytes);
+  const carpet = () => createLockControlCarpet({
+    signalBytes: 0,
+    abortBytes: 0,
+    lockSectorBytes: LOCK_SECTOR_BYTE_LENGTH,
+    headerSlotStrideU32: HEADER_SLOT_STRIDE_U32,
+    slotCount: LockBound.slots,
+    headerLayout: "split"
+  });
+  const toBuffers = (half, payloadSab) => ({
+    ...half,
+    payload: payloadSab,
+    textCompat: probeLockBufferTextCompat({
+      headers: half.headers,
+      payload: payloadSab
+    })
+  });
+  const maxLanes = resolveStealRegionLanes(threads);
+  const lanes = regionLanes === undefined ? maxLanes : Math.min(Math.max(1, regionLanes | 0), maxLanes);
+  const resolvedAbortSignalCapacity = resolveAbortSignalCapacity(abortSignalCapacity);
+  const processMemory = processWorker === undefined ? undefined : createProcessStealMemoryLayout({
+    threads,
+    signalBytes: processWorker.signalBytes,
+    abortBytes: usesAbortSignal === true ? abortSignalByteLength(resolvedAbortSignalCapacity) : 0,
+    abortSignalMax: usesAbortSignal === true ? resolvedAbortSignalCapacity : undefined,
+    payloadBytes: payloadConfig.payloadMaxByteLength,
+    sharedMemory: processWorker.sharedMemory
+  });
+  const submitBuffers = processMemory === undefined ? (() => {
+    const submitCarpet = carpet();
+    return toBuffers(submitCarpet.lock, makePayload());
+  })() : toBuffers(processMemory.workers[0].controlLayout.lock, processMemory.workers[0].lockPayload);
+  const hostSubmitLock = lock2({
+    headers: submitBuffers.headers,
+    headerSlotStrideU32: submitBuffers.headerSlotStrideU32,
+    LockBoundSector: submitBuffers.lockSector,
+    payload: submitBuffers.payload,
+    payloadSector: submitBuffers.payloadSector,
+    payloadConfig,
+    textCompat: submitBuffers.textCompat,
+    consumers: threads,
+    regionLanes: lanes,
+    processBoundary: processMemory !== undefined
+  });
+  const returnBuffers = [];
+  const hostReturnLocks = [];
+  for (let i = 0;i < threads; i++) {
+    const buffers = processMemory === undefined ? toBuffers(carpet().returnLock, makePayload()) : toBuffers(processMemory.workers[i].controlLayout.returnLock, processMemory.workers[i].returnPayload);
+    returnBuffers.push(buffers);
+    hostReturnLocks.push(lock2({
+      headers: buffers.headers,
+      headerSlotStrideU32: buffers.headerSlotStrideU32,
+      LockBoundSector: buffers.lockSector,
+      payload: buffers.payload,
+      payloadSector: buffers.payloadSector,
+      payloadConfig,
+      textCompat: buffers.textCompat,
+      processBoundary: processMemory !== undefined
+    }));
+  }
+  const abortSignalSAB = usesAbortSignal === true ? processMemory?.workers[0]?.controlLayout.abortSignals ?? createSharedArrayBuffer(abortSignalByteLength(resolvedAbortSignalCapacity)) : undefined;
+  const abortSignals = abortSignalSAB === undefined ? undefined : signalAbortFactory({
+    sab: abortSignalSAB,
+    maxSignals: resolvedAbortSignalCapacity
+  });
+  const sharedQueue = createHostTxQueue({
+    lock: hostSubmitLock,
+    returnLock: hostReturnLocks[0],
+    extraReturnLocks: hostReturnLocks.slice(1),
+    abortSignals
+  });
+  return {
+    submitBuffers,
+    returnBuffers,
+    hostSubmitLock,
+    hostReturnLocks,
+    sharedQueue,
+    regionLanes: lanes,
+    processMemory,
+    abortSignalSAB,
+    abortSignalMax: processMemory?.abortSignalMax ?? (abortSignalSAB === undefined ? undefined : resolvedAbortSignalCapacity)
+  };
+};
 var spawnWorkerContext = ({
   list,
   ids,
@@ -5527,7 +6011,8 @@ var spawnWorkerContext = ({
   bufferReferenceReturn,
   abortSignalCapacity,
   usesAbortSignal,
-  sharedChannelHandler
+  sharedChannelHandler,
+  stealPool
 }) => {
   if (workerOptions?.runtime === "compiled") {
     return spawnCompiledWorkerContext({
@@ -5553,34 +6038,29 @@ var spawnWorkerContext = ({
     throw new Error("SharedArrayBuffer is unavailable: serve the page cross-origin isolated " + "(Cross-Origin-Opener-Policy: same-origin, " + "Cross-Origin-Embedder-Policy: require-corp).");
   }
   const WorkerCtor = poliWorker;
-  const sanitizeBytes = (value) => {
-    if (!Number.isFinite(value))
-      return;
-    const bytes = Math.floor(value);
-    return bytes > 0 ? bytes : undefined;
-  };
+  const sanitizeBytes = sanitizePositiveInteger;
   const basePayloadConfig = resolvePayloadBufferOptions({
     options: payload
   });
   const resolvedPayloadConfig = useProcessWorkerRuntime ? withFixedPayloadConfig(basePayloadConfig) : basePayloadConfig;
-  const defaultAbortSignalCapacity = 258;
-  const requestedAbortSignalCapacity = sanitizeBytes(abortSignalCapacity);
-  const resolvedAbortSignalCapacity = requestedAbortSignalCapacity ?? defaultAbortSignalCapacity;
-  const abortSignalWords = Math.max(1, Math.ceil(resolvedAbortSignalCapacity / 32));
+  const resolvedAbortSignalCapacity = resolveAbortSignalCapacity(abortSignalCapacity);
   const requestedSignalBytes = sanitizeBytes(sab?.size);
   const externalSignalSab = sab?.sharedSab;
   if (useProcessWorkerRuntime && externalSignalSab != null) {
     throw new Error("process worker runtime cannot use an external signal buffer");
   }
   const signalBytes = Math.max(TRANSPORT_SIGNAL_BYTES, requestedSignalBytes ?? TRANSPORT_SIGNAL_BYTES);
-  const abortBytes = abortSignalWords * Uint32Array.BYTES_PER_ELEMENT;
-  const processWorkerMemory = useProcessWorkerRuntime ? createProcessWorkerMemoryLayout({
+  const abortBytes = stealPool === undefined && usesAbortSignal === true ? abortSignalByteLength(resolvedAbortSignalCapacity) : 0;
+  const stealProcessMemory = stealPool?.processMemory;
+  const processWorkerMemory = !useProcessWorkerRuntime ? undefined : stealProcessMemory === undefined ? createProcessWorkerMemoryLayout({
     signalBytes,
     abortBytes,
     payloadBytes: resolvedPayloadConfig.payloadMaxByteLength,
     thread,
     sharedMemory: processSharedMemorySettings
-  }) : undefined;
+  }) : stealProcessMemory.workers[thread] ?? (() => {
+    throw new RangeError(`stealing process pool has no shared-memory slice for worker ${thread}`);
+  })();
   const processSharedMemory = processWorkerMemory === undefined ? createProcessSharedMemoryAllocator(debug) : undefined;
   const createControlBuffer = processSharedMemory?.createBuffer ?? createWasmSharedArrayBuffer;
   const createPayloadBuffer = processSharedMemory?.createBuffer;
@@ -5598,7 +6078,7 @@ var spawnWorkerContext = ({
   };
   const controlLayout = processWorkerMemory?.controlLayout ?? makeLockControlLayout();
   const lockPayload = processWorkerMemory?.lockPayload ?? makePayloadBuffer();
-  const lockBuffers = {
+  const lockBuffers = stealPool?.submitBuffers ?? {
     ...controlLayout.lock,
     payload: lockPayload,
     textCompat: probeLockBufferTextCompat({
@@ -5607,7 +6087,7 @@ var spawnWorkerContext = ({
     })
   };
   const returnPayload = processWorkerMemory?.returnPayload ?? makePayloadBuffer();
-  const returnLockBuffers = {
+  const returnLockBuffers = stealPool?.returnBuffers ?? {
     ...controlLayout.returnLock,
     payload: returnPayload,
     textCompat: probeLockBufferTextCompat({
@@ -5615,7 +6095,7 @@ var spawnWorkerContext = ({
       payload: returnPayload
     })
   };
-  const lock = lock2({
+  const lock = stealPool?.hostSubmitLock ?? lock2({
     headers: lockBuffers.headers,
     headerSlotStrideU32: lockBuffers.headerSlotStrideU32,
     LockBoundSector: lockBuffers.lockSector,
@@ -5625,7 +6105,7 @@ var spawnWorkerContext = ({
     textCompat: lockBuffers.textCompat,
     processBoundary: useProcessWorkerRuntime
   });
-  const returnLock = lock2({
+  const returnLock = stealPool?.hostReturnLock ?? lock2({
     headers: returnLockBuffers.headers,
     headerSlotStrideU32: returnLockBuffers.headerSlotStrideU32,
     LockBoundSector: returnLockBuffers.lockSector,
@@ -5635,8 +6115,8 @@ var spawnWorkerContext = ({
     textCompat: returnLockBuffers.textCompat,
     processBoundary: useProcessWorkerRuntime
   });
-  const abortSignalSAB = usesAbortSignal === true ? controlLayout.abortSignals : undefined;
-  const abortSignals = abortSignalSAB ? signalAbortFactory({
+  const abortSignalSAB = stealPool?.abortSignalSAB ?? (usesAbortSignal === true ? controlLayout.abortSignals : undefined);
+  const abortSignals = abortSignalSAB && stealPool === undefined ? signalAbortFactory({
     sab: abortSignalSAB,
     maxSignals: resolvedAbortSignalCapacity
   }) : undefined;
@@ -5676,30 +6156,34 @@ var spawnWorkerContext = ({
     }
     outstandingBorrowedReturns.clear();
   };
-  const queue = createHostTxQueue({
+  const returnHooks = bufferReferenceReturn === "borrow" ? {
+    release: releaseBorrowedReturnToken,
+    track: (ref, token, aliasBuffer) => {
+      if (outstandingBorrowedReturns === undefined)
+        return;
+      const record = outstandingBorrowedReturns.get(token);
+      if (record !== undefined) {
+        if (aliasBuffer !== undefined) {
+          record.aliasBuffer = new WeakRef(aliasBuffer);
+        }
+        return;
+      }
+      outstandingBorrowedReturns.set(token, {
+        ref: new WeakRef(ref),
+        aliasBuffer: aliasBuffer === undefined ? undefined : new WeakRef(aliasBuffer),
+        runtime: ref.runtime
+      });
+    }
+  } : undefined;
+  const queue = stealPool?.sharedQueue ?? createHostTxQueue({
     lock,
     returnLock,
     abortSignals,
-    releaseBufferReferenceReturn: bufferReferenceReturn === "borrow" ? {
-      release: releaseBorrowedReturnToken,
-      track: (ref, token, aliasBuffer) => {
-        if (outstandingBorrowedReturns === undefined)
-          return;
-        const record = outstandingBorrowedReturns.get(token);
-        if (record !== undefined) {
-          if (aliasBuffer !== undefined) {
-            record.aliasBuffer = new WeakRef(aliasBuffer);
-          }
-          return;
-        }
-        outstandingBorrowedReturns.set(token, {
-          ref: new WeakRef(ref),
-          aliasBuffer: aliasBuffer === undefined ? undefined : new WeakRef(aliasBuffer),
-          runtime: ref.runtime
-        });
-      }
-    } : undefined
+    releaseBufferReferenceReturn: returnHooks
   });
+  if (stealPool !== undefined) {
+    stealPool.sharedQueue.setReturnHooks(stealPool.consumerId, returnHooks);
+  }
   const {
     enqueue,
     rejectAll,
@@ -5720,16 +6204,17 @@ var spawnWorkerContext = ({
   let dispatchSend = () => {};
   const send = () => dispatchSend();
   let channelHandler;
-  const ownsChannel = sharedChannelHandler === undefined;
+  const ownsChannel = sharedChannelHandler === undefined && stealPool === undefined;
   const ownChannel = sharedChannelHandler ?? new ChannelHandler;
-  const { check: dispatcherCheck } = hostDispatcherLoop({
+  const { check: dispatcherCheck } = stealPool !== undefined ? { check: undefined } : hostDispatcherLoop({
     signalBox,
     queue,
     channelHandler: ownChannel,
     dispatcherOptions: host,
-    notifySignal: nativeNotifySignal
+    notifySignal: nativeNotifySignal,
+    crossProcess: useProcessWorkerRuntime
   });
-  if (ownsChannel) {
+  if (ownsChannel && dispatcherCheck !== undefined) {
     ownChannel.open(dispatcherCheck);
     channelHandler = ownChannel;
     dispatchSend = () => {
@@ -5747,7 +6232,7 @@ var spawnWorkerContext = ({
   const workerDataPayload = {
     sab: signals.sab,
     abortSignalSAB,
-    abortSignalMax: usesAbortSignal === true ? resolvedAbortSignalCapacity : undefined,
+    abortSignalMax: stealPool?.abortSignalMax ?? (usesAbortSignal === true ? resolvedAbortSignalCapacity : undefined),
     list,
     ids,
     names,
@@ -5761,7 +6246,13 @@ var spawnWorkerContext = ({
     returnLock: returnLockBuffers,
     payloadConfig: resolvedPayloadConfig,
     bufferReferenceReturn,
-    permission
+    permission,
+    notifyOnHostPublish: !useProcessWorkerRuntime && host?.doorbell !== false && (RUNTIME === "bun" || RUNTIME === "node") && typeof Atomics.waitAsync === "function",
+    steal: stealPool === undefined ? undefined : {
+      consumers: stealPool.consumers,
+      consumerId: stealPool.consumerId,
+      regionLanes: stealPool.regionLanes
+    }
   };
   const baseWorkerOptions = {
     type: "module",
@@ -5816,6 +6307,17 @@ var spawnWorkerContext = ({
     worker.postMessage?.(workerDataPayload);
   }
   let closedReason;
+  const deactivateStealConsumer = () => {
+    stealPool?.hostSubmitLock.deactivateStealConsumer(stealPool.consumerId);
+  };
+  const terminateFailedWorker = () => {
+    try {
+      worker.unref?.();
+      Promise.resolve(worker.terminate()).catch(() => {}).finally(deactivateStealConsumer);
+    } catch {
+      deactivateStealConsumer();
+    }
+  };
   const markWorkerClosed = (reason, workerBytesReadable = false) => {
     if (closedReason)
       return;
@@ -5828,18 +6330,20 @@ var spawnWorkerContext = ({
     if (!isWorkerFatalMessage(message))
       return;
     markWorkerClosed(`Worker startup failed: ${message[WORKER_FATAL_MESSAGE_KEY2]}`, true);
-    terminateWorkerQuietly(worker);
+    terminateFailedWorker();
   };
   const onWorkerError = (error) => {
     const message = String(error?.message ?? error);
     markWorkerClosed(`Worker crashed: ${message}`);
+    terminateFailedWorker();
   };
   const nodeWorker = worker;
   if (typeof nodeWorker.on === "function") {
     nodeWorker.on("message", onWorkerMessage);
     nodeWorker.on("error", onWorkerError);
     nodeWorker.on("exit", (code) => {
-      if (typeof code === "number" && code === 0)
+      deactivateStealConsumer();
+      if (closedReason !== undefined)
         return;
       const normalized = typeof code === "number" ? code : -1;
       markWorkerClosed(`Worker exited with code ${normalized}`);
@@ -5879,14 +6383,16 @@ var spawnWorkerContext = ({
     call,
     kills: async () => {
       markWorkerClosed("Thread closed", true);
-      terminateWorkerQuietly(worker);
+      const termination = terminateWorkerQuietly(worker);
+      if (processWorkerMemory !== undefined)
+        await termination;
       cleanupProcessWorkerMemoryQuietly(processWorkerMemory);
     },
     lock,
     processSharedMemoryBackings: processSharedMemory?.backings,
     dispatcherCheck,
-    laneWake: sharedChannelHandler !== undefined ? laneWake : undefined,
-    bindSend: sharedChannelHandler !== undefined ? (fn) => void (dispatchSend = fn) : undefined
+    laneWake: sharedChannelHandler !== undefined || stealPool !== undefined ? laneWake : undefined,
+    bindSend: sharedChannelHandler !== undefined || stealPool !== undefined ? (fn) => void (dispatchSend = fn) : undefined
   };
   return context;
 };
@@ -6128,7 +6634,7 @@ var createInlineExecutor = ({
   genTaskID: genTaskID2,
   batchSize
 }) => {
-  const entries = Array.isArray(tasks) ? tasks : Object.values(tasks).sort((a, b) => a.id - b.id);
+  const entries = Array.isArray(tasks) ? tasks : Object.values(tasks).sort((a, b) => a.name.localeCompare(b.name));
   const runners = entries.map((entry) => {
     if (entry.imported === true) {
       return () => {
@@ -6351,18 +6857,6 @@ var readHostCwd = () => {
   }
   return;
 };
-var readKnownProcessWorkerNodeMajor = (worker) => {
-  if (RUNTIME !== "node")
-    return;
-  if (readProcessWorkerCommandPrefix(worker) !== undefined)
-    return;
-  const nodeProcess4 = getNodeProcess();
-  if (nodeProcess4?.env?.NODE_BINARY !== undefined)
-    return;
-  const raw2 = nodeProcess4?.versions?.node;
-  const major = Number.parseInt(String(raw2).split(".", 1)[0] ?? "", 10);
-  return Number.isInteger(major) && major > 0 ? major : undefined;
-};
 var formatDebugList = (values, empty = "(none)") => values && values.length > 0 ? values.join(",") : empty;
 var MAX_FUNCTION_ID = 65535;
 var MAX_FUNCTION_COUNT = MAX_FUNCTION_ID + 1;
@@ -6571,6 +7065,12 @@ var createPool = ({
   hostDebug?.log(`permission=${permissionProtocol?.mode ?? "off"} execArgv=${formatDebugList(execArgv)}`);
   const usesAbortSignal = listOfFunctions.some((fn) => fn.abortSignal !== undefined);
   const resolvedWorker = resolveWorkerSettings(worker, callerHref);
+  const dispatcherEnv = nodeProcess4?.env?.KNITTING_DISPATCHER;
+  const stealEnvRaw = nodeProcess4?.env?.KNITTING_STEAL?.trim().toLowerCase();
+  const stealEnv = stealEnvRaw === "1" || stealEnvRaw === "true" ? true : stealEnvRaw === "0" || stealEnvRaw === "false" ? false : undefined;
+  const dispatcherExplicitlySelected = host?.dispatcher !== undefined || dispatcherEnv === "serial-channel" || dispatcherEnv === "per-thread";
+  const stealDefaultCompatible = balancer === undefined && !dispatcherExplicitlySelected && (threads ?? 1) <= MAX_STEAL_CONSUMERS;
+  const stealRequested = host?.steal ?? stealEnv ?? stealDefaultCompatible;
   const usingCompiledWorker = resolvedWorker?.runtime === "compiled";
   if (resolvedWorker?.compiled !== undefined && !usingCompiledWorker) {
     throw new Error("worker.compiled requires worker.runtime to be compiled");
@@ -6631,7 +7131,7 @@ var createPool = ({
       resolved: permissionProtocol,
       target: {
         runtime: processRuntime,
-        nodeMajor: processRuntime === "node" ? readKnownProcessWorkerNodeMajor(resolvedWorker) : undefined
+        nodeMajor: processRuntime === "node" ? readProcessWorkerNodeMajor(resolvedWorker) : undefined
       }
     }));
   }
@@ -6639,7 +7139,6 @@ var createPool = ({
   if (RUNTIME_POOL_DEPTH >= 1) {
     throw new Error(`createPool() tried to spawn workers from inside a worker process ` + `(pool depth ${RUNTIME_POOL_DEPTH}). This usually means a pool is ` + `created at module scope in a module your workers import, so every ` + `worker spawns its own pool recursively. Is your createPool protected ` + `by isMain? Guard pool creation behind \`if (isMain) { ... }\` ` + `(import { isMain } from "knitting") so only the main program starts ` + `the pool.`);
   }
-  const dispatcherEnv = nodeProcess4?.env?.KNITTING_DISPATCHER;
   const explicitDispatcher = host?.dispatcher ?? (dispatcherEnv === "serial-channel" || dispatcherEnv === "per-thread" ? dispatcherEnv : undefined);
   const autoDispatcher = (() => {
     if (RUNTIME === "bun")
@@ -6649,8 +7148,20 @@ var createPool = ({
     return "serial-channel";
   })();
   const dispatcher = explicitDispatcher ?? autoDispatcher;
-  const serialChannel = !usingCompiledWorker && dispatcher === "serial-channel";
-  const serialDispatcherChannel = serialChannel ? new ChannelHandler : undefined;
+  const useSteal = stealRequested && !usingCompiledWorker && (threads ?? 1) > 1 && !usingInliner;
+  const stealBuffers = useSteal ? createStealPoolBuffers({
+    threads: threads ?? 1,
+    payload,
+    regionLanes: host?.stealRegionLanes,
+    abortSignalCapacity,
+    usesAbortSignal,
+    processWorker: resolvedWorker?.runtime === "process" ? {
+      signalBytes: TRANSPORT_SIGNAL_BYTES,
+      sharedMemory: readProcessSharedMemorySettings(resolvedWorker)
+    } : undefined
+  }) : undefined;
+  const serialChannel = !usingCompiledWorker && !useSteal && dispatcher === "serial-channel";
+  const serialDispatcherChannel = serialChannel ? new ChannelHandler("channel") : undefined;
   let workers = Array.from({
     length: threads ?? 1
   }).map((_, thread) => spawnWorkerContext({
@@ -6671,15 +7182,75 @@ var createPool = ({
     abortSignalCapacity,
     usesAbortSignal,
     permission: permissionProtocol,
-    sharedChannelHandler: serialDispatcherChannel
+    sharedChannelHandler: serialDispatcherChannel,
+    stealPool: stealBuffers === undefined ? undefined : {
+      submitBuffers: stealBuffers.submitBuffers,
+      returnBuffers: stealBuffers.returnBuffers[thread],
+      hostSubmitLock: stealBuffers.hostSubmitLock,
+      hostReturnLock: stealBuffers.hostReturnLocks[thread],
+      sharedQueue: stealBuffers.sharedQueue,
+      consumers: threads ?? 1,
+      consumerId: thread,
+      regionLanes: stealBuffers.regionLanes,
+      abortSignalSAB: stealBuffers.abortSignalSAB,
+      abortSignalMax: stealBuffers.abortSignalMax,
+      processMemory: stealBuffers.processMemory
+    }
   }));
+  const stealChannel = useSteal ? new ChannelHandler : undefined;
+  if (useSteal) {
+    const channel = stealChannel;
+    const queue = stealBuffers.sharedQueue;
+    let wakeCursor = 0;
+    const wakeOne = () => {
+      const lanes = workers.length;
+      if (lanes === 0)
+        return;
+      const lane = wakeCursor;
+      wakeCursor = wakeCursor + 1 < lanes ? wakeCursor + 1 : 0;
+      workers[lane].laneWake?.();
+    };
+    const signalWords = new Int32Array(createSharedArrayBuffer(3 * Int32Array.BYTES_PER_ELEMENT));
+    const { check } = hostDispatcherLoop({
+      signalBox: {
+        opView: signalWords.subarray(0, 1),
+        txStatus: signalWords.subarray(1, 2),
+        rxStatus: signalWords.subarray(2, 3)
+      },
+      queue,
+      channelHandler: channel,
+      dispatcherOptions: host,
+      notifySignal: wakeOne,
+      crossProcess: resolvedWorker?.runtime === "process"
+    });
+    channel.open(check);
+    workers.forEach((context) => {
+      context.bindSend(() => {
+        if (check.isRunning !== true) {
+          check.isRunning = true;
+          Promise.resolve().then(check);
+        }
+        wakeOne();
+      });
+    });
+    hostDebug?.log(`dispatcher=steal lanes=${workers.length} g=${stealBuffers.regionLanes}`);
+  }
   const sharedDispatcherChannel = serialDispatcherChannel;
   if (serialChannel) {
     const channel = serialDispatcherChannel;
     const checks = workers.map((context) => context.dispatcherCheck);
+    const laneIdle = workers.map((context) => context.txIdle);
     let serialScheduled = false;
     let serialInFlight = false;
     let serialRerun = false;
+    const active = [];
+    const isActive = new Uint8Array(checks.length);
+    const markActive = (lane) => {
+      if (isActive[lane] === 1)
+        return;
+      isActive[lane] = 1;
+      active.push(lane);
+    };
     const runSerialChecks = () => {
       if (serialInFlight) {
         serialRerun = true;
@@ -6689,11 +7260,18 @@ var createPool = ({
       do {
         serialRerun = false;
         serialScheduled = false;
-        for (let index = 0;index < checks.length; index++) {
-          const check = checks[index];
+        for (let index = active.length - 1;index >= 0; index--) {
+          const lane = active[index];
+          const check = checks[lane];
           if (check.isRunning !== true)
             check.isRunning = true;
           check();
+          if (laneIdle[lane]()) {
+            isActive[lane] = 0;
+            const last = active.pop();
+            if (index < active.length)
+              active[index] = last;
+          }
         }
       } while (serialRerun);
       serialInFlight = false;
@@ -6709,9 +7287,10 @@ var createPool = ({
       Promise.resolve().then(runSerialChecks);
     };
     channel.open(runSerialChecks);
-    workers.forEach((context) => {
+    workers.forEach((context, lane) => {
       const wake = context.laneWake;
       context.bindSend(() => {
+        markActive(lane);
         scheduleSerialCheck();
         wake();
       });
@@ -6746,6 +7325,7 @@ var createPool = ({
     closing = true;
     closePromise = Promise.allSettled(workers.map((context) => context.kills())).then(() => {
       sharedDispatcherChannel?.close();
+      stealChannel?.close();
     });
     return closePromise;
   };
@@ -6890,7 +7470,7 @@ var buildTaskDefinitionFromCaller = (input, callerHref, at, imported = false) =>
   const importedFrom = new URL(callerHref).href;
   const out = {
     ...input,
-    id: genTaskID(),
+    id: stableTaskID(importedFrom, at),
     importedFrom,
     at,
     imported,
@@ -6950,13 +7530,13 @@ function importTask(options) {
   }, callerHref, at, true);
 }
 export {
-  workerMainLoop,
-  task,
-  setModuleUrl,
-  isNumericArray,
-  isMain,
-  importTask,
-  createPool,
+  Envelope,
   NumericArray,
-  Envelope
+  createPool,
+  importTask,
+  isMain,
+  isNumericArray,
+  setModuleUrl,
+  task,
+  workerMainLoop
 };

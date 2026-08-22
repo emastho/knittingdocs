@@ -19,7 +19,7 @@ The real implementation has many more moving parts -- fast paths, edge cases, pl
 Knitting has three layers:
 
 1. **API layer** -- `task()`, `createPool()`, `call.*()`, `shutdown()`. This is what your code touches.
-2. **Dispatch layer** -- the host handler: lane routing, the optional balancer strategy, and the inliner. This decides *where* a call runs.
+2. **Dispatch layer** -- the host handler: lane routing, the optional balancer strategy, native work stealing, and the inliner. This decides *where* a call runs.
 3. **Transport layer** -- shared-memory mailboxes, payload buffers, wakeups. This moves data between threads without going through the runtime's message queue.
 
 Knitting runs **thread** workers by default. It can also run each worker as a **separate process** (for sandboxing or containers): the transport is the same shared-memory idea; a process worker just reaches the memory through a *named* mapping instead of an inherited handle. See [Process workers](/guides/process-workers/) and [Shared memory](/guides/shared-memory/).
@@ -30,10 +30,17 @@ This is the core of Knitting's speed advantage. Instead of using `postMessage` (
 
 ### The mailbox model
 
-Each worker has two independent mailboxes:
+In the private-lane topology, each worker has two independent mailboxes:
 
 - **Request mailbox** (host -> worker): the host writes a call header here, the worker reads it.
 - **Response mailbox** (worker -> host): the worker writes the result header here, the host reads it.
+
+Compatible multi-worker pools can use native work stealing instead. The host
+publishes requests into one shared submit region, workers claim available work
+from that region, and each worker retains a private response mailbox. This
+shared-submit/private-return layout prevents a busy worker's private request
+lane from holding work while another worker is idle. The payload format and
+response registry are unchanged.
 
 Each mailbox has **32 slots** -- the slot index is a 5-bit field, so 2⁵ = 32 slots per direction. A slot is a small fixed-size region that holds:
 - Task function ID (`Uint16`, supports up to 65,536 tasks per pool)
@@ -48,9 +55,19 @@ $$
 \text{free} = \sim(H \oplus W)\ \&\ \text{MASK}
 $$
 
-Publishing work is therefore a single atomic toggle of one bit -- not a message copy. Because each direction has exactly one writer (the host writes requests, the worker writes responses), this is a single-producer/single-consumer queue per direction: no mutex, no critical section, just write the payload, then publish the bit. The reader acquires the bit before it trusts the bytes.
+In the private-lane topology, publishing work is a single atomic toggle of one
+bit -- not a message copy. Because each direction has exactly one writer (the
+host writes requests, the worker writes responses), this is a
+single-producer/single-consumer queue per direction: no mutex, no critical
+section, just write the payload, then publish the bit. The reader acquires the
+bit before it trusts the bytes.
 
-The lifecycle of a slot:
+With native stealing, the shared submit region adds a claim handshake so
+multiple workers can compete for available regions. Once a worker claims one,
+the payload publication and private response path use the same shared-memory
+protocol.
+
+For private request lanes, the lifecycle of a slot is:
 
 1. Host atomically claims a free slot in the request mailbox.
 2. Host writes the call header (task ID, payload tag, inline data or payload offset).
@@ -128,11 +145,24 @@ A **lane** is an execution target -- either a worker thread or the inline lane. 
 When you call `call.myTask(args)`, the host **handler**:
 
 1. Resolves any promise arguments on the host.
-2. Picks a lane (using the balancer strategy when there's more than one).
-3. Encodes the arguments and writes them to that lane's mailbox (or queues them for the inliner).
+2. Picks a private lane using the balancer strategy, or publishes to the shared
+   submit region when native work stealing is active.
+3. Encodes the arguments and writes them to the selected mailbox or shared
+   region (or queues them for the inliner).
 4. Returns a promise that resolves when the response arrives.
 
 The handler runs on *every* call; the **balancer** only decides *which* lane it lands on. With a single worker and no inliner there is nothing to balance, so the balancer is bypassed entirely.
+
+### Native work stealing
+
+With stealing enabled, the host does not predict which worker will execute a
+call. A worker claims a submit region when it can make progress, executes the
+task, and writes the response to its own return mailbox. The host uses the
+pool-global pending registry to settle the promise for the task's caller.
+
+Stealing changes request ownership, not task semantics. Completion order still
+follows task completion rather than submission order, so use `Promise.all()` or
+another explicit ordering strategy when order matters.
 
 ### Balancer strategies
 

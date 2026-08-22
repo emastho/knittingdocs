@@ -202,7 +202,9 @@ deno add --npm knitting`;
         <p>
           Pass typed payloads and promises. Move large buffers through zero-copy
           handles. Set timeouts, cancel with abort signals, and keep stack traces
-          and error causes intact.
+          and error causes intact. Knitting's native work stealing lets
+          compatible multi-worker pools claim tasks from a shared submit region
+          instead of waiting in private request lanes.
         </p>
         <ul class="kh-chip-list" aria-label="Call and payload features">
           <li>Promise inputs</li>
@@ -213,6 +215,7 @@ deno add --npm knitting`;
           <li>Abort signals</li>
           <li>Typed arrays</li>
           <li>Error cause chains</li>
+          <li>Native work stealing</li>
         </ul>
         <a href="/guides/payloads/">Explore payloads <span aria-hidden="true">→</span></a>
       </article>
@@ -251,6 +254,27 @@ deno add --npm knitting`;
           signals, or global state. When disabled, the logger is not imported.
         </p>
         <a href="/guides/creating-pools/">Configure a pool <span aria-hidden="true">→</span></a>
+      </article>
+
+      <article class="kh-feature">
+        <div class="kh-feature-icon" aria-hidden="true">⇄</div>
+        <p class="kh-feature-label">Adaptive scheduling</p>
+        <h3 id="kh-stealing-title">Keep every worker moving.</h3>
+        <p>
+          Compatible multi-worker pools share one submit region, so workers can
+          claim tasks as they become free. On Node.js and Bun thread pools, the
+          host doorbell can wait for completions instead of repeatedly polling.
+          The task API stays the same.
+        </p>
+        <ul class="kh-chip-list" aria-label="Adaptive scheduling features">
+          <li>Work stealing</li>
+          <li>Shared submit region</li>
+          <li>Private return lanes</li>
+          <li>Host doorbell</li>
+        </ul>
+        <a href="https://github.com/mimiMonads/knitting/blob/main/STEALING_DOORBELL.md">
+          Explore scheduling details <span aria-hidden="true">→</span>
+        </a>
       </article>
     </div>
   </section>
@@ -524,35 +548,6 @@ html:has([data-knit-home-marker]) .kh-hero-copy {
   flex-direction: column;
   align-items: flex-start;
   gap: clamp(1rem, 2vw, 1.25rem);
-}
-
-html:has([data-knit-home-marker]) .kh-release {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.3rem 0.75rem 0.3rem 0.32rem;
-  border: 1px solid color-mix(in srgb, var(--kh-accent) 38%, transparent);
-  border-radius: 999px;
-  color: var(--kh-muted);
-  font-size: 0.78rem;
-  font-weight: 650;
-  text-decoration: none;
-  transition: border-color 160ms ease, color 160ms ease;
-}
-
-html:has([data-knit-home-marker]) .kh-release:hover {
-  border-color: var(--kh-accent);
-  color: var(--kh-paper);
-}
-
-html:has([data-knit-home-marker]) .kh-release span:first-child {
-  padding: 0.28rem 0.55rem;
-  border-radius: 999px;
-  background: var(--kh-accent);
-  color: var(--kh-button-ink);
-  font-family: var(--sl-font-mono);
-  font-size: 0.75rem;
-  letter-spacing: -0.02em;
 }
 
 html:has([data-knit-home-marker]) .kh-hero h1 {
@@ -1580,11 +1575,6 @@ html:has([data-knit-home-marker]) button:focus-visible {
   html:has([data-knit-home-marker]) .kh-hero h1 {
     font-size: clamp(2.65rem, 13vw, 3.5rem);
     line-height: 1.05;
-  }
-
-  html:has([data-knit-home-marker]) .kh-release {
-    max-width: 100%;
-    flex-wrap: wrap;
   }
 
   html:has([data-knit-home-marker]) .kh-actions {

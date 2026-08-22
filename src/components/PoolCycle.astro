@@ -57,7 +57,7 @@ const firstFrame = [
       <button class="pc-step" type="button" data-step="1" aria-label="Show process worker">process</button>
       <button class="pc-step" type="button" data-step="2" aria-label="Show Node.js process worker">node</button>
       <button class="pc-step" type="button" data-step="3" aria-label="Show bubblewrap sandbox">bwrap</button>
-      <button class="pc-step" type="button" data-step="4" aria-label="Show three sandboxed workers">×3</button>
+      <button class="pc-step" type="button" data-step="4" aria-label="Show three sandboxed workers using work stealing">×3</button>
       <button class="pc-toggle" type="button" data-play aria-label="Pause the animation">
         <span data-play-icon>pause</span>
       </button>
@@ -152,13 +152,14 @@ const firstFrame = [
         bridge: "shared memory · fd 0 kept open",
       },
       {
-        lines: build(["    threads: 3,"].concat(WORKER_BWRAP)),
+        lines: build(["    threads: 3,", "    host: { steal: true },"].concat(WORKER_BWRAP)),
         kind: "process",
         runtime: "node",
         sandbox: true,
         count: 3,
-        note: "three sandboxes, one call site",
-        bridge: "shared memory · 3 lanes",
+        steal: true,
+        note: "three workers claim a shared submit region",
+        bridge: "shared memory · work stealing",
       },
     ];
 
@@ -299,9 +300,11 @@ const firstFrame = [
             stage.runtime +
             "</span>" +
             (stage.sandbox ? '<span class="pc-tag">bwrap</span>' : "") +
+            (stage.steal ? '<span class="pc-tag pc-tag--steal">steal</span>' : "") +
             "</div>";
         }
         workersEl.dataset.count = String(stage.count);
+        workersEl.dataset.steal = String(Boolean(stage.steal));
         workersEl.innerHTML = html;
 
         steps.forEach((step, i) => {
@@ -697,6 +700,12 @@ const firstFrame = [
     color: color-mix(in srgb, var(--pc-accent) 80%, #ffffff 20%);
     font-family: var(--pc-mono);
     font-size: 0.75rem;
+  }
+
+  .pc-tag--steal {
+    border-color: color-mix(in srgb, var(--pc-accent) 70%, transparent);
+    color: var(--pc-accent);
+    font-weight: 700;
   }
 
   .pc-call {

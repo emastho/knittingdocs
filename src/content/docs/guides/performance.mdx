@@ -94,6 +94,30 @@ state. Adding threads beyond the number of available cores usually stops
 helping. For compute-heavy work, `threads: os.availableParallelism() - 1` is a
 reasonable starting point; benchmark the result with your own tasks.
 
+### Native work stealing
+
+Compatible multi-worker pools use native work stealing by default. The host
+publishes calls to one shared submit region, and workers claim available tasks
+as they become free. Responses still use private return lanes, so the task API
+and promise behavior do not change.
+
+This helps most when many CPU-bound calls compete for workers and task durations
+are uneven. It is unlikely to be the main lever for tasks that mostly wait on
+databases, networks, or other external I/O. Set `host.steal: false` for a
+private-lane baseline, or tune `host.stealRegionLanes` for the workload:
+
+- Wider regions reduce arbitration overhead for many cheap, similarly sized
+  calls.
+- Narrower regions expose more independent work for expensive or uneven calls.
+  `1` is a useful starting point when one task can take much longer than another.
+
+The host `doorbell` is a separate completion optimization. Node.js and Bun
+thread pools can use `Atomics.waitAsync` instead of repeatedly polling for
+responses; Deno, process, compiled, and browser pools use the polling fallback.
+Compare like with like when benchmarking: keep the worker topology fixed and
+change one of `host.steal` or `host.doorbell` at a time. See [Work stealing](/guides/work-stealing/)
+for the full option and compatibility details.
+
 ### Inliner
 
 The inliner runs eligible calls without sending them through a worker, skipping

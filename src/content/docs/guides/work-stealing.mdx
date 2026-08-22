@@ -1,0 +1,134 @@
+---
+title: Work stealing
+description: Balance compatible multi-worker pools with native shared-submit work stealing and host completion doorbells.
+sidebar:
+  order: 13
+---
+
+Knitting has two independent host-side scheduling features:
+
+- **Native work stealing** changes how requests reach workers. Compatible
+  multi-worker pools publish work to one shared submit region, so workers can
+  claim tasks as they become available.
+- **The host doorbell** changes how the host waits for responses. Supported
+  runtimes can arm an asynchronous waiter instead of repeatedly polling the
+  response mailbox.
+
+Neither feature changes the task API. Tasks are still exported functions or
+`task()` definitions, and calls still look like
+`await pool.call.name(input)`.
+
+## Quick start
+
+```ts
+import { createPool, isMain, task } from "knitting";
+
+export const transform = task<string, string>({
+  f: (value) => value.toUpperCase(),
+});
+
+if (isMain) {
+  using pool = createPool({
+    threads: 4,
+    host: {
+      steal: true,
+      doorbell: true,
+    },
+  })({ transform });
+
+  console.log(await pool.call.transform("hello"));
+}
+```
+
+The explicit options are useful when documenting or benchmarking a topology.
+For compatible multi-worker pools, native stealing is selected automatically;
+the task code does not need to opt in from the worker side.
+
+## Work stealing
+
+With private request lanes, the host chooses a worker and publishes the call
+to that worker's mailbox. A busy worker can therefore hold queued work while a
+different worker is idle.
+
+With native stealing, the pool uses a shared-submit/private-return layout:
+
+1. The host publishes a request to one shared submit region.
+2. A worker claims a region when it can make progress on the work there.
+3. Each worker keeps a private return region for its responses.
+4. The worker that claims a task owns its response; the host's pending registry
+   settles the corresponding promise.
+
+This lets a worker that finishes early claim more available work without the
+host predicting which worker will be free next. Completion order remains task
+completion order, not submission order.
+
+### Automatic selection
+
+Native stealing is selected automatically when the pool has multiple workers
+and its configuration is compatible with the shared-submit topology. A
+one-worker pool keeps its ordinary private lane because there is nothing to
+steal from.
+
+An explicit balancer, private-lane dispatcher, inliner, compiled worker, or an
+unsupported worker count can change that compatibility decision. Use
+`host.steal: false` to force private request lanes. Use `host.steal: true` only
+when the resulting topology is supported and is what you intend to measure.
+
+### `stealRegionLanes`
+
+The submit region has 32 slots. Stealing divides those slots into regions, and
+one claiming handshake takes one whole region. `stealRegionLanes` is the region
+width:
+
+```text
+number of regions = 32 / stealRegionLanes
+```
+
+Use a positive power of two. Knitting chooses the widest valid region by
+default, leaving a spare region alongside the worker claimants. Wider regions
+amortise arbitration and suit many cheap, similarly sized calls. Narrower
+regions expose more independent work and suit expensive or uneven calls. This
+is a throughput/load-balancing knob, not a correctness knob.
+
+## The host doorbell
+
+The doorbell is a host completion mechanism. It is separate from the worker
+loop that waits for new requests.
+
+When the host has drained all visible responses, a polling dispatcher schedules
+another notification and eventually backs off with a timer. With the doorbell,
+the host arms an asynchronous wait on the response mailbox's shared signal.
+When a worker publishes a response, it rings that signal and the host schedules
+another drain. If the runtime cannot arm the wait, Knitting falls back to
+polling.
+
+The doorbell is enabled by default only when all of these are true:
+
+- the runtime is Node.js or Bun;
+- `Atomics.waitAsync` is available;
+- `host.doorbell` is not `false`; and
+- workers are not in another process.
+
+| Runtime or topology | Completion behavior |
+| --- | --- |
+| Node.js or Bun thread workers | Doorbell when `Atomics.waitAsync` is available |
+| Deno | Polling |
+| Process workers | Polling; another process cannot ring the host isolate's waiter |
+| Compiled workers | Host options are unsupported by the compiled-worker path |
+| Browser web workers | Polling; the browser doorbell is intentionally disabled |
+
+Setting `host.doorbell: true` cannot override a runtime limitation. Set it to
+`false` for an apples-to-apples polling benchmark or when the host is competing
+with workers for every CPU core.
+
+## Tuning and benchmarking
+
+Start with the defaults. Tune `stealRegionLanes` when task durations are highly
+uneven, and compare `host.doorbell: false` with the supported default when host
+CPU or completion latency matters.
+
+Keep the topology constant while benchmarking. Do not compare a polling
+private-lane pool with a doorbell stealing pool and attribute the entire
+difference to the doorbell. These settings matter most when many calls compete
+for local CPU; they are unlikely to dominate a workload that mostly waits on
+external I/O.
