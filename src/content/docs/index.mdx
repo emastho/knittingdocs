@@ -1,6 +1,6 @@
 ---
-title: "Worker runtime for JavaScript"
-description: "Knitting is a zero-dependency worker runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on worker threads or isolated processes without blocking the main thread."
+title: "Concurrency runtime for JavaScript"
+description: "A zero-dependency concurrency runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on threads or isolated processes without blocking the main thread."
 template: splash
 tableOfContents: false
 prev: false
@@ -13,7 +13,7 @@ head:
   - tag: meta
     attrs:
       property: og:title
-      content: "Knitting — Worker runtime for JavaScript"
+      content: "Knitting — Concurrency runtime for JavaScript"
   - tag: meta
     attrs:
       property: og:description
@@ -21,7 +21,7 @@ head:
   - tag: meta
     attrs:
       name: twitter:title
-      content: "Knitting — Worker runtime for JavaScript"
+      content: "Knitting — Concurrency runtime for JavaScript"
   - tag: meta
     attrs:
       name: twitter:description
@@ -360,6 +360,23 @@ deno add --npm knitting`;
     </div>
   </section>
 
+  <section class="kh-quality" data-reveal aria-labelledby="kh-quality-title">
+    <div class="kh-quality-copy">
+      <p class="kh-kicker">Tested on every push</p>
+      <h2 id="kh-quality-title">The hard parts are the tested parts.</h2>
+      <p>Tests cover what is easy to get wrong: shared-memory transport, work stealing, deadlines, payload limits, permissions, and the published package itself. All of it runs on Node.js, Deno, and Bun, on Linux, macOS, and Windows.</p>
+      <div class="kh-quality-links">
+        <a href="https://github.com/mimiMonads/knitting/tree/main/test">Browse the tests</a>
+        <a href="https://github.com/mimiMonads/knitting/actions/workflows/test.yml">View CI <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+    <div class="kh-quality-metrics" aria-label="Testing metrics">
+      <div><strong>400+</strong><span>tests in the suite</span></div>
+      <div><strong>90%</strong><span>line coverage floor on Node</span></div>
+      <div><strong>3</strong><span>operating systems in CI</span></div>
+    </div>
+  </section>
+
   <section class="kh-final" data-reveal aria-labelledby="kh-final-title">
     <p class="kh-kicker">Your hot path can stay a function.</p>
     <h2 id="kh-final-title">Give it a better place to run.</h2>
@@ -524,6 +541,7 @@ html:has([data-knit-home-marker]) .kh-hero-grid,
 html:has([data-knit-home-marker]) .kh-proof,
 html:has([data-knit-home-marker]) .kh-section,
 html:has([data-knit-home-marker]) .kh-benchmark,
+html:has([data-knit-home-marker]) .kh-quality,
 html:has([data-knit-home-marker]) .kh-final {
   width: min(100% - 3rem, 76rem);
   margin-inline: auto;
@@ -804,6 +822,7 @@ html:has([data-knit-home-marker]) .kh-main {
    where the homepage owns the grid rhythm so separators stay one pixel wide. */
 html:has([data-knit-home-marker]) .kh-main > .kh-section,
 html:has([data-knit-home-marker]) .kh-main > .kh-benchmark,
+html:has([data-knit-home-marker]) .kh-main > .kh-quality,
 html:has([data-knit-home-marker]) .kh-main > .kh-final,
 html:has([data-knit-home-marker]) .kh-features > .kh-section-intro,
 html:has([data-knit-home-marker]) .kh-start-grid,
@@ -1396,6 +1415,86 @@ html:has([data-knit-home-marker]) .kh-use-grid > a:hover i {
   transform: translateX(0.25rem);
 }
 
+html:has([data-knit-home-marker]) .kh-quality {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(20rem, 0.85fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: center;
+  margin-bottom: clamp(3rem, 6vw, 5rem);
+  padding: clamp(2.5rem, 5vw, 4.25rem);
+  border: 1px solid var(--kh-night-line);
+  border-radius: 1.2rem;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--kh-accent) 14%, transparent), transparent 27rem),
+    var(--kh-night);
+  color: var(--kh-paper);
+}
+
+html:has([data-knit-home-marker]) .kh-quality-copy h2 {
+  max-width: 15ch;
+  margin: 0.7rem 0 1rem;
+  color: var(--kh-paper);
+}
+
+html:has([data-knit-home-marker]) .kh-quality-copy > p:not(.kh-kicker) {
+  max-width: 40rem;
+  margin: 0;
+  color: var(--kh-muted);
+  font-size: 0.97rem;
+  line-height: 1.65;
+}
+
+html:has([data-knit-home-marker]) .kh-quality-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.5rem;
+  margin-top: 1.6rem;
+}
+
+html:has([data-knit-home-marker]) .kh-quality-links a {
+  color: var(--kh-accent);
+  font-size: 0.84rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+html:has([data-knit-home-marker]) .kh-quality-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+html:has([data-knit-home-marker]) .kh-quality-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--kh-night-line);
+  border-left: 1px solid var(--kh-night-line);
+}
+
+html:has([data-knit-home-marker]) .kh-quality-metrics > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 9.75rem;
+  padding: 1.15rem 0.9rem;
+  border-right: 1px solid var(--kh-night-line);
+  border-bottom: 1px solid var(--kh-night-line);
+}
+
+html:has([data-knit-home-marker]) .kh-quality-metrics strong {
+  color: var(--kh-paper);
+  font-family: var(--sl-font-mono);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+html:has([data-knit-home-marker]) .kh-quality-metrics span {
+  color: var(--kh-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 html:has([data-knit-home-marker]) .kh-final {
   display: flex;
   flex-direction: column;
@@ -1478,6 +1577,10 @@ html:has([data-knit-home-marker]) button:focus-visible {
   html:has([data-knit-home-marker]) .kh-feature--wide {
     grid-column: auto;
   }
+
+  html:has([data-knit-home-marker]) .kh-quality {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 52rem) {
@@ -1485,6 +1588,7 @@ html:has([data-knit-home-marker]) button:focus-visible {
   html:has([data-knit-home-marker]) .kh-proof,
   html:has([data-knit-home-marker]) .kh-section,
   html:has([data-knit-home-marker]) .kh-benchmark,
+  html:has([data-knit-home-marker]) .kh-quality,
   html:has([data-knit-home-marker]) .kh-final {
     width: min(100% - 2rem, 76rem);
   }
@@ -1554,6 +1658,19 @@ html:has([data-knit-home-marker]) button:focus-visible {
 
   html:has([data-knit-home-marker]) .kh-feature--wide {
     min-height: 0;
+  }
+
+  html:has([data-knit-home-marker]) .kh-quality {
+    padding: 2rem 1.35rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-quality-metrics > div {
+    min-height: 8rem;
+    padding: 0.9rem 0.7rem;
+  }
+
+  html:has([data-knit-home-marker]) .kh-quality-metrics strong {
+    font-size: 1.55rem;
   }
 
   html:has([data-knit-home-marker]) .kh-metric-grid article {

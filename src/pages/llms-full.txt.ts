@@ -5,6 +5,7 @@ import {
   ESSENTIALS,
   groupDocs,
   loadDocs,
+  POSITIONING,
   rawBodyFor,
   TAGLINE,
   TITLE,
@@ -19,6 +20,8 @@ export const GET: APIRoute = async ({ site }) => {
     `# ${TITLE} — full documentation`,
     "",
     `> ${TAGLINE}`,
+    "",
+    POSITIONING,
     "",
     ESSENTIALS,
   ];

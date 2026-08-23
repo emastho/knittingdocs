@@ -3,8 +3,10 @@ import {
   docUrl,
   ESSENTIALS,
   fileUrl,
+  GITHUB,
   groupDocs,
   loadDocs,
+  POSITIONING,
   TAGLINE,
   TITLE,
 } from "../lib/llms";
@@ -19,9 +21,11 @@ export const GET: APIRoute = async ({ site }) => {
     "",
     `> ${TAGLINE}`,
     "",
-    `**Building with Knitting? Fetch [llms-full.txt](${
+    POSITIONING,
+    "",
+    `Use the links below to find the documentation relevant to your question. For broad architectural or repository-wide work, fetch [llms-full.txt](${
       fileUrl("llms-full.txt", site)
-    }) first** — it inlines every documentation page into one file. The essentials below cover the common path; the full text covers everything else.`,
+    }) for the complete documentation; most implementation questions only need a few targeted pages.`,
     "",
     ESSENTIALS,
     "",
@@ -37,6 +41,17 @@ export const GET: APIRoute = async ({ site }) => {
     }
     lines.push("");
   }
+
+  lines.push(
+    "## Source and verification",
+    "",
+    `- [GitHub repository](${GITHUB.repository}): Knitting's implementation, releases, issue tracker, and Apache-2.0 license.`,
+    `- [Test suite](${GITHUB.tests}): Runtime, IPC, process-worker, scheduling, permissions, package, browser, and compiled-worker tests.`,
+    `- [Continuous integration](${GITHUB.ci}): Node.js, Deno, and Bun testing across a multi-OS matrix, plus browser end-to-end checks.`,
+    `- [Coverage workflow](${GITHUB.coverage}): Node.js line coverage enforced at 90% or higher.`,
+    `- [Documentation source](${GITHUB.documentation}): Source for this documentation site and its generated llms files.`,
+    "",
+  );
 
   lines.push(
     "## Full text",
