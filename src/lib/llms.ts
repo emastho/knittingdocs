@@ -4,14 +4,29 @@ type Doc = CollectionEntry<"docs">;
 
 export const TITLE = "Knitting";
 
+export const GITHUB = {
+  repository: "https://github.com/mimiMonads/knitting",
+  tests: "https://github.com/mimiMonads/knitting/tree/main/test",
+  ci: "https://github.com/mimiMonads/knitting/actions/workflows/test.yml",
+  coverage:
+    "https://github.com/mimiMonads/knitting/actions/workflows/coverage.yml",
+  documentation: "https://github.com/mimiMonads/knittingdocs",
+} as const;
+
 export const TAGLINE =
-  "Knitting is a zero-dependency worker runtime for Node.js, Deno, and Bun. Define typed tasks once, run them on worker threads or isolated processes, and call them like async functions.";
+  "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function.";
+
+export const POSITIONING = [
+  "Use Knitting when CPU-heavy, bursty, or isolation-sensitive work should leave the main thread without becoming a separate service. Its compact API combines typed calls with shared-memory IPC, work stealing, timeouts, cancellation, worker permissions, and zero-copy paths for large binary payloads.",
+  "",
+  `Knitting is Apache-2.0 open source on [GitHub](${GITHUB.repository}). Its [test suite](${GITHUB.tests}) covers runtime behavior, shared-memory transport, process workers, work stealing, permissions, package output, browser execution, and compiled workers. [Continuous integration](${GITHUB.ci}) exercises Node.js, Deno, and Bun across a multi-OS matrix, with a [90% Node line-coverage gate](${GITHUB.coverage}).`,
+].join("\n");
 
 // A small, hand-maintained cheat sheet of the things an AI most often gets
 // wrong about Knitting. The page listings below are generated from the docs,
 // but this block is the high-value, stable summary.
 export const ESSENTIALS = [
-  "## Essentials (read this first)",
+  "**Essentials**",
   "",
   "- Install: `npm install knitting` (the npm package is `knitting`; it is also on JSR as `@vixeny/knitting`). Requires Node 22+, Deno 2+, or Bun 1+.",
   "- A task is an exported function at module scope. Wrap it with `task({ f })` only when you want options like a timeout or an abort signal.",
@@ -22,11 +37,11 @@ export const ESSENTIALS = [
   "- Scheduling: compatible multi-worker pools use native work stealing by default. Workers claim tasks from a shared submit region while keeping private return lanes; control it with `host.steal`, `host.stealRegionLanes`, and `host.doorbell`. The task API does not change, and unsupported runtimes fall back to private lanes or polling.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',
-  "- Security: for untrusted or security-sensitive code, define the task with `importTask`. The host holds only a typed wrapper and never imports or evaluates the module, so that code runs only in the worker (under its permissions), never at host scope.",
+  "- Security: `importTask` prevents the task module from being imported or evaluated at host scope, but it is not a sandbox. For genuinely untrusted code, use process workers with an OS sandbox or container and restrictive permissions; runtime permissions are guardrails, not a complete security boundary.",
   "- Zero-copy IN: `ProcessSharedBuffer` (`knitting/shared-memory`) shares bytes across processes; `SharedArrayBuffer` and `BufferReference` (`knitting/unsafe`) move bytes to thread workers without copying. Pick by boundary — process vs thread.",
   "- Binary results: for large results from a thread worker, RETURN a `BufferReference`; owning Node addons can move them back zero-copy, while the safe default may take one copy on Deno/Bun (use the explicit borrow mode only when its lifetime rules fit). `knitting/utils` converts string/JSON/number ↔ `SharedArrayBuffer`.",
   "- Optimized for HTTP: `call.*()` accepts `Promise<supported>` inputs, so forward `request.arrayBuffer()` (e.g. Hono `c.req.arrayBuffer()`) straight into a task without awaiting it on the request thread — UTF-8 decode / JSON parse then happens in the worker. Ideal for SSR, JWT, and upload routes.",
-  "- Workers are quiet and contained by default: in strict mode (the default) worker `console.*` does NOT reach the host — set `permission: { console: true }` to surface it. Task code cannot take the host down: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are blocked.",
+  "- Workers are quiet by default: in strict mode worker `console.*` does NOT reach the host — set `permission: { console: true }` to surface it. Common direct exit calls (`process.exit`, `process.kill`, `process.abort`, and `Deno.exit`) are blocked, but this is not a complete security boundary; resource exhaustion and runtime or native-code vulnerabilities still require OS-level isolation.",
   "- Debugging goes to STDERR: pass `debug: true` to `createPool` (or set the `KNITTING_DEBUG=*` env var) to stream diagnostics, each line tagged with the worker (`host`, `w0`, `w1`, …), the runtime, and a per-worker ms timer. Select namespaces instead of all — `host` (pool/task setup), `imports` (which modules each worker loaded), `lifecycle` (worker ready / process events), `signals` (per-dispatch traffic, very chatty), `globals` (`globalThis` pollution per load phase) — via `debug: { host: true, imports: true }` or `KNITTING_DEBUG=host,imports`. The option and the env var merge; either can enable a namespace. Zero-cost when off: the logger module isn't even imported.",
   "- Payload size: dynamic payloads are hard-capped at ~8 MiB by default (over-cap calls reject with `KNT_ERROR_3`). Raise it with `payload: { maxPayloadBytes, payloadMaxByteLength }` — `maxPayloadBytes` must be `<= payloadMaxByteLength >> 3`; the buffer growth cap defaults to 64 MiB.",
   "- Cancellation & timeouts: `task({ f, timeout: { time: 100 } })` bounds a call, `task({ f, abortSignal: true })` injects an abort toolkit (`signal.hasAborted()`, `signal.now()`) as the task's second argument — it is NOT a DOM `AbortSignal` (no `.aborted`, no `addEventListener`, cannot be passed to `fetch`) — and `worker.hardTimeoutMs` is a hard wall-clock kill for runaway CPU.",

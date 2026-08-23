@@ -107,7 +107,7 @@ export default defineConfig({
     starlight({
       title: "Knitting",
       description:
-        "Knitting is a zero-dependency worker runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on worker threads or isolated processes without blocking the main thread.",
+        "A zero-dependency concurrency runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on threads or isolated processes without blocking the main thread.",
       favicon: "/favicon.ico",
       head: [
         {
@@ -132,7 +132,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Knitting worker runtime diagram showing a typed task dispatched to threads or isolated processes",
+            content: "The Knitting sheep mascot beside the Knitting wordmark, with Node.js, Deno, and Bun listed below",
           },
         },
         {
@@ -174,7 +174,7 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             name: "twitter:image:alt",
-            content: "Knitting worker runtime diagram showing a typed task dispatched to threads or isolated processes",
+            content: "The Knitting sheep mascot beside the Knitting wordmark, with Node.js, Deno, and Bun listed below",
           },
         },
         {
