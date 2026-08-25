@@ -14,6 +14,13 @@ Knitting has two independent host-side scheduling features:
   runtimes can arm an asynchronous waiter instead of repeatedly polling the
   response mailbox.
 
+Both exist for the same reason. Threading in JavaScript usually buys its
+throughput with CPU, and Knitting is built to keep that bill small: a worker
+with nothing to claim parks instead of spinning, and a host with nothing to
+drain waits on the doorbell instead of polling. An idle thread should cost
+close to nothing. [Multi-threading](/guides/multi-threading/) shows what that
+looks like in measurements.
+
 Neither feature changes the task API. Tasks are still exported functions or
 `task()` definitions, and calls still look like
 `await pool.call.name(input)`.
@@ -101,6 +108,12 @@ the host arms an asynchronous wait on the response mailbox's shared signal.
 When a worker publishes a response, it rings that signal and the host schedules
 another drain. If the runtime cannot arm the wait, Knitting falls back to
 polling.
+
+Polling spends host CPU whether or not a response is waiting, and it spends it
+on the same thread that produces the work. The doorbell removes the empty
+checks: nothing is scheduled until a worker has something to hand back. The
+less loaded the pool, the larger the share of checks that were empty, which is
+why the doorbell matters most on a pool that is not saturated.
 
 The doorbell is enabled by default only when all of these are true:
 

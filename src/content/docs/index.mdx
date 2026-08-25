@@ -33,6 +33,7 @@ head:
 ---
 
 import PoolCycle from "../../components/PoolCycle.astro";
+import ImpactBars from "../../components/ImpactBars.astro";
 import { Code } from "@astrojs/starlight/components";
 
 export const quickStart = `import { createPool, isMain } from "knitting";
@@ -171,6 +172,35 @@ deno add --npm knitting`;
       <pre class="kh-install-code"><code>{install}</code></pre>
       <a href="/start/installation/">Installation details <span aria-hidden="true">→</span></a>
     </div>
+  </section>
+
+  <section
+    class="kh-section kh-server-proof"
+    data-reveal
+    aria-labelledby="kh-server-proof-title"
+  >
+    <div class="kh-server-proof-copy">
+      <p class="kh-kicker">The effect at the server edge</p>
+      <h2 id="kh-server-proof-title">Keep fast routes fast.</h2>
+      <p>
+        On the Hono example’s mixed workload, React SSR and JWT leave the
+        request thread. <code>/ping</code> never enters the pool, yet handles
+        201% more requests under saturation because it no longer waits behind
+        expensive routes.
+      </p>
+      <div class="kh-server-proof-links">
+        <a href="/examples/data_transforms/rendering_output/hono_server/">
+          View the Hono server <span aria-hidden="true">→</span>
+        </a>
+        <a href="/guides/multi-threading/">
+          Tune multi-worker pools <span aria-hidden="true">→</span>
+        </a>
+        <a href="/documents/hono-16core-benchmark.md">
+          Read the 16-core results <span aria-hidden="true">→</span>
+        </a>
+      </div>
+    </div>
+    <ImpactBars />
   </section>
 
   <section class="kh-section kh-features" data-reveal aria-labelledby="kh-features-title">
@@ -1353,6 +1383,57 @@ html:has([data-knit-home-marker]) .kh-metric-grid p {
   font-size: 0.75rem;
 }
 
+html:has([data-knit-home-marker]) .kh-server-proof {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(20rem, 1.1fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof-copy {
+  display: grid;
+  gap: 1rem;
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof h2 {
+  margin: 0;
+  color: var(--kh-paper);
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  letter-spacing: -0.045em;
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof-copy > p:not(.kh-kicker) {
+  margin: 0;
+  color: var(--kh-muted);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof code {
+  color: var(--kh-paper);
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.3rem;
+  margin-top: 0.4rem;
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof-links a {
+  color: var(--kh-accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+html:has([data-knit-home-marker]) .kh-server-proof-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+
 html:has([data-knit-home-marker]) .kh-benchmark-links {
   display: flex;
   align-items: center;
@@ -1633,7 +1714,8 @@ html:has([data-knit-home-marker]) button:focus-visible {
 
   html:has([data-knit-home-marker]) .kh-steps,
   html:has([data-knit-home-marker]) .kh-feature-grid,
-  html:has([data-knit-home-marker]) .kh-metric-grid {
+  html:has([data-knit-home-marker]) .kh-metric-grid,
+  html:has([data-knit-home-marker]) .kh-server-proof {
     grid-template-columns: 1fr;
   }
 

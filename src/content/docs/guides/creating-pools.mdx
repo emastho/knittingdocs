@@ -121,6 +121,9 @@ Deprecated payload aliases are still accepted at the top level:
 How many worker threads to spawn (default `1`). Lanes are counted as
 `threads + (inliner ? 1 : 0)`.
 
+See [Multi-threading](/guides/multi-threading/) for choosing a worker count and
+configuring idle-worker timers in a server.
+
 ## payload
 
 These options tune the shared buffers that carry arguments out and results

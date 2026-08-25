@@ -89,53 +89,29 @@ curl -s http://localhost:3000/jwt \
   -d '{"user":{"id":"u_42","email":"ari@example.com","role":"admin"},"ttlSec":900}'
 ```
 
-## Performance notes (how to talk about it correctly)
+## Performance notes
 
-### What the numbers say (hono_only → hono+knitting)
+Measurements: [Hono 16-core benchmark](/documents/hono-16core-benchmark.md).
 
-#### Throughput (RPS)
+### Saturating mixed load — throughput
+
+One worker, with `/ping`, `/ssr`, and `/jwt` loaded concurrently.
 
 | Route | Hono only | Hono + Knitting | Delta |
 | --- | ---: | ---: | ---: |
-| `/ping` | `2998` | `5471` | **+82%** |
-| `/ssr` | `2998` | `5421` | **+81%** |
-| `/jwt` | `2916` | `5454` | **+87%** |
+| `/ping` | `2,815 rps` | `8,486 rps` | **+201%** |
+| `/ssr` | `2,815 rps` | `4,816 rps` | **+71%** |
+| `/jwt` | `2,578 rps` | `4,712 rps` | **+83%** |
 
-So: roughly **~1.8× throughput** across the board. Offloading the heavy work frees the main thread, so even the “cheap” routes handle more requests per second when Knitting is in play.
+### Fixed 6,000 RPS mixed load — latency
 
-### Latency improvements (lower is better)
+One worker, with each route offered `2,000 rps`.
 
-#### PING
-
-| Percentile | Hono only | Hono + Knitting | Delta |
-| --- | ---: | ---: | ---: |
-| `p50` | `16.32ms` | `8.84ms` | **-46%** |
-| `p99` | `27.05ms` | `14.52ms` | **-46%** |
-| `p99.9` | `71.01ms` | `64.59ms` | **-9%** |
-| `p99.99` | `128.70ms` | `99.44ms` | **-23%** |
-| `slowest` | `129.25ms` | `99.90ms` | **-23%** |
-
-#### SSR
-
-| Percentile | Hono only | Hono + Knitting | Delta |
-| --- | ---: | ---: | ---: |
-| `p50` | `16.32ms` | `8.71ms` | **-47%** |
-| `p99` | `27.32ms` | `17.35ms` | **-36%** |
-| `p99.9` | `71.96ms` | `63.97ms` | **-11%** |
-| `p99.99` | `128.61ms` | `98.75ms` | **-23%** |
-| `slowest` | `129.31ms` | `106.73ms` | **-17%** |
-
-#### JWT
-
-| Percentile | Hono only | Hono + Knitting | Delta |
-| --- | ---: | ---: | ---: |
-| `p50` | `16.47ms` | `8.71ms` | **-47%** |
-| `p99` | `34.49ms` | `15.91ms` | **-54%** |
-| `p99.9` | `114.95ms` | `59.48ms` | **-48%** |
-| `p99.99` | `121.47ms` | `101.07ms` | **-17%** |
-| `slowest` | `161.28ms` | `138.48ms` | **-14%** |
-
-Headline: the median and `p99` basically halve, and the JWT tail (`p99.9`) improves dramatically.
+| Route | Hono only p50 | Knitting p50 | Hono only p99 | Knitting p99 |
+| --- | ---: | ---: | ---: | ---: |
+| `/ping` | `0.81ms` | `0.40ms` | `16.93ms` | `2.31ms` |
+| `/ssr` | `0.84ms` | `2.22ms` | `14.32ms` | `8.71ms` |
+| `/jwt` | `1.03ms` | `2.58ms` | `25.18ms` | `9.76ms` |
 
 ## Why this pattern matters
 
