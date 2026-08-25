@@ -475,9 +475,14 @@ html:has([data-knit-home-marker]) main {
 }
 
 html:has([data-knit-home-marker]) .header {
-  border-color: transparent;
+  border-bottom: 0;
   background: var(--kh-night);
+  box-shadow: 0 1px 0 var(--kh-night);
   color: var(--kh-paper);
+}
+
+html:has([data-knit-home-marker]) .header .social-icons::after {
+  content: none;
 }
 
 html:has([data-knit-home-marker]) .header .site-title,
@@ -554,7 +559,7 @@ html:has([data-knit-home-marker]) .kh-hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  --kh-mascot-size: clamp(24rem, 50vw, 40rem);
+  --kh-mascot-size: clamp(21rem, 38vw, 34rem);
   background: var(--kh-night);
   color: var(--kh-paper);
 }
@@ -574,8 +579,8 @@ html:has([data-knit-home-marker]) .kh-hero-mascot {
   z-index: -1;
   width: var(--kh-mascot-size);
   height: auto;
-  top: clamp(-7rem, -7vw, -3rem);
-  right: clamp(-8rem, -6vw, -2rem);
+  top: clamp(0.75rem, 2vw, 2rem);
+  right: clamp(1rem, 3vw, 3rem);
   margin: 0;
   opacity: 0.13;
   transform: rotate(4deg);
@@ -1672,13 +1677,13 @@ html:has([data-knit-home-marker]) button:focus-visible {
   }
 
   html:has([data-knit-home-marker]) .kh-hero {
-    --kh-mascot-size: clamp(20rem, 68vw, 28rem);
+    --kh-mascot-size: clamp(18rem, 70vw, 22rem);
   }
 
   html:has([data-knit-home-marker]) .kh-hero-mascot {
-    top: -3rem;
-    right: -5rem;
-    opacity: 0.09;
+    top: 0.75rem;
+    right: 0.5rem;
+    opacity: 0.075;
   }
 
   html:has([data-knit-home-marker]) .kh-section-intro {
