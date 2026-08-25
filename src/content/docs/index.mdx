@@ -580,7 +580,10 @@ html:has([data-knit-home-marker]) .kh-hero-mascot {
   width: var(--kh-mascot-size);
   height: auto;
   top: clamp(0.75rem, 2vw, 2rem);
-  right: clamp(1rem, 3vw, 3rem);
+  /* Keep Lamby attached to the centered terminal on wide viewports. The
+     fixed overhang lets the body sit behind its right edge without drifting
+     toward the side of the screen as the viewport grows. */
+  right: max(1rem, calc((100vw - 66rem) / 2 - 8rem));
   margin: 0;
   opacity: 0.13;
   transform: rotate(4deg);
