@@ -1,7 +1,13 @@
 {
   "name": "knitting",
+  "private": true,
+  "description": "Documentation site for Knitting.",
   "type": "module",
   "version": "0.0.1",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=9.6.5"
+  },
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
