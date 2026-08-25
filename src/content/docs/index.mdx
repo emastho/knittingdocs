@@ -58,6 +58,15 @@ deno add --npm knitting`;
 <div data-knit-home-marker hidden></div>
 
 <section class="kh-hero" aria-labelledby="kh-hero-title">
+  <img
+    class="kh-hero-mascot"
+    src={`${import.meta.env.BASE_URL}brand/knitting-mascot.png`}
+    alt=""
+    aria-hidden="true"
+    decoding="async"
+    width="1024"
+    height="1024"
+  />
   <div class="kh-hero-grid">
     <div class="kh-hero-copy" data-reveal>
       <h1 id="kh-hero-title">
@@ -204,16 +213,6 @@ deno add --npm knitting`;
   </section>
 
   <section class="kh-section kh-features" data-reveal aria-labelledby="kh-features-title">
-    <img
-      class="kh-mascot-watermark"
-      src={`${import.meta.env.BASE_URL}brand/knitting-mascot.png`}
-      alt=""
-      aria-hidden="true"
-      loading="lazy"
-      decoding="async"
-      width="1024"
-      height="1024"
-    />
     <div class="kh-section-intro">
       <p class="kh-kicker">The mechanics around the call</p>
       <h2 id="kh-features-title">The boundary is part of the API.</h2>
@@ -555,6 +554,7 @@ html:has([data-knit-home-marker]) .kh-hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  --kh-mascot-size: clamp(24rem, 50vw, 40rem);
   background: var(--kh-night);
   color: var(--kh-paper);
 }
@@ -565,6 +565,24 @@ html:has([data-knit-home-marker]) .kh-hero::before {
 
 html:has([data-knit-home-marker]) .kh-hero::after {
   content: none;
+}
+
+/* Lamby is a quiet backdrop to the opening statement, matching the original
+   hero composition without competing with its text or the pool visual. */
+html:has([data-knit-home-marker]) .kh-hero-mascot {
+  position: absolute;
+  z-index: -1;
+  width: var(--kh-mascot-size);
+  height: auto;
+  top: clamp(-7rem, -7vw, -3rem);
+  right: clamp(-8rem, -6vw, -2rem);
+  margin: 0;
+  opacity: 0.13;
+  transform: rotate(4deg);
+  filter: saturate(0.82) contrast(1.04);
+  mask-image: linear-gradient(to bottom, black 58%, transparent 100%);
+  pointer-events: none;
+  user-select: none;
 }
 
 html:has([data-knit-home-marker]) .kh-hero-grid,
@@ -899,8 +917,6 @@ html:has([data-knit-home-marker]) .kh-main-rule {
 html:has([data-knit-home-marker]) .kh-features {
   position: relative;
   isolation: isolate;
-  --kh-mascot-size: clamp(18rem, 35vw, 30rem);
-  --kh-mascot-right: clamp(0rem, 2vw, 2rem);
 }
 
 html:has([data-knit-home-marker]) .kh-features::before {
@@ -918,27 +934,6 @@ html:has([data-knit-home-marker]) .kh-features::before {
     transparent 68%
   );
   pointer-events: none;
-}
-
-html:has([data-knit-home-marker]) .kh-mascot-watermark {
-  position: absolute;
-  z-index: -1;
-  width: var(--kh-mascot-size);
-  height: auto;
-  top: clamp(1.5rem, 4vw, 3.5rem);
-  right: var(--kh-mascot-right);
-  margin: 0;
-  opacity: 0.12;
-  transform: rotate(4deg);
-  filter: saturate(0.82) contrast(1.04);
-  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
-  pointer-events: none;
-  user-select: none;
-}
-
-html:has([data-knit-home-marker]) .kh-features > :not(.kh-mascot-watermark) {
-  position: relative;
-  z-index: 1;
 }
 
 html:has([data-knit-home-marker]) .kh-section-intro {
@@ -1191,8 +1186,6 @@ html:has([data-knit-home-marker]) .kh-feature-grid {
   column-gap: clamp(2.5rem, 7vw, 7rem);
 }
 
-/* Leave a clean opening wherever Lamby sits so the divider cannot read as a
-   seam between the head and body through the transparent artwork. */
 html:has([data-knit-home-marker]) .kh-feature-grid::before {
   content: "";
   position: absolute;
@@ -1200,13 +1193,7 @@ html:has([data-knit-home-marker]) .kh-feature-grid::before {
   right: 0;
   left: 0;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    var(--kh-line) 0
-      calc(100% - var(--kh-mascot-right) - var(--kh-mascot-size) - 0.75rem),
-    transparent calc(100% - var(--kh-mascot-right) - var(--kh-mascot-size) - 0.75rem)
-      100%
-  );
+  background: var(--kh-line);
   pointer-events: none;
 }
 
@@ -1684,14 +1671,14 @@ html:has([data-knit-home-marker]) button:focus-visible {
     padding-block: 4rem;
   }
 
-  html:has([data-knit-home-marker]) .kh-features {
-    --kh-mascot-size: clamp(15rem, 58vw, 21rem);
-    --kh-mascot-right: 0rem;
+  html:has([data-knit-home-marker]) .kh-hero {
+    --kh-mascot-size: clamp(20rem, 68vw, 28rem);
   }
 
-  html:has([data-knit-home-marker]) .kh-mascot-watermark {
-    top: 2.5rem;
-    opacity: 0.08;
+  html:has([data-knit-home-marker]) .kh-hero-mascot {
+    top: -3rem;
+    right: -5rem;
+    opacity: 0.09;
   }
 
   html:has([data-knit-home-marker]) .kh-section-intro {
