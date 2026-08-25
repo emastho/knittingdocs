@@ -7,12 +7,12 @@ type ThroughputRow = {
 };
 
 const rows: ThroughputRow[] = [
-  { route: "/ping", before: 2998, after: 5471, gainPercent: 82 },
-  { route: "/ssr", before: 2998, after: 5421, gainPercent: 81 },
-  { route: "/jwt", before: 2916, after: 5454, gainPercent: 87 },
+  { route: "/ping", before: 2815, after: 8486, gainPercent: 201 },
+  { route: "/ssr", before: 2815, after: 4816, gainPercent: 71 },
+  { route: "/jwt", before: 2578, after: 4712, gainPercent: 83 },
 ];
 
-const tailLatencyReductionPercent = 48;
+const pingP99LatencyReductionPercent = 86;
 const maxAfter = Math.max(...rows.map((row) => row.after));
 
 const benchmarkMetadata = {
@@ -29,8 +29,8 @@ const benchmarkMetadata = {
     gainPercent: row.gainPercent,
   })),
   tailLatency: {
-    percentile: "p99.9",
-    reductionPercent: tailLatencyReductionPercent,
+    percentile: "p99",
+    reductionPercent: pingP99LatencyReductionPercent,
   },
 };
 const benchmarkMetadataJson = JSON.stringify(benchmarkMetadata);
@@ -81,17 +81,17 @@ function width(value: number) {
     class="impact-latency"
     role="group"
     aria-label="Tail latency reduction"
-    data-tail-latency-percentile="p99.9"
-    data-tail-latency-reduction-percent={String(tailLatencyReductionPercent)}
+    data-tail-latency-percentile="p99"
+    data-tail-latency-reduction-percent={String(pingP99LatencyReductionPercent)}
   >
     <div class="impact-latency-head">
-      <span>Overall p99.9 tail latency</span>
-      <strong>{tailLatencyReductionPercent}% lower</strong>
+      <span><code>/ping</code> p99 latency</span>
+      <strong>{pingP99LatencyReductionPercent}% lower</strong>
     </div>
     <div class="impact-latency-track" aria-hidden="true">
       <div
         class="impact-latency-fill"
-        style={`width: ${tailLatencyReductionPercent}%;`}
+        style={`width: ${pingP99LatencyReductionPercent}%;`}
       />
     </div>
   </div>

@@ -1,0 +1,267 @@
+---
+type CpuPoint = {
+  label: string;
+  cpuUsPerRequest: number;
+  requestsPerSecond: number;
+  featured?: boolean;
+};
+
+const points: CpuPoint[] = [
+  { label: "Host", cpuUsPerRequest: 145, requestsPerSecond: 8208 },
+  { label: "1 worker", cpuUsPerRequest: 100, requestsPerSecond: 18014, featured: true },
+  { label: "2 workers", cpuUsPerRequest: 121, requestsPerSecond: 15811 },
+  { label: "4 workers", cpuUsPerRequest: 144, requestsPerSecond: 13906 },
+  { label: "8 workers", cpuUsPerRequest: 198, requestsPerSecond: 11649 },
+  { label: "15 workers", cpuUsPerRequest: 236, requestsPerSecond: 11987 },
+];
+
+const maximumCpuUs = 250;
+
+const metadata = {
+  benchmark: "hono-16core-cpu-efficiency",
+  workload: "Saturating mixed Hono load: /ping, /ssr, and /jwt",
+  runtime: "Bun 1.4.0",
+  metric: "cpu_microseconds_per_request",
+  lowerIsBetter: true,
+  policy: "One worker spins for 50 microseconds; multi-worker pools share work through native stealing, then park without spinning.",
+  rows: points.map((point) => ({
+    label: point.label,
+    cpuMicrosecondsPerRequest: point.cpuUsPerRequest,
+    requestsPerSecond: point.requestsPerSecond,
+  })),
+};
+const metadataJson = JSON.stringify(metadata);
+
+function height(value: number) {
+  return `${Math.max(5, Math.min(100, (value / maximumCpuUs) * 100)).toFixed(2)}%`;
+}
+
+function formatRps(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+---
+
+<section class="hono-cpu" aria-labelledby="hono-cpu-title">
+  <header class="hono-cpu__header">
+    <div>
+      <p class="hono-cpu__eyebrow">Hono mixed load · less is more</p>
+      <h3 id="hono-cpu-title">Leave more CPU for serving requests.</h3>
+    </div>
+    <p>
+      Each bar is CPU time for one served request. Multi-worker pools share
+      available work through native stealing, then sleep when there is none.
+    </p>
+  </header>
+
+  <div class="hono-cpu__plot" role="list" aria-label="CPU microseconds per request by worker count">
+    <div class="hono-cpu__scale" aria-hidden="true">
+      <span>250 µs</span>
+      <span>125 µs</span>
+      <span>0</span>
+    </div>
+    <div class="hono-cpu__bars">
+      {points.map((point) => (
+        <article
+          class:list={["hono-cpu__column", point.featured && "hono-cpu__column--featured"]}
+          role="listitem"
+          aria-label={`${point.label}: ${point.cpuUsPerRequest} CPU microseconds per request at ${formatRps(point.requestsPerSecond)} requests per second`}
+        >
+          <div class="hono-cpu__bar-zone" aria-hidden="true">
+            <div class="hono-cpu__bar" style={`height: ${height(point.cpuUsPerRequest)};`}>
+              <strong>{point.cpuUsPerRequest}</strong>
+            </div>
+          </div>
+          <span class="hono-cpu__label">{point.label}</span>
+          <span class="hono-cpu__rps">{formatRps(point.requestsPerSecond)} rps</span>
+        </article>
+      ))}
+    </div>
+  </div>
+
+  <p class="hono-cpu__source">
+    <a href="/documents/hono-16core-benchmark.md">Full method and measurements</a>
+  </p>
+
+  <script
+    type="application/json"
+    data-benchmark-metadata="hono-cpu-efficiency"
+    set:html={metadataJson}
+  ></script>
+</section>
+
+<style>
+  .hono-cpu {
+    --hono-cpu-ink: color-mix(in srgb, var(--sl-color-text) 90%, transparent);
+    --hono-cpu-muted: color-mix(in srgb, var(--sl-color-text) 62%, transparent);
+    --hono-cpu-line: color-mix(in srgb, var(--sl-color-text) 14%, transparent);
+    --hono-cpu-bar: linear-gradient(180deg, #fb923c, #ea580c);
+    --hono-cpu-featured: linear-gradient(180deg, #a3e635, #4d7c0f);
+    display: grid;
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border: 1px solid var(--hono-cpu-line);
+    border-radius: 1rem;
+    background:
+      radial-gradient(circle at 0 0, color-mix(in srgb, #fb923c 12%, transparent), transparent 28rem),
+      color-mix(in srgb, var(--sl-color-bg) 94%, #fff 6%);
+  }
+
+  .hono-cpu__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.75fr);
+    gap: 1.5rem;
+    align-items: end;
+  }
+
+  .hono-cpu__eyebrow,
+  .hono-cpu__header > p,
+  .hono-cpu__source,
+  .hono-cpu__rps {
+    margin: 0;
+    color: var(--hono-cpu-muted);
+  }
+
+  .hono-cpu__eyebrow {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .hono-cpu h3 {
+    margin: 0.35rem 0 0;
+    color: var(--hono-cpu-ink);
+    font-size: clamp(1.35rem, 3vw, 1.85rem);
+  }
+
+  .hono-cpu__header > p {
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .hono-cpu__plot {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.6rem;
+    min-height: 17rem;
+  }
+
+  .hono-cpu__scale {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-block: 0.5rem 2.85rem;
+    color: var(--hono-cpu-muted);
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.7rem;
+    text-align: right;
+  }
+
+  .hono-cpu__bars {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: clamp(0.3rem, 1.4vw, 1rem);
+    min-width: 0;
+    border-bottom: 1px solid var(--hono-cpu-line);
+    background: repeating-linear-gradient(
+      to top,
+      transparent 0 calc(50% - 1px),
+      var(--hono-cpu-line) calc(50% - 1px) 50%,
+      transparent 50% 100%
+    );
+  }
+
+  .hono-cpu__column {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    gap: 0.35rem;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .hono-cpu__bar-zone {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    min-height: 0;
+    padding-top: 0.5rem;
+  }
+
+  .hono-cpu__bar {
+    display: flex;
+    align-items: start;
+    justify-content: center;
+    width: min(100%, 3.25rem);
+    min-height: 1.65rem;
+    padding-top: 0.35rem;
+    border-radius: 0.55rem 0.55rem 0 0;
+    background: var(--hono-cpu-bar);
+    box-shadow: 0 0.35rem 1rem color-mix(in srgb, #ea580c 22%, transparent);
+  }
+
+  .hono-cpu__bar strong {
+    color: #fff;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: clamp(0.68rem, 1.7vw, 0.82rem);
+  }
+
+  .hono-cpu__column--featured .hono-cpu__bar {
+    background: var(--hono-cpu-featured);
+    box-shadow: 0 0.35rem 1rem color-mix(in srgb, #65a30d 24%, transparent);
+  }
+
+  .hono-cpu__label {
+    overflow: hidden;
+    color: var(--hono-cpu-ink);
+    font-size: clamp(0.68rem, 1.6vw, 0.8rem);
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hono-cpu__rps {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: clamp(0.56rem, 1.3vw, 0.68rem);
+    white-space: nowrap;
+  }
+
+  .hono-cpu__source {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .hono-cpu__source a {
+    color: inherit;
+  }
+
+  :global(:root[data-theme="dark"]) .hono-cpu {
+    --hono-cpu-ink: color-mix(in srgb, var(--sl-color-white) 92%, transparent);
+    --hono-cpu-muted: color-mix(in srgb, var(--sl-color-white) 64%, transparent);
+    --hono-cpu-line: color-mix(in srgb, var(--sl-color-white) 14%, transparent);
+    background:
+      radial-gradient(circle at 0 0, color-mix(in srgb, #fb923c 15%, transparent), transparent 28rem),
+      color-mix(in srgb, var(--sl-color-bg) 96%, #000 4%);
+  }
+
+  @media (max-width: 36rem) {
+    .hono-cpu__header {
+      grid-template-columns: 1fr;
+      gap: 0.55rem;
+    }
+
+    .hono-cpu__plot {
+      min-height: 14rem;
+    }
+
+    .hono-cpu__bars {
+      gap: 0.2rem;
+    }
+
+    .hono-cpu__scale {
+      padding-bottom: 2.45rem;
+      font-size: 0.58rem;
+    }
+  }
+</style>

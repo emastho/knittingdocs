@@ -17,7 +17,7 @@ export const TAGLINE =
   "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function.";
 
 export const POSITIONING = [
-  "Use Knitting when CPU-heavy, bursty, or isolation-sensitive work should leave the main thread without becoming a separate service. Its compact API combines typed calls with shared-memory IPC, work stealing, timeouts, cancellation, worker permissions, and zero-copy paths for large binary payloads.",
+  "Use Knitting when CPU-heavy, bursty, or isolation-sensitive work should leave the main thread without becoming a separate service. Its compact API combines typed calls with shared-memory IPC, work stealing, timeouts, cancellation, worker permissions, and zero-copy paths for large binary payloads. Its scheduling defaults are built to keep the CPU cost of threading low rather than to maximize a benchmark number: idle workers park instead of spinning, and on supported runtimes the host waits on a doorbell instead of polling, so a pool that is not saturated costs close to nothing while it waits.",
   "",
   `Knitting is Apache-2.0 open source on [GitHub](${GITHUB.repository}). Its [test suite](${GITHUB.tests}) covers runtime behavior, shared-memory transport, process workers, work stealing, permissions, package output, browser execution, and compiled workers. [Continuous integration](${GITHUB.ci}) exercises Node.js, Deno, and Bun across a multi-OS matrix, with a [90% Node line-coverage gate](${GITHUB.coverage}).`,
 ].join("\n");
@@ -35,6 +35,7 @@ export const ESSENTIALS = [
   "- Module loading: each worker re-imports the module that DEFINES your tasks, and its top-level `import`s run in every worker (they are hoisted — `isMain` does NOT gate them). Keep tasks in a lean module separate from your server/framework code. Tasks must be `export`ed or the loader can't find them and the call silently hangs. `importTask` targets must be plain functions, not `task()` wrappers.",
   "- Create a pool with `createPool(options)({ taskA, taskB })`, then call `await pool.call.taskA(args)`.",
   "- Scheduling: compatible multi-worker pools use native work stealing by default. Workers claim tasks from a shared submit region while keeping private return lanes; control it with `host.steal`, `host.stealRegionLanes`, and `host.doorbell`. The task API does not change, and unsupported runtimes fall back to private lanes or polling.",
+  "- Idle cost is a design goal: waiting threads are not allowed to burn CPU. A single worker spins 50us before parking because it is on the request's critical path; multi-worker pools park immediately, since a peer is already awake to take the work. The host doorbell replaces polling wake-ups on Node and Bun thread pools. Expect a bigger pool to raise CPU per request without raising throughput when the host is the only producer (a server), so size `threads` from measurements, not from core count — see the Multi-threading guide.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',
   "- Security: `importTask` prevents the task module from being imported or evaluated at host scope, but it is not a sandbox. For genuinely untrusted code, use process workers with an OS sandbox or container and restrictive permissions; runtime permissions are guardrails, not a complete security boundary.",
@@ -169,13 +170,40 @@ function codeFor(path: string): string | undefined {
   return rawCode["/src/assets/code/" + trimmed];
 }
 
+// Benchmark tables and other text data the docs pull in with
+// `import x from "../../../assets/.../file.md?raw"`. Limited to text
+// extensions so the glob can't inline the charts and logos next to them.
+const rawAssets = import.meta.glob("/src/assets/**/*.{md,txt,sh,json,csv}", {
+  query: "?raw",
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+// `?raw` specifiers are relative to the doc, so match on the path from
+// `assets/` onwards, which is unique within the repo.
+function assetFor(specifier: string): string | undefined {
+  const match = /assets\/(.+)$/.exec(specifier.replace(/\?raw$/, ""));
+  if (!match) return undefined;
+  const key = "/src/assets/" + match[1];
+  return rawAssets[key] ?? rawCode[key];
+}
+
+// A fence long enough to survive whatever fences the file itself contains.
+function fenceFor(code: string): string {
+  const runs = [...code.matchAll(/^\s*(`{3,})/gm)].map((m) => m[1].length);
+  return "`".repeat(Math.max(3, ...runs.map((n) => n + 1)));
+}
+
 const CODE_SENTINEL = "\u0000";
+const INLINE_SENTINEL = "\u0001";
 
 // Turn an MDX doc body into plain markdown: drop imports, inline getCode()
 // snippets in place of <Code/> components, and strip the structural JSX
 // (Tabs, Steps, Badge, custom components) while leaving fenced code untouched.
 export function cleanBody(body: string): string {
   const codeMap = new Map<string, string>();
+  const assetMap = new Map<string, string>();
+  const inlined = new Set<string>();
   let fence = false;
   for (const line of body.split("\n")) {
     if (/^\s*```/.test(line)) {
@@ -187,6 +215,8 @@ export function cleanBody(body: string): string {
       /export const (\w+)\s*=\s*getCode\(\s*['"]([^'"]+)['"]\s*\)/,
     );
     if (m) codeMap.set(m[1], m[2]);
+    const raw = line.match(/^import\s+(\w+)\s+from\s+['"]([^'"]+\?raw)['"]/);
+    if (raw) assetMap.set(raw[1], raw[2]);
   }
 
   const out: string[] = [];
@@ -206,12 +236,35 @@ export function cleanBody(body: string): string {
     text = text.replace(
       /<Code\b[^>]*?\bcode=\{(\w+)\}[^>]*?\/>/g,
       (full, name) => {
-        const path = codeMap.get(name);
-        const code = path ? codeFor(path) : undefined;
+        const snippet = codeMap.get(name);
+        const asset = assetMap.get(name);
+        const code = snippet
+          ? codeFor(snippet)
+          : asset
+          ? assetFor(asset)
+          : undefined;
         if (!code) return "";
+        const source = (snippet ?? asset)!;
+        const title = /\btitle=\{?["']([^"']+)["']/.exec(full)?.[1];
+        const push = (block: string) => {
+          blocks.push(block);
+          return CODE_SENTINEL + (blocks.length - 1) + CODE_SENTINEL;
+        };
+
+        // The same table is often shown in two tabs. Inline it once and
+        // point at it after that, so the full text does not carry it twice.
+        if (inlined.has(source)) {
+          return title ? push(`\nSame data as \`${title}\` above.\n`) : "";
+        }
+        inlined.add(source);
+
         const lang = /\blang="([\w-]+)"/.exec(full)?.[1] ?? "ts";
-        blocks.push("\n```" + lang + "\n" + code.trim() + "\n```\n");
-        return CODE_SENTINEL + (blocks.length - 1) + CODE_SENTINEL;
+        const fence = fenceFor(code);
+        const caption = title ? `\n\`${title}\`\n` : "";
+        return push(
+          caption + "\n" + fence + lang + "\n" + code.trim() + "\n" + fence +
+            "\n",
+        );
       },
     );
 
@@ -246,17 +299,40 @@ export function cleanBody(body: string): string {
 }
 
 function cleanMdx(text: string): string {
+  // `Arc<Vec<u8>>` and `Envelope<H, B>` are prose, not markup. Hide inline
+  // code before the tag strippers run, or they match from the `<` to the end
+  // of the paragraph and take the sentence with them.
+  const spans: string[] = [];
+  text = text.replace(/(`+)([^`]*?)\1/g, (span) => {
+    spans.push(span);
+    return INLINE_SENTINEL + (spans.length - 1) + INLINE_SENTINEL;
+  });
+
   text = text.replace(
     /<Badge\b[^>]*\btext=(?:"([^"]*)"|'([^']*)'|\{["']([^"']*)["']\})[^>]*\/>/g,
     (_, doubleQuoted, singleQuoted, braced) =>
       doubleQuoted ?? singleQuoted ?? braced ?? "",
   );
   text = htmlTablesToMarkdown(text);
-  text = text.replace(/<[A-Z][A-Za-z0-9.]*\b[\s\S]*?\/>/g, "");
+  // Stop at a sentinel: a multi-line component must not swallow an inlined
+  // snippet that sits between it and the next `/>`.
+  text = text.replace(
+    /<[A-Z][A-Za-z0-9.]*\b[^\u0000\u0001]*?\/>/g,
+    "",
+  );
   text = text.replace(/<\/?[A-Z][A-Za-z0-9.]*\b[^>]*>/g, "");
   text = text.replace(/<br\s*\/?><\/br>/gi, "\n");
   text = text.replace(/<br\s*\/?>/gi, "\n");
   text = text.replace(/<img\b[^>]*>/gi, "");
+  // Inline SVG is markup an agent cannot read. Keep the accessible label,
+  // which is the one part that says what the diagram shows.
+  text = text.replace(
+    /<svg\b([^>]*)>[\s\S]*?<\/svg>/gi,
+    (_, attrs: string) => {
+      const label = /\baria-label=["']([^"']+)["']/.exec(attrs)?.[1];
+      return label ? `_Diagram: ${label}_` : "";
+    },
+  );
   text = text.replace(
     /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
     (_, href: string, label: string) => `[${cleanInlineHtml(label)}](${href})`,
@@ -279,7 +355,10 @@ function cleanMdx(text: string): string {
         .join("\n");
     },
   );
-  return text;
+  return text.replace(
+    /\u0001(\d+)\u0001/g,
+    (_, index) => spans[Number(index)] ?? "",
+  );
 }
 
 function cleanInlineHtml(text: string): string {

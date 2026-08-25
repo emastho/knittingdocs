@@ -81,7 +81,8 @@ For private request lanes, the lifecycle of a slot is:
 
 When the host writes a request, it needs to wake a potentially parked worker. When a worker writes a response, it needs to wake the host handler. Knitting uses `Atomics.notify` (futex-style wakeups) for this.
 
-Workers don't busy-wait by default. The idle cycle is a bounded spin, then a park:
+Workers finish available work before waiting. The idle cycle is a bounded spin
+when one worker is on the request's critical path, then a park:
 
 <svg role="img" aria-label="Worker idle cycle: spin, then park, waking to run work and looping back" viewBox="0 0 720 200" width="100%" style="max-width: 660px; height: auto; display: block; margin: 1.25rem auto;" font-family="var(--sl-font, system-ui, sans-serif)" fill="currentColor">
   <defs>
@@ -111,11 +112,14 @@ Workers don't busy-wait by default. The idle cycle is a bounded spin, then a par
   <text x="317" y="184" text-anchor="middle" font-size="12" fill-opacity="0.8">more work?</text>
 </svg>
 
-1. **Spin** -- check the mailbox in a tight loop for `spinMicroseconds` (default: scales with lane count). Uses `Atomics.pause` to reduce power draw.
+1. **Spin** -- a one-worker pool checks the mailbox for 50 µs. Multi-worker pools skip the spin, leaving the CPU for the host or an awake peer. `Atomics.pause` reduces power draw when spinning.
 2. **Park** -- call `Atomics.wait` with a timeout of `parkMs`. The thread sleeps until notified or the timeout expires.
 3. **Wake** -- `Atomics.notify` from the host breaks the park immediately.
 
-So an idle worker costs almost no CPU and still wakes within microseconds of work arriving.
+Before this cycle, workers flush completed results, release return-side payload
+resources when safe, and make a best-effort GC call when the runtime exposes
+one. In a stealing pool, a completed response is flushed before another claim
+attempt. This keeps idle workers cheap without delaying work already finished.
 
 ## Data path: payload buffers
 

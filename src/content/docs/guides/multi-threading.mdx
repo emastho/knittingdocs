@@ -1,0 +1,118 @@
+---
+title: Multi-threading
+description: Choose a worker count for HTTP services and CPU-bound batch work without starving the host thread.
+sidebar:
+  order: 10
+---
+
+import HonoCpuEfficiency from '../../../components/HonoCpuEfficiency.astro';
+
+Moving work into a worker does not remove it from the host. Only the task body
+leaves the request thread: the host still accepts the request, routes it,
+encodes the arguments, submits the call, receives the result, and writes the
+response. All of that costs CPU, so pick a worker count that leaves room for
+it.
+
+## Start with the workload
+
+| Workload | Starting point | Why |
+| --- | --- | --- |
+| HTTP service with a few CPU-heavy routes | `threads: 1` | Keeps expensive work off the event loop without taking many cores from the host. |
+| HTTP service with a growing queue of heavy calls | `threads: 2` to `4` | More workers can improve tail latency while requests wait for CPU. |
+| Independent CPU-bound batch jobs | `available cores - 1` | The worker bodies can execute in parallel; leave a core for the host and OS. |
+| Mostly network, database, or filesystem work | Keep it async; do not add workers just for I/O | A worker does not make an external dependency faster. |
+
+Treat these as places to start. Task duration, payload size, request rate, and
+the runtime itself all move the answer.
+
+## A server starting point
+
+Move the expensive route work into tasks and leave the rest of the handler on
+the request thread. One worker is usually enough to clear the head-of-line
+blocking, and it keeps most of the machine available to the host.
+
+```ts
+import { createPool } from "knitting";
+
+const threads = 1;
+
+const handlers = createPool({
+  threads,
+})({ renderSsrPage, issueJwt });
+```
+
+The Hono example is built this way: SSR and JWT run in the worker, `/ping`
+stays on the request thread. Under a saturating mixed load, `/ping` served 201%
+more requests than the single-threaded version, because it was no longer stuck
+behind a render. See the [Hono server example](/examples/data_transforms/rendering_output/hono_server/)
+and its [16-core measurements](/documents/hono-16core-benchmark.md).
+
+## When a second worker helps
+
+A second worker earns its place when heavy calls are queueing behind the first
+one and the host still has CPU to spare. Each worker you add competes with the
+host for cores and brings its own scheduling, memory, and result draining.
+
+In the Hono workload, one worker gave the highest throughput under saturation.
+Larger pools did cut the p99 of the heavy routes at a fixed offered rate, but
+they could not make the host a faster producer, and that is what a saturated
+run measures. This is the usual outcome when a single event loop feeds the
+pool.
+
+Past one compatible worker, [native work stealing](/guides/work-stealing/) is
+automatic. Workers pull from shared work instead of each sitting on a private
+backlog, so whichever one is free takes the next task. That evens out uneven
+task durations. The host-side cost stays where it is.
+
+## What a worker does when it runs out of work
+
+Idle CPU is a resource the host can use, so a worker that has caught up spends
+as little of it as it can, in this order:
+
+1. Finished results go out first. In a stealing pool, a worker sends its
+   response before it tries to claim more work.
+2. Safe return-side releases are drained. A `BufferReference` is released only
+   once its result has been consumed or released explicitly.
+3. The worker looks for available shared work. If there is none, it makes a
+   best-effort `maybeGc()` call where the runtime offers one, then parks.
+
+How it parks depends on the size of the pool:
+
+- A single worker spins for 50 µs first, because it sits on the request's
+  critical path.
+- Multi-worker pools skip the spin and park immediately, leaving the CPU to the
+  host or to an awake peer.
+
+Both are defaults. `worker.timers` is there if you need to override them.
+
+<HonoCpuEfficiency />
+
+Each bar is total server CPU divided by completed requests under saturating
+mixed Hono load, so a shorter bar leaves more CPU for the host and for
+everything else on the machine. One worker is the efficient point for this
+workload: 100 CPU-µs per request at 18,014 RPS. A larger pool can still be the
+right call if what you are buying with that CPU is tail latency.
+
+Read those bars knowing that nothing above one worker is saturated here. The
+host is the only producer, so the extra workers spend most of their time
+waiting for a call that may never arrive. A pool that spun through that wait
+would look busy without being useful: at fifteen workers, the old 750 µs spin
+budget burned 6.4 idle cores and 954 CPU-µs per request to serve fewer requests
+than the current policy serves at 236. The bars stay short because a worker
+with nothing to do parks instead of billing the machine for waiting.
+
+## Measure the choice
+
+Two runs per candidate thread count are enough:
+
+1. **Saturating mixed load** shows the ceiling, and whether cheap endpoints are
+   still delayed by expensive ones.
+2. **Fixed offered rate** makes p50 and p99 comparable, since every candidate
+   receives the same work.
+
+Record server CPU, idle CPU, throughput, and p50/p99 for each route. Total RPS
+on its own will mislead you: a configuration that cuts a heavy route's tail
+latency while giving up some throughput is often the one you want.
+
+For the lower-level options, see [Creating pools](/guides/creating-pools/),
+[Performance](/guides/performance/), and [Work stealing](/guides/work-stealing/).

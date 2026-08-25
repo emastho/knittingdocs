@@ -88,11 +88,16 @@ them.
 
 ### Thread count
 
-More threads can improve throughput when tasks can run in parallel, but every
-thread also consumes memory for payload buffers, shared locks, and cancellation
-state. Adding threads beyond the number of available cores usually stops
-helping. For compute-heavy work, `threads: os.availableParallelism() - 1` is a
-reasonable starting point; benchmark the result with your own tasks.
+Thread count depends on what the host thread must still do. For a mixed HTTP
+service, start with one worker: the host still accepts connections, routes,
+encodes requests, and sends responses. Add workers only when CPU-heavy calls
+queue and lower tail latency is worth the extra coordination. For independent
+batch compute, `os.availableParallelism() - 1` is a reasonable first trial.
+
+Every worker also consumes memory for payload buffers, shared locks, and
+cancellation state. Adding threads beyond the available cores usually stops
+helping. See [Multi-threading](/guides/multi-threading/) for a server-focused
+selection process and timer configuration.
 
 ### Native work stealing
 
