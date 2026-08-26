@@ -113,6 +113,23 @@ One worker, with each route offered `2,000 rps`.
 | `/ssr` | `0.84ms` | `2.22ms` | `14.32ms` | `8.71ms` |
 | `/jwt` | `1.03ms` | `2.58ms` | `25.18ms` | `9.76ms` |
 
+### CPU cost at the fixed load
+
+The latency improvement did not come from doing materially more CPU work. The
+host-only server used `1.08` server-process cores. The canonical one-worker run
+used `1.10`, and an equivalent repeat of the same one-worker configuration used
+`1.06`.
+
+Read those measurements as approximately `1.1` cores for both shapes, not as a
+meaningful difference between `1.08` and `1.10`. The SSR and JWT computation
+does not disappear when it moves to the worker. Knitting keeps the transport,
+waiting, and coordination cost low enough that the same work costs about the
+same CPU while `/ping` no longer queues behind it.
+
+These are workload-specific 15-second runs. The full report documents the
+methodology, repeat variance, and limitations; they are evidence for the design,
+not a universal performance guarantee.
+
 ## Why this pattern matters
 
 - `ping` stays cheap and synchronous.

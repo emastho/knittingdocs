@@ -13,6 +13,13 @@ const rows: ThroughputRow[] = [
 ];
 
 const pingP99LatencyReductionPercent = 86;
+// One-worker runs measured 1.10 and 1.06 cores against the inline server's
+// 1.08, so the shapes are at CPU parity. Show the parity, keep the raw
+// measurements in the metadata below.
+const serverCoresHostOnly = 1.08;
+const serverCoresOneWorker = 1.1;
+const serverCoresOneWorkerRepeat = 1.06;
+const serverCoresApproximate = "≈1.1 cores either way";
 const maxAfter = Math.max(...rows.map((row) => row.after));
 
 const benchmarkMetadata = {
@@ -32,6 +39,13 @@ const benchmarkMetadata = {
     percentile: "p99",
     reductionPercent: pingP99LatencyReductionPercent,
   },
+  serverCpu: {
+    unit: "cores",
+    hostOnly: serverCoresHostOnly,
+    oneWorker: serverCoresOneWorker,
+    oneWorkerRepeat: serverCoresOneWorkerRepeat,
+    reading: "parity: the repeat run brackets the host-only figure from below",
+  },
 };
 const benchmarkMetadataJson = JSON.stringify(benchmarkMetadata);
 
@@ -43,8 +57,46 @@ function width(value: number) {
 <section class="impact-panel" aria-label="Hono benchmark impact">
   <header class="impact-header">
     <p class="impact-kicker">Hono + SSR + JWT + Zod benchmark</p>
-    <p class="impact-subtitle">Throughput (requests/sec, higher is better)</p>
   </header>
+
+  <p class="impact-group-label">
+    Fixed mixed load — 6,000 rps
+    <span>both configurations completed the offered rate</span>
+  </p>
+
+  <div
+    class="impact-latency"
+    role="group"
+    aria-label="Tail latency reduction"
+    data-tail-latency-percentile="p99"
+    data-tail-latency-reduction-percent={String(pingP99LatencyReductionPercent)}
+  >
+    <div class="impact-latency-head">
+      <span><code>/ping</code> p99 latency</span>
+      <strong>{pingP99LatencyReductionPercent}% lower</strong>
+    </div>
+    <div class="impact-latency-track" aria-hidden="true">
+      <div
+        class="impact-latency-fill"
+        style={`width: ${pingP99LatencyReductionPercent}%;`}
+      />
+    </div>
+  </div>
+
+  <p
+    class="impact-cpu"
+    data-server-cores-host-only={serverCoresHostOnly.toFixed(2)}
+    data-server-cores-one-worker={serverCoresOneWorker.toFixed(2)}
+    data-server-cores-one-worker-repeat={serverCoresOneWorkerRepeat.toFixed(2)}
+  >
+    <span>server-process CPU</span>
+    <strong>{serverCoresApproximate}</strong>
+  </p>
+
+  <p class="impact-group-label">
+    Pushed to saturation
+    <span>requests per second, higher is better</span>
+  </p>
 
   <ul class="impact-list">
     {rows.map((row) => (
@@ -70,31 +122,12 @@ function width(value: number) {
         </div>
 
         <div class="impact-values">
-          <span class="impact-value impact-value-before">before {row.before.toLocaleString()}</span>
-          <span class="impact-value impact-value-after">after {row.after.toLocaleString()}</span>
+          <span class="impact-value impact-value-before">Hono only {row.before.toLocaleString()}</span>
+          <span class="impact-value impact-value-after">one worker {row.after.toLocaleString()}</span>
         </div>
       </li>
     ))}
   </ul>
-
-  <div
-    class="impact-latency"
-    role="group"
-    aria-label="Tail latency reduction"
-    data-tail-latency-percentile="p99"
-    data-tail-latency-reduction-percent={String(pingP99LatencyReductionPercent)}
-  >
-    <div class="impact-latency-head">
-      <span><code>/ping</code> p99 latency</span>
-      <strong>{pingP99LatencyReductionPercent}% lower</strong>
-    </div>
-    <div class="impact-latency-track" aria-hidden="true">
-      <div
-        class="impact-latency-fill"
-        style={`width: ${pingP99LatencyReductionPercent}%;`}
-      />
-    </div>
-  </div>
 
   <script
     type="application/json"
@@ -149,6 +182,21 @@ function width(value: number) {
   .impact-subtitle {
     margin: 0;
     font-size: 0.85rem;
+    color: var(--impact-muted);
+  }
+
+  .impact-group-label {
+    display: grid;
+    gap: 0.1rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: color-mix(in srgb, var(--sl-color-text) 78%, transparent);
+  }
+
+  .impact-group-label span {
+    font-size: 0.78rem;
+    font-weight: 400;
     color: var(--impact-muted);
   }
 
@@ -265,6 +313,20 @@ function width(value: number) {
     box-shadow: 0 0 18px color-mix(in srgb, #60a5fa 28%, transparent);
   }
 
+  .impact-cpu {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--impact-muted);
+  }
+
+  .impact-cpu strong {
+    color: color-mix(in srgb, var(--sl-color-text) 82%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+
   @media (max-width: 800px) {
     .impact-panel {
       padding: 0.75rem;
@@ -297,5 +359,13 @@ function width(value: number) {
 
   :global(:root[data-theme="dark"]) .impact-latency-head strong {
     color: #93c5fd;
+  }
+
+  :global(:root[data-theme="dark"]) .impact-group-label {
+    color: color-mix(in srgb, var(--sl-color-white) 82%, transparent);
+  }
+
+  :global(:root[data-theme="dark"]) .impact-cpu strong {
+    color: color-mix(in srgb, var(--sl-color-white) 86%, transparent);
   }
 </style>

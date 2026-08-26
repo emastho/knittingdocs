@@ -189,13 +189,13 @@ deno add --npm knitting`;
     aria-labelledby="kh-server-proof-title"
   >
     <div class="kh-server-proof-copy">
-      <p class="kh-kicker">The effect at the server edge</p>
+      <p class="kh-kicker">The loop is full. The machine isn’t.</p>
       <h2 id="kh-server-proof-title">Keep fast routes fast.</h2>
       <p>
-        On the Hono example’s mixed workload, React SSR and JWT leave the
-        request thread. <code>/ping</code> never enters the pool, yet handles
-        201% more requests under saturation because it no longer waits behind
-        expensive routes.
+        In the Hono mixed workload, React SSR and JWT move off the request
+        thread. <code>/ping</code> never touches the pool, yet at the same fixed
+        6,000 rps its p99 falls from 16.93 ms to 2.31 ms while both server
+        shapes use approximately 1.1 cores. It was never slow. It was waiting.
       </p>
       <div class="kh-server-proof-links">
         <a href="/examples/data_transforms/rendering_output/hono_server/">
