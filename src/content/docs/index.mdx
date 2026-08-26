@@ -448,7 +448,6 @@ html:has([data-knit-home-marker]) {
   --kh-cloud-ink: var(--kh-night);
   --kh-line: color-mix(in srgb, var(--kh-muted) 24%, transparent);
   --kh-night-line: var(--kh-line);
-  overflow-x: clip;
   background: var(--kh-night);
 }
 
@@ -934,7 +933,7 @@ html:has([data-knit-home-marker]) .kh-features::before {
   width: min(44rem, 72vw);
   height: min(44rem, 72vw);
   top: -8rem;
-  right: clamp(-10rem, -7vw, -3rem);
+  right: 0;
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -1262,6 +1261,7 @@ html:has([data-knit-home-marker]) .kh-chip-list {
 }
 
 html:has([data-knit-home-marker]) .kh-chip-list li {
+  margin: 0;
   padding: 0;
   color: var(--kh-muted);
   font-family: var(--sl-font-mono);
@@ -1302,9 +1302,7 @@ html:has([data-knit-home-marker]) .kh-benchmark::before {
   content: "";
   position: absolute;
   z-index: -1;
-  inset: 0 50%;
-  width: 100vw;
-  transform: translateX(-50%);
+  inset: 0;
   background:
     radial-gradient(circle at 80% 15%, color-mix(in srgb, var(--kh-accent) 13%, transparent), transparent 24rem),
     var(--kh-night);
@@ -1549,11 +1547,15 @@ html:has([data-knit-home-marker]) .kh-quality-metrics {
 html:has([data-knit-home-marker]) .kh-quality-metrics > div {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0;
   min-height: 9.75rem;
   padding: 1.15rem 0.9rem;
   border-right: 1px solid var(--kh-night-line);
   border-bottom: 1px solid var(--kh-night-line);
+  text-align: center;
 }
 
 html:has([data-knit-home-marker]) .kh-quality-metrics strong {
