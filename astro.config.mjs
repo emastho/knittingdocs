@@ -1,4 +1,5 @@
 // @ts-check
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import remarkMath from "remark-math";
@@ -101,6 +102,36 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: [{ find: /^knitting$/, replacement: "@vixeny/knitting" }],
+    },
+    // The knitting 0.1.70 tarball was packed with a stale `src/worker/loop.js`:
+    // it dynamically imports "../debug/handle.ts", but only `handle.js` ships.
+    // (A current `tsc -p tsconfig.npm.json` emits ".js" there, so a rebuild of
+    // the package fixes it at the source.) Vite's dependency scanner follows the
+    // `knitting` imports in our src/assets/code/ samples -- which we only ever
+    // read as `?raw` text -- and cannot resolve the specifier. Vite's own
+    // aliases do not reach esbuild's resolver, so redirect it here instead.
+    // Remove once knitting is republished from a clean build.
+    optimizeDeps: {
+      esbuildOptions: {
+        plugins: [
+          {
+            name: "knitting-debug-handle",
+            setup(build) {
+              build.onResolve(
+                { filter: /^\.\.\/debug\/handle\.ts$/ },
+                () => ({
+                  path: fileURLToPath(
+                    new URL(
+                      "./node_modules/@vixeny/knitting/src/debug/handle.js",
+                      import.meta.url,
+                    ),
+                  ),
+                }),
+              );
+            },
+          },
+        ],
+      },
     },
   },
   integrations: [

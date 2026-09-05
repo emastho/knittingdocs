@@ -57,7 +57,9 @@ boundary and whether that data is copied.
   the bytes. Knitting passes a handle instead, so the cost of sending a 1 KiB
   buffer and a 64 MiB buffer is roughly the same. `BufferReference`
   (`knitting/unsafe`) is the thread-only move variant: it detaches the source
-  and hands the bytes to the worker.
+  and hands the bytes to the worker. For large top-level thread-worker returns,
+  ordinary `Uint8Array` and `ArrayBuffer` values use the safe ownership path
+  automatically at 256 KiB and above.
 
 ---
 
@@ -117,11 +119,13 @@ private-lane baseline, or tune `host.stealRegionLanes` for the workload:
   `1` is a useful starting point when one task can take much longer than another.
 
 The host `doorbell` is a separate completion optimization. Node.js and Bun
-thread pools can use `Atomics.waitAsync` instead of repeatedly polling for
-responses; Deno, process, compiled, and browser pools use the polling fallback.
-Compare like with like when benchmarking: keep the worker topology fixed and
-change one of `host.steal` or `host.doorbell` at a time. See [Work stealing](/guides/work-stealing/)
-for the full option and compatibility details.
+thread pools use `Atomics.waitAsync`; Deno can use a thread-safe FFI callback,
+and process workers use a process-local completion transport. Denied or
+unsupported configurations fall back to polling; compiled workers and browsers
+remain on their documented fallback paths. Compare like with like when
+benchmarking: keep the worker topology fixed and change one of `host.steal` or
+`host.doorbell` at a time. See [Work stealing](/guides/work-stealing/) for the
+full option and compatibility details.
 
 ### Inliner
 
@@ -265,12 +269,15 @@ already represented:
 - **`SharedArrayBuffer` / `ProcessSharedBuffer`** — shared memory is usually the
   cheapest way to return bytes when the result can use it. `ProcessSharedBuffer`
   also works with process workers.
-- **`BufferReference`** — useful for large binary results, especially when a
-  library gives you an ordinary `ArrayBuffer` that you cannot turn into shared
-  memory. Returned references can stay zero-copy on Node with native ownership;
-  the safe default makes one copy on Deno, Bun, and some Node builds. See the
-  [Buffer reference guide](/guides/buffer-reference/) for the explicit borrow
-  option and its lifetime rules.
+- **Large plain byte returns** — return an ordinary top-level `Uint8Array` or
+  `ArrayBuffer`; at 256 KiB and above the thread worker uses the safe ownership
+  path automatically. Node with the native addon can adopt the backing store,
+  while Deno, Bun, and older Node backends make one private copy. The result
+  remains valid after later calls and pool shutdown.
+- **`BufferReference`** — use it mainly for large inputs that are already in an
+  owned `ArrayBuffer` or typed-array view and need to move into a thread worker.
+  For an intentionally short-lived borrowed return, use `sharedBytes()` with
+  `unsafe: { SharedBytes: true }`; see the [Buffer reference guide](/guides/buffer-reference/).
 
 See [Payloads](/guides/payloads/) and
 [Buffer reference](/guides/buffer-reference/) for the full type list.

@@ -1,19 +1,17 @@
 import { createPool, isMain } from "knitting";
-import {
-  scanForProbablePrime,
-  type ScanResult,
-} from "./prime_scan.ts";
+import { findHash, type HashResult } from "./find_hash.ts";
 
 type Options = {
   threads: number;
-  bits: number;
+  zeroes: number;
   region: number;
-  rounds: number;
 };
 
 type AbortablePromise<T> = Promise<T> & {
   reject: (reason?: unknown) => void;
 };
+
+const PREFIX = "knitting-proof-of-work-v1";
 
 function positiveIntArg(name: string, fallback: number): number {
   const index = process.argv.indexOf(`--${name}`);
@@ -24,43 +22,21 @@ function positiveIntArg(name: string, fallback: number): number {
 function readOptions(): Options {
   return {
     threads: positiveIntArg("threads", 4),
-    bits: positiveIntArg("bits", 1_500),
-    region: positiveIntArg("region", 1_000_000_000),
-    rounds: positiveIntArg("rounds", 8),
+    zeroes: Math.min(positiveIntArg("zeroes", 4), 64),
+    region: positiveIntArg("region", 50_000_000),
   };
 }
 
-function xorshift32(state: number): number {
-  state |= 0;
-  state ^= state << 13;
-  state ^= state >>> 17;
-  state ^= state << 5;
-  return state | 0;
-}
-
-function makeRandomOdd(bits: number, seed: number): bigint {
-  let state = seed;
-  let value = 0n;
-
-  for (let offset = 0; offset < bits; offset += 32) {
-    state = xorshift32(state);
-    value = (value << 32n) | BigInt(state >>> 0);
-  }
-
-  const mask = (1n << BigInt(bits)) - 1n;
-  return (value & mask) | (1n << BigInt(bits - 1)) | 1n;
-}
-
-function waitForFirstPrime(
-  jobs: AbortablePromise<ScanResult>[],
-): Promise<ScanResult | null> {
+function waitForFirstHash(
+  jobs: AbortablePromise<HashResult>[],
+): Promise<HashResult | null> {
   return new Promise((resolve, reject) => {
     let remaining = jobs.length;
 
     for (const job of jobs) {
       job.then(
         (result) => {
-          if (result.prime !== null) {
+          if (result.nonce !== null) {
             resolve(result);
             return;
           }
@@ -76,35 +52,33 @@ function waitForFirstPrime(
 
 async function main() {
   const options = readOptions();
-  const start = makeRandomOdd(options.bits, 0x6d2b_79f5);
   const workerCount = Math.min(options.threads, options.region);
-  const step = 2 * options.threads;
 
   using pool = createPool({
     threads: options.threads,
     abortSignalCapacity: workerCount,
-  })({ scanForProbablePrime });
+  })({ findHash });
 
   const started = performance.now();
-  const jobs: AbortablePromise<ScanResult>[] = [];
+  const jobs: AbortablePromise<HashResult>[] = [];
 
   for (let worker = 0; worker < workerCount; worker++) {
     const count = Math.ceil((options.region - worker) / options.threads);
-    const workerStart = start + 2n * BigInt(worker);
 
     jobs.push(
-      pool.call.scanForProbablePrime([
-        workerStart.toString(),
+      pool.call.findHash([
+        PREFIX,
+        worker,
         count,
-        step,
-        options.rounds,
+        options.threads,
+        options.zeroes,
       ]),
     );
   }
 
-  let winner: ScanResult | null;
+  let winner: HashResult | null;
   try {
-    winner = await waitForFirstPrime(jobs);
+    winner = await waitForFirstHash(jobs);
     if (winner !== null) {
       for (const job of jobs) job.reject();
     }
@@ -115,11 +89,13 @@ async function main() {
     const elapsed = performance.now() - started;
 
     console.log(`threads:    ${options.threads}`);
-    console.log(`bits:       ${options.bits}`);
-    console.log(`region:     ${options.region.toLocaleString()} odd candidates`);
+    console.log(`prefix:     ${PREFIX}`);
+    console.log(`zeroes:     ${options.zeroes}`);
+    console.log(`region:     ${options.region.toLocaleString()} nonces`);
     console.log(`workers:    ${workerCount}`);
     console.log(`tested:     ${tested.toLocaleString()}`);
-    console.log(`prime:      ${winner?.prime ?? "not found"}`);
+    console.log(`nonce:      ${winner?.nonce ?? "not found"}`);
+    console.log(`hash:       ${winner?.hash ?? "-"}`);
     console.log(`cancelled:  ${cancelled ? "yes" : "no"}`);
     console.log(`elapsed:    ${elapsed.toFixed(0)} ms`);
   } catch (error) {

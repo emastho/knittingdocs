@@ -1,0 +1,105 @@
+---
+title: Proof of work
+description: "Find a SHA-256 nonce with a configurable number of leading zeroes."
+hero:
+  title: 'Parallel proof-of-work search'
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
+
+export const run = getCode("maths/proof_of_work/run_hash.ts");
+export const find_hash = getCode("maths/proof_of_work/find_hash.ts");
+
+## What is this about
+
+This example searches for a nonce whose SHA-256 hash starts with a requested
+number of hexadecimal zeroes:
+
+```text
+SHA-256("knitting-proof-of-work-v1:<nonce>")
+  -> 0000........................................................
+```
+
+Every nonce is independent, so each worker can scan a different stride through
+the nonce space. The first match wins and aborts the other workers.
+
+This is the core idea behind proof-of-work puzzles. It is a teaching example,
+not a cryptocurrency miner: the prefix and difficulty are fixed, and the
+search has a finite region.
+
+## How it works
+
+1. The host divides a nonce region into disjoint strides, one per worker.
+2. Each worker hashes its nonce values with the built-in Web Crypto SHA-256 API.
+3. The worker checks whether the digest has the requested number of leading zeroes.
+4. The first match wins; the host aborts the other hash loops through shared signals.
+5. Workers stop at their next signal check and return compact summaries.
+
+Each extra hexadecimal zero makes the search about 16 times harder. The default
+uses four zeroes, so it remains practical across Node.js, Deno, and Bun.
+
+## Run
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/run_hash.ts --threads 4 --zeroes 4 --region 50000000"
+  denoCommand="deno run -A src/run_hash.ts --threads 4 --zeroes 4 --region 50000000"
+  nodeCommand="npx tsx src/run_hash.ts --threads 4 --zeroes 4 --region 50000000"
+/>
+:::
+
+Expected output:
+
+```text
+threads:    4
+prefix:     knitting-proof-of-work-v1
+zeroes:     4
+region:     50,000,000 nonces
+workers:    4
+tested:     varies
+nonce:      a matching nonce
+hash:       0000........................................................
+cancelled:  yes
+elapsed:    runtime-dependent
+```
+
+The region and prefix are deterministic, but the first winning nonce can vary
+with worker scheduling. The tested count and elapsed time also depend on how
+quickly the other workers observe the abort signal.
+
+## Why this pattern works
+
+- Hash attempts are independent and need no shared mutable state.
+- Each worker owns a disjoint nonce stride, so no nonce is checked twice.
+- The worker returns one match instead of transferring every failed hash.
+- Abort-aware tasks stop wasted hashing as soon as another worker succeeds.
+- The finite region keeps the no-match case safe and testable.
+
+## Code
+
+<Tabs>
+  <TabItem label="run_hash.ts">
+    <Code code={run} lang="ts" title={"run_hash.ts"} />
+  </TabItem>
+  <TabItem label="find_hash.ts">
+    <Code code={find_hash} lang="ts" title={"find_hash.ts"} />
+  </TabItem>
+</Tabs>
+
+## CLI knobs
+
+- `--zeroes` — leading hexadecimal zeroes required in the digest, from 1 to 64.
+- `--region` — total nonce values available to all workers.
+- `--threads` — number of workers scanning the region.
+
+## Things to try
+
+1. Use `--zeroes 3 --region 100000` for a quick run.
+2. Increase to `--zeroes 5` and watch the work grow by roughly 16 times.
+3. Compare one worker with four workers on the same difficulty.
+4. Change the prefix in `run_hash.ts` and confirm that the winning nonce changes.

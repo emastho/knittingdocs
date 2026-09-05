@@ -1,13 +1,10 @@
 ---
 title: Big prime
-description: "Search for large primes in parallel with a Miller-Rabin test."
+description: "Find a probable prime with a signal-cancelled BigInt search."
 hero:
-  title: 'Prime Hunt in Big-Number Territory'
+  title: 'Parallel BigInt prime search'
 sidebar:
   order: 1
-banner:
-  content: |
-    This example could be improved with ` signals `
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -18,73 +15,86 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/big_prime/run_prime.hunt.ts");
 export const prime_scan = getCode("maths/big_prime/prime_scan.ts");
 
-Scans through large integers (default: 1500-bit) looking for probable primes using Miller-Rabin, distributed across Knitting workers. This is a long-running compute pipeline -- it scans windows of candidates, prints progress, and keeps going until you stop it.
+## What is this about
+
+This example searches a seeded region of large odd integers for a probable
+prime. Each candidate is checked with the Miller–Rabin primality test, and the
+host gives each worker a long-running, disjoint scan through the region.
+
+The result is **probable**, not a formal proof. More Miller–Rabin rounds make a
+false positive less likely, at the cost of more work per candidate.
 
 ## How it works
 
-1. The host picks a starting odd integer in the chosen bit-width.
-2. It scans **windows** of 10,000,000 odd candidates, printing progress after each window.
-3. Each window is split across threads -- threads scan disjoint candidate sequences (no overlap, no duplicated work).
-4. Each worker runs `candidate -> Miller-Rabin -> next candidate -> ...` in a tight loop.
-5. If any worker finds a probable prime, it reports it for that window.
-6. The process runs continuously until Ctrl+C.
+1. The host creates a deterministic odd starting point from the requested bit width.
+2. Worker `i` checks `start + 2i`, then advances by `2 * threads` so scans do not overlap.
+3. Each worker keeps testing candidates until it finds a probable prime, sees an abort signal, or reaches the region limit.
+4. The first result wins; the host aborts the other calls through their shared signals.
+5. Aborted workers stop at their next signal check and the host prints a compact summary.
 
-The scanning uses an interleaved stride pattern: thread 0 checks `start + 0`, `start + 2T`, `start + 4T`, ..., thread 1 checks `start + 2`, `start + 2 + 2T`, ..., and so on. This guarantees full coverage with zero overlap.
+The default uses 1,500-bit candidates, a region of one billion odd numbers, and
+eight rounds. The region is intentionally much larger than a normal run needs:
+workers usually stop because one of them finds a prime, not because they reach
+the limit. The seed fixes the searched region, but the winning candidate can
+vary with worker scheduling because the first result cancels the rest.
 
 ## Run
 
 :::info
 <RuntimeRunTabs
-  bunCommand="bun src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
-  denoCommand="deno run -A src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
-  nodeCommand="npx tsx src/run_prime_hunt.ts --threads 4 --bits 1500 --total 10000000 --chunk 200000 --rounds 8"
+  bunCommand="bun src/run_prime_hunt.ts --threads 4 --bits 1500 --region 1000000000 --rounds 8"
+  denoCommand="deno run -A src/run_prime_hunt.ts --threads 4 --bits 1500 --region 1000000000 --rounds 8"
+  nodeCommand="npx tsx src/run_prime_hunt.ts --threads 4 --bits 1500 --region 1000000000 --rounds 8"
 />
 :::
 
 Expected output:
 
-```
-starting at 1500-bit odd integer (4 threads, 8 MR rounds)
-window 1: scanned 10,000,000 candidates in 4.2s -- no prime found
-window 2: scanned 10,000,000 candidates in 4.1s -- no prime found
-window 3: scanned 10,000,000 candidates in 4.3s -- OK probable prime found!
-  digits: 452
-  hex prefix: 0xA3F7...
+```text
+threads:    4
+bits:       1500
+region:     1,000,000,000 odd candidates
+workers:    4
+tested:     varies
+prime:      a probable 1500-bit prime
+cancelled:  yes
+elapsed:    500 ms
 ```
 
-:::note
-At 1500 bits, primes are sparse -- expect to scan through many windows. Lower `--bits` to 65 or 128 for faster results while testing.
-:::
+The searched region is deterministic. The tested count, winning prime, and
+elapsed time depend on how quickly each worker finds a result and observes the
+signal, as well as your runtime, CPU, and worker count.
+
+## Why this pattern works
+
+- Each worker owns one long-running scan with a disjoint stride.
+- The host owns input generation, cancellation, and reporting.
+- Task payloads are strings and numbers, so BigInt conversion stays inside the worker.
+- Abort-aware tasks stop wasted BigInt work as soon as another worker finds a result.
+- A finite region keeps the no-hit case safe and testable.
+- The same shape scales from a quick 64-bit demo to a much larger search.
 
 ## Code
+
 <Tabs>
-  <TabItem label="run.ts">
-    <Code code={run} lang="ts" title={"run.ts"} />
+  <TabItem label="run_prime.hunt.ts">
+    <Code code={run} lang="ts" title={"run_prime.hunt.ts"} />
   </TabItem>
-    <TabItem label="prime_scan.ts">
+  <TabItem label="prime_scan.ts">
     <Code code={prime_scan} lang="ts" title={"prime_scan.ts"} />
   </TabItem>
 </Tabs>
 
-## The math behind it
-
-**Why primes are findable:** Around a number of size N, prime density is roughly `1/ln(N)`. Primes get rarer as numbers get bigger, but not impossibly rare -- even at 1500 bits, you'll find them.
-
-**Probable vs proven primes:** Miller-Rabin is a probabilistic test. With 8 rounds, the false-positive rate is vanishingly small (less than `4^-8`). In practice, this is what cryptographic libraries use for key generation.
-
-**Tuning `--rounds`:** More rounds = higher confidence, but more compute per candidate. 8 rounds is a solid default. You can go higher if you need cryptographic-grade confidence.
-
 ## CLI knobs
 
-- `--bits` -- bit-width of candidates (higher = harder, sparser primes)
-- `--threads` -- worker count
-- `--total` -- candidates per window (controls progress granularity)
-- `--chunk` -- candidates per task (controls scheduling granularity)
-- `--rounds` -- Miller-Rabin rounds (controls confidence vs speed)
+- `--bits` — size of each candidate; larger numbers cost more to test.
+- `--region` — total number of odd candidates available to all workers.
+- `--rounds` — Miller–Rabin rounds; more rounds increase confidence and cost.
+- `--threads` — number of workers in the pool.
 
 ## Things to try
 
-1. Lower `--bits` to 65 and watch primes appear frequently.
-2. Increase `--rounds` to 20 and measure the throughput impact.
-3. Compare different `--chunk` values -- too small and dispatch overhead dominates, too large and load balance suffers.
-4. Modify the task to search for twin primes (p and p+2 both prime) or Sophie Germain primes (p and 2p+1 both prime).
+1. Use `--bits 64 --region 10000` for an almost instant run.
+2. Increase `--rounds` to 20 and compare the elapsed time.
+3. Increase `--region` to `10000000000` and watch workers stop long before the limit.
+4. Increase `--bits` to 2048 and watch BigInt arithmetic become the main cost.

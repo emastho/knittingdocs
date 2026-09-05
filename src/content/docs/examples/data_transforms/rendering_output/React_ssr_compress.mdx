@@ -16,17 +16,24 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 
 export const bench = getCode("data_transforms/react_ssr_compress/bench_react_ssr_compress.ts");
 export const component = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
-export const utils = getCode("data_transforms/react_ssr_compress/utils.ts");
 
 Takes the React SSR example one step further: after rendering HTML, compress it with Brotli. This tests whether it's better to compress on the worker (render + compress in one shot) or on the host (render on worker, compress on main thread). Spoiler: doing both on the worker usually wins because you avoid sending uncompressed HTML back across the thread boundary.
 
 ## How it works
 
-The host generates JSON payload strings. Both paths render the same user card component, then Brotli-compress the HTML output. The benchmark compares compressed byte totals for parity, then measures throughput.
+The host generates JSON payload strings, and the benchmark measures three placements of the same work:
+
+1. **host** -- render and compress on the main thread.
+2. **worker: render only, host compresses** -- the worker returns HTML, the host runs Brotli.
+3. **worker: render + compress** -- both steps on the worker, so only the compressed bytes come back.
+
+All three must produce identical compressed byte totals; the benchmark checks that before measuring.
 
 - `bench_react_ssr_compress.ts` -- the benchmark
 - `render_user_card_compressed.tsx` -- the SSR + compression task
-- `utils.ts` -- shared payload and compression helpers
+
+Payloads and the card component come from the [React SSR](/examples/data_transforms/rendering_output/react_ssr)
+example, so the only new code here is the compression step.
 
 ## Example input and output
 
@@ -51,17 +58,38 @@ Compression uses built-in `node:zlib` -- no extra packages.
 />
 :::
 
-Expected output:
+Expected output (4 cores / 8 threads, Bun 1.4, 100 requests per iteration):
 
 ```
-byte parity check: host=42,380  worker=42,380  OK match
+byte parity check: host=52,551 worker=52,551 split=52,551 OK match
 
-benchmark        avg (ns)    min ... max (ns)
-host              45,600     41,200 ... 58,300
-knitting          24,100     21,800 ... 32,400
+React SSR + compression benchmark (mitata)
+workload: parse + normalize + render + brotli
+requests per iteration: 100
+threads: 4 + inliner
+
+benchmark                            avg (min … max)
+host: render + compress              294.18 ms/iter
+worker: render only, host compresses 284.79 ms/iter
+worker: render + compress            111.20 ms/iter
+
+summary
+  worker: render + compress
+   2.65x faster than host: render + compress
+   2.56x faster than worker: render only, host compresses
 ```
 
-Brotli is significantly more expensive than `renderToString` alone, so the worker advantage is more pronounced here than in the plain SSR example.
+The middle row is the interesting one: moving only the render to a worker is
+barely faster than doing everything on the host. You pay to ship the full HTML
+back, and every Brotli call still lands on the thread you were trying to keep
+free. Compression is not a step you bolt on after the boundary -- put it on the
+same side as the render and the return payload gets smaller too.
+
+Brotli is also far more expensive than `renderToString` alone, which changes the
+pool shape: the plain SSR example is faster **without** an inliner, while this
+one is faster **with** one. The host spends most of its time waiting here, so
+giving it a share of the work pays. That is a workload property, not a rule --
+measure it on yours.
 
 <DontDoubleParseTip />
 
@@ -73,9 +101,6 @@ Brotli is significantly more expensive than `renderToString` alone, so the worke
   </TabItem>
   <TabItem label="bench_react_ssr_compress.ts">
     <Code code={bench} lang="ts" title={"bench_react_ssr_compress.ts"} />
-  </TabItem>
-  <TabItem label="utils.ts">
-    <Code code={utils} lang="ts" title={"utils.ts"} />
   </TabItem>
 </Tabs>
 

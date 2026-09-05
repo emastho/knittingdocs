@@ -91,9 +91,15 @@ createPool({
     steal?: boolean,
     stealRegionLanes?: number,
     doorbell?: boolean,
+    nativeDoorbell?: boolean,
+    stealClaim?: "dekker" | "cas-mask",
     stallFreeLoops?: number,
     maxBackoffMs?: number,
     dispatcher?: "per-thread" | "serial-channel",
+  },
+  unsafe?: {
+    SharedBytes?: boolean,
+    SharedArgs?: boolean,
   },
   workerExecArgv?: string[],
   permission?: "strict" | "unsafe" | PermissionProtocol,
@@ -108,6 +114,30 @@ createPool({
   source?: string,
 })
 ```
+
+When `unsafe.SharedArgs` is enabled, the returned pool also exposes
+`sharedArgBytes(byteLength)`. It allocates a borrowed argument view in the
+shared submit arena when the topology supports one, and otherwise returns a
+private `Uint8Array`:
+
+```ts
+using pool = createPool({
+  threads: 4,
+  unsafe: { SharedArgs: true },
+})({ task });
+
+const input = pool.sharedArgBytes(256 * 1024);
+input.set(source);
+await pool.call.task(input);
+```
+
+Borrowed argument bytes must be consumed before the task's first suspension
+point, and the host must keep only a few calls in flight at a time -- the submit
+arena is recycled, so over-allocating corrupts in-flight arguments silently. See
+[Shared memory](/guides/shared-memory/#shared-byte-arguments-and-returns) before
+reaching for it. For borrowed worker returns, enable `unsafe.SharedBytes` and use
+`sharedBytes()` from `knitting/unsafe`; see [Buffer reference](/guides/buffer-reference/)
+for its lifetime rules. Both unsafe options are disabled by default.
 
 Deprecated payload aliases are still accepted at the top level:
 
@@ -367,13 +397,30 @@ sized calls. Smaller regions expose more independent work for expensive or
 uneven tasks. Start with `1` when task durations vary substantially, then
 benchmark the real workload.
 
+### stealClaim
+
+Selects the region-claim discipline for work stealing. The default is
+`"dekker"`; `"cas-mask"` uses a shared compare-and-swap mask. The same choice
+can be set with `KNITTING_STEAL_CLAIM`, but the explicit host option wins.
+Dekker requires at least one spare region per live consumer, so it can impose a
+lower ceiling on an explicit `stealRegionLanes` than `"cas-mask"`. See
+[Work stealing](/guides/work-stealing/) for the topology and limits.
+
 ### doorbell
 
 Requests an asynchronous host completion waiter instead of repeated response
-mailbox polling. It is enabled by default when Node.js or Bun thread workers
-provide `Atomics.waitAsync`. It is disabled for Deno, process workers, compiled
-workers, and browsers, where polling is used instead. Setting it to `true`
-cannot override a runtime limitation; set it to `false` for a polling baseline.
+mailbox polling. It is enabled by default when the runtime provides a wake path:
+`Atomics.waitAsync` on Node/Bun threads, a thread-safe FFI callback on Deno when
+FFI is available, and a process-local completion transport for process workers.
+Unsupported or denied configurations fall back to polling. Set it to `false`
+for a polling baseline.
+
+### nativeDoorbell
+
+On Node thread workers, requests the optional native `uv_async_t` completion
+bridge from the `knitting_doorbell` addon. It is `false` by default, requires
+`doorbell: true`, does not apply to process workers, and falls back when the
+prebuild or permission is unavailable.
 
 ### stallFreeLoops
 

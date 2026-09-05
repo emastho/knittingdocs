@@ -17,9 +17,9 @@ import { BufferReference } from "knitting/unsafe";
 
 <Aside type="note">
 This API is experimental, so it may still change. Normal use is safe on all
-supported runtimes. The optional `borrow` mode can avoid a copy for returned
-buffers, but it comes with stricter lifetime rules; see [Copying and borrowing
-returned buffers](#copying-and-borrowing-returned-buffers).
+supported runtimes. `BufferReference` is a thread-only ownership handle; use
+ordinary large binary returns unless you specifically need to move an input
+buffer without a host-to-worker copy.
 </Aside>
 
 ---
@@ -129,52 +129,74 @@ untrusted code.
 
 ---
 
-## Copying and borrowing returned buffers
+## Large binary returns
 
-When a worker returns a `BufferReference`, Knitting must make those bytes
-readable on the host. By default, it chooses the safe option. You can make that
-choice explicit with `BufferReferenceReturn: "copy"`:
+For a large result, return an ordinary top-level `Uint8Array` or `ArrayBuffer`.
+At **256 KiB** and above, thread workers use the safe ownership path
+automatically:
 
-```ts
-using pool = createPool({
-  threads: 1,
-  unsafe: { BufferReferenceReturn: "copy" },
-})({ invert });
-```
+| Runtime | Result ownership |
+| --- | --- |
+| Node 22/24 with the native addon | The host adopts the backing store without a byte copy. |
+| Deno and Bun | The host makes one private copy before releasing the worker's memory. |
+| Older Node backends | The same one-private-copy fallback. |
 
-On Node 22/24 with the current native support, the host can share the returned
-memory, so no copy is needed. On Deno, Bun, and Node builds without that
-support, Knitting makes one safe copy. Choose `"borrow"` when you want to skip
-that copy and can keep the result's lifetime under control:
+The host result is owned and remains valid after later calls and pool shutdown.
+There is no wrapper or manual release for this path:
 
 ```ts
-import { BufferReferenceReturn } from "knitting/unsafe";
-
-using pool = createPool({
-  threads: 1,
-  unsafe: { BufferReferenceReturn: BufferReferenceReturn.Borrow },
-})({ invert });
-
-const input = new Uint8Array([0, 64, 128, 192, 255]);
-{
-  using result = await pool.call.invert(new BufferReference(input));
-  const out = result.toUint8Array(); // valid while result is alive
-  console.log([...out]);
-} // result is released here; do not read out after this point
+export const render = task<number, Uint8Array>({
+  f: (size) => {
+    const out = new Uint8Array(size);
+    out.fill(7);
+    return out; // 256 KiB and above: ownership moves automatically
+  },
+});
 ```
 
-<Aside type="caution">
-On Deno, Bun, and Node builds without native ownership support, `"borrow"`
-reads directly from worker memory. Release the result before its worker shuts
-down. If the bytes need to outlive the result—for example in an HTTP response,
-stream, timer, or cache—make a normal copy while the reference is still active,
-for example with `new Uint8Array(result.toUint8Array())`. Worker shutdown
-revokes outstanding borrows, but you should not rely on a view surviving it.
-</Aside>
+Smaller or non-movable values use the ordinary payload-copy path. Use
+`BufferReference` when the input is already an owned `ArrayBuffer` or typed-array
+view and moving it into a thread worker is the bottleneck.
 
-If you prefer named constants, `BufferReferenceReturn.Copy` (`"copy"`) and
-`BufferReferenceReturn.Borrow` (`"borrow"`) are exported from
-`knitting/unsafe`.
+For an intentionally short-lived borrowed return from a worker's shared arena,
+use [`sharedBytes()`](#explicit-borrowed-returns) with
+`unsafe: { SharedBytes: true }` instead. That opt-in path has stricter lifetime
+rules and is not a replacement for ordinary owned results.
+
+## Explicit borrowed returns
+
+`sharedBytes(byteLength, zeroFill = false)` allocates a return view in the
+worker's shared arena. The task must write every byte it returns, and the host
+must copy a result that needs to outlive the next batch of calls:
+
+```ts
+import { createPool, isMain, task } from "knitting";
+import { sharedBytes } from "knitting/unsafe";
+
+export const render = task<number, Uint8Array>({
+  f: (size) => {
+    const out = sharedBytes(size);
+    for (let i = 0; i < out.length; i++) out[i] = i & 0xff;
+    return out;
+  },
+});
+
+if (isMain) {
+  using pool = createPool({
+    threads: 4,
+    unsafe: { SharedBytes: true },
+  })({ render });
+
+  const borrowed = await pool.call.render(1024 * 1024);
+  const owned = borrowed.slice(); // keep this beyond the current return window
+  console.log(owned.byteLength);
+}
+```
+
+Borrowed return views are kept for a window of 32 large results per worker lane.
+Outside a worker return lane, or when the shared path is unavailable,
+`sharedBytes()` falls back to an ordinary private `Uint8Array`. Compiled workers
+reject `unsafe` options instead of falling back.
 
 ---
 

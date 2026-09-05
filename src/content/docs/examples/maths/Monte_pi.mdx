@@ -1,11 +1,10 @@
 ---
 title: Monte Carlo pi
-description: "Estimate pi by throwing darts at a circle, split across workers."
+description: "Estimate pi with a small, readable map-reduce example."
 hero:
   title: 'Parallel Monte Carlo pi'
 sidebar:
   order: 2
-
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -16,43 +15,66 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/monte_carlo/pi.ts");
 export const pi_chunk = getCode("maths/monte_carlo/montecarlo_pi.ts");
 
-The classic Monte Carlo dartboard: throw random points into a square, count how many land inside the unit circle, and estimate pi. Every point is independent, making this embarrassingly parallel and a clean demonstration of Knitting's map-reduce pattern.
+## What is this about
+
+This example estimates pi by throwing random points at a square. Points inside
+the unit circle count as hits:
+
+$$
+\pi \approx 4 \cdot \frac{\text{points inside the circle}}{\text{total points}}
+$$
+
+Every point is independent, so the host can split the work into chunks and let
+the workers run them in parallel. Each task returns one small number — its hit
+count — and the host adds those counts together.
 
 ## How it works
 
-Throw lots of random points into $$[-1,1]\times[-1,1]$$. A point is "inside" if $$x^2 + y^2 \le 1$$. Because areas scale nicely:
+1. The host creates a pool and divides the sample count into chunks.
+2. Each worker receives one tuple: `[seed, samples]`.
+3. The worker runs the tight numeric loop and returns its hit count.
+4. The host reduces all counts into one estimate of pi.
 
-$$
-\pi \approx 4 \cdot \frac{\text{inside}}{\text{total}}
-$$
-
-The host divides the total sample count into chunks, dispatches each chunk to a worker via `piChunk(seed, samples)`, and each worker runs a tight inner loop with a fast deterministic RNG (xorshift32). Each chunk returns a tiny summary: `{ inside, samples }`. The host aggregates and prints the final estimate.
+The example uses a deterministic seed, so the estimate is reproducible. Change
+`--samples` to trade runtime for accuracy; Monte Carlo error falls roughly as
+`1 / sqrt(samples)`.
 
 ## Run
 
 :::info
 <RuntimeRunTabs
-  bunCommand="bun src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
-  denoCommand="deno run -A src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
-  nodeCommand="npx tsx src/pi.ts --threads 6 --samples 50000000 --chunk 1000000"
+  bunCommand="bun src/pi.ts --threads 4 --samples 50000000 --chunk 1000000"
+  denoCommand="deno run -A src/pi.ts --threads 4 --samples 50000000 --chunk 1000000"
+  nodeCommand="npx tsx src/pi.ts --threads 4 --samples 50000000 --chunk 1000000"
 />
 :::
 
 Expected output:
 
+```text
+threads: 4
+samples: 50,000,000
+chunks:  50
+pi:      3.14140728
+error:   1.85e-4
+elapsed: 900 ms
 ```
-threads: 6  samples: 50,000,000  chunk: 1,000,000
-dispatching 50 chunks...
 
-pi ~ 3.14159842  (error: +0.00000577)
-elapsed: 0.87s
-```
+The estimate is stable for the fixed seed; elapsed time depends on your
+runtime, CPU, and worker count.
 
-:::note
-Monte Carlo error shrinks like `1/sqrtN` -- to halve the error, you need 4x more samples. With 50M samples you'll typically land within ~0.001 of the true value.
-:::
+## Why this pattern works
+
+- The task does one thing: simulate a chunk of points.
+- The host owns orchestration and reporting.
+- Results stay tiny instead of transferring every generated point.
+- The same shape works for numerical integration, sampling, and simulations.
+
+This is the map-reduce pattern in its simplest form: map independent chunks to
+workers, then reduce their summaries on the host.
 
 ## Code
+
 <Tabs>
   <TabItem label="pi.ts">
     <Code code={run} lang="ts" title={"pi.ts"} />
@@ -62,23 +84,9 @@ Monte Carlo error shrinks like `1/sqrtN` -- to halve the error, you need 4x more
   </TabItem>
 </Tabs>
 
-## Why this is a good parallel pattern
-
-This example captures the core scientific computing pattern: **map** (simulate many independent trials) then **reduce** (combine partial statistics). Each chunk returns a small summary, not raw data -- that's critical for keeping transfer overhead low.
-
-The same structure works for numerical integration, uncertainty propagation, risk estimation, statistical physics, and any problem you can phrase as "run many trials and combine results."
-
-## Practical notes
-
-**Chunk size matters.** Each task should do enough work to justify dispatch overhead. Start with 100k-5M iterations per chunk depending on your loop cost. Too small and overhead dominates; too big and you lose load balancing.
-
-**Seed carefully.** Use one base seed (so runs are reproducible) and derive a different per-chunk seed (so chunks don't share the same random stream). This example does this correctly.
-
-**Keep the inner loop tight.** Avoid allocations per iteration. This example uses xorshift32 instead of `Math.random()` for speed.
-
 ## Things to try
 
-1. Increase `--samples` to 500M and watch the estimate stabilize.
-2. Try different `--chunk` sizes and measure throughput -- there's a sweet spot.
-3. Fix the seed and confirm identical output across runs.
-4. Modify the worker to also return timing per chunk and plot a histogram.
+1. Lower `--samples` to `1_000_000` for a quick run.
+2. Increase `--samples` to see the estimate settle closer to pi.
+3. Compare `--chunk 100000` with `--chunk 5000000` and watch the scheduling trade-off.
+4. Replace the circle test with another independent simulation and keep the same pool shape.

@@ -1,83 +1,101 @@
 import { createPool, isMain } from "knitting";
 import { bench, boxplot, run, summary } from "mitata";
-import { renderUserCardHost } from "../react_ssr/render_user_card.tsx";
-import { renderUserCardCompressed } from "./render_user_card_compressed.tsx";
+import { renderUserCard } from "../react_ssr/render_user_card.tsx";
+import { buildUserPayloads } from "../react_ssr/utils.ts";
 import {
-  buildCompressionPayloads,
   compressHtml,
-  sumCompressedBytes,
-} from "./utils.ts";
+  renderAndCompressHost,
+  renderUserCardCompressed,
+} from "./render_user_card_compressed.tsx";
 
-const THREADS = 1;
+// Brotli is expensive enough that the host lane is worth having here: unlike the
+// plain SSR example, the inliner earns its place on this workload.
+const THREADS = 4;
 const REQUESTS = 100;
 
 async function main() {
-  const payloads = buildCompressionPayloads(REQUESTS);
-  const pool = createPool({
+  const payloads = buildUserPayloads(REQUESTS);
+  using pool = createPool({
     threads: THREADS,
-    inliner: {
-      batchSize: 8,
-    },
-  })({ renderUserCardCompressed });
+    inliner: { batchSize: 8 },
+  })({ renderUserCardCompressed, renderUserCard });
   let sink = 0;
 
-  try {
-    runHost(payloads);
-    await runWorkers(
-      pool.call.renderUserCardCompressed,
-      payloads,
-    );
+  const onWorker = pool.call.renderUserCardCompressed;
+  const renderOnly = pool.call.renderUserCard;
 
-    console.log("React SSR + compression benchmark (mitata)");
-    console.log("workload: parse + normalize + render + brotli");
-    console.log("requests per iteration:", REQUESTS.toLocaleString());
-    console.log("threads:", THREADS, " + main");
+  const hostBytes = runHost(payloads);
+  const workerBytes = await runWorkerCompress(onWorker, payloads);
+  const splitBytes = await runHostCompress(renderOnly, payloads);
+  const parity = hostBytes === workerBytes && hostBytes === splitBytes;
+  console.log(
+    `byte parity check: host=${hostBytes.toLocaleString()} ` +
+      `worker=${workerBytes.toLocaleString()} ` +
+      `split=${splitBytes.toLocaleString()} ` +
+      (parity ? "OK match" : "MISMATCH"),
+  );
+  if (!parity) throw new Error("Compressed byte totals differ.");
 
-    boxplot(() => {
-      summary(() => {
-        bench(`host (${REQUESTS.toLocaleString()} req)`, () => {
-          sink = runHost(payloads);
-        });
+  console.log("\nReact SSR + compression benchmark (mitata)");
+  console.log("workload: parse + normalize + render + brotli");
+  console.log("requests per iteration:", REQUESTS.toLocaleString());
+  console.log("threads:", THREADS, "+ inliner\n");
 
-        bench(
-          `knitting (${THREADS} thread(s), ${REQUESTS.toLocaleString()} req)`,
-          async () => {
-            sink = await runWorkers(
-              pool.call.renderUserCardCompressed,
-              payloads,
-            );
-          },
-        );
+  boxplot(() => {
+    summary(() => {
+      bench("host: render + compress", () => {
+        sink = runHost(payloads);
+      });
+
+      bench("worker: render only, host compresses", async () => {
+        sink = await runHostCompress(renderOnly, payloads);
+      });
+
+      bench("worker: render + compress", async () => {
+        sink = await runWorkerCompress(onWorker, payloads);
       });
     });
+  });
 
-    await run();
-    console.log("last compressed bytes:", sink.toLocaleString());
-  } finally {
-    pool.shutdown();
-  }
+  await run();
+  console.log("last compressed bytes:", sink.toLocaleString());
 }
 
 function runHost(payloads: string[]): number {
   let compressedBytes = 0;
   for (let i = 0; i < payloads.length; i++) {
-    const html = renderUserCardHost(payloads[i]!);
-    compressedBytes += compressHtml(html).byteLength;
+    compressedBytes += renderAndCompressHost(payloads[i]!).byteLength;
   }
   return compressedBytes;
 }
 
-async function runWorkers(
-  callRender: (payload: string) => Promise<{ byteLength: number }>,
+// Both steps on the worker: only the compressed bytes cross the boundary.
+async function runWorkerCompress(
+  callCompressed: (payload: string) => Promise<Uint8Array>,
   payloads: string[],
 ): Promise<number> {
-  const jobs: Promise<{ byteLength: number }>[] = [];
-  for (let i = 0; i < payloads.length; i++) {
-    jobs.push(callRender(payloads[i]!));
-  }
-
+  const jobs = payloads.map(callCompressed);
   const results = await Promise.all(jobs);
-  return sumCompressedBytes(results);
+
+  let total = 0;
+  for (let i = 0; i < results.length; i++) total += results[i]!.byteLength;
+  return total;
+}
+
+// Render on the worker, compress on the host: the full HTML crosses back, and
+// every brotli call lands on the thread you were trying to keep free.
+async function runHostCompress(
+  callRender: (payload: string) => Promise<string>,
+  payloads: string[],
+): Promise<number> {
+  const jobs = payloads.map(callRender);
+  const results = await Promise.all(jobs);
+
+  let total = 0;
+  for (let i = 0; i < results.length; i++) {
+    total += compressHtml(results[i]!).byteLength;
+  }
+  return total;
 }
 
 if (isMain) {

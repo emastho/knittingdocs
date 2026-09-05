@@ -85,6 +85,25 @@ How it parks depends on the size of the pool:
 
 Both are defaults. `worker.timers` is there if you need to override them.
 
+## Completion doorbells
+
+The host has a separate wait path for completed results. `host.doorbell` is
+enabled by default when the runtime can wake the host without polling:
+
+| Runtime or topology | Completion path |
+| --- | --- |
+| Node and Bun thread workers | `Atomics.waitAsync` |
+| Deno thread workers | A thread-safe FFI callback when FFI permission is available |
+| Process workers | A process-local completion transport |
+| Compiled workers and browsers | Polling/fallback; host options are unsupported for compiled workers |
+
+If a runtime denies the required capability, Knitting falls back to portable
+polling. Set `host: { doorbell: false }` when you need a controlled polling
+comparison or when workers already occupy every core. Node thread workers can
+also request `host.nativeDoorbell: true`, which uses the optional native
+`uv_async_t` bridge from the `knitting_doorbell` addon. It is off by default,
+requires the regular doorbell, and does not apply to process workers.
+
 <HonoCpuEfficiency />
 
 Each bar is total server CPU divided by completed requests under saturating

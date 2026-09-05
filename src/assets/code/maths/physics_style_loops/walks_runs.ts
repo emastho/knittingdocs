@@ -1,98 +1,94 @@
 import { createPool, isMain } from "knitting";
 import { walkChunk } from "./walk2d.ts";
 
-function intArg(name: string, fallback: number) {
-  const i = process.argv.indexOf(`--${name}`);
-  if (i !== -1 && i + 1 < process.argv.length) {
-    const v = Number(process.argv[i + 1]);
-    if (Number.isFinite(v) && v > 0) return Math.floor(v);
-  }
-  return fallback;
-}
-function numArg(name: string, fallback: number) {
-  const i = process.argv.indexOf(`--${name}`);
-  if (i !== -1 && i + 1 < process.argv.length) {
-    const v = Number(process.argv[i + 1]);
-    if (Number.isFinite(v) && v > 0) return v;
-  }
-  return fallback;
+type Options = {
+  threads: number;
+  runs: number;
+  batch: number;
+  maxSteps: number;
+  radius: number;
+};
+
+type WalkResult = {
+  escaped: number;
+  totalRuns: number;
+  sumSteps: number;
+  sumSteps2: number;
+};
+
+function positiveIntArg(name: string, fallback: number): number {
+  const index = process.argv.indexOf(`--${name}`);
+  const value = index === -1 ? undefined : Number(process.argv[index + 1]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-// Tunables (pick any data you like)
-const THREADS = intArg("threads", 4);
-const TOTAL_RUNS = intArg("runs", 5_000_000);
-const RUNS_PER_JOB = intArg("batch", 5_000);
-const MAX_STEPS = intArg("steps", 15_000);
-const RADIUS = numArg("radius", 100);
-
-const { call, shutdown } = createPool({
-  threads: THREADS,
-  balancer: "firstIdle",
-  // Optional: inliner helps if each job is too small.
-  // inliner: { position: "last", batchSize: 1 },
-})({ walkChunk });
+function readOptions(): Options {
+  return {
+    threads: positiveIntArg("threads", 4),
+    runs: positiveIntArg("runs", 50_000),
+    batch: positiveIntArg("batch", 2_500),
+    maxSteps: positiveIntArg("steps", 3_000),
+    radius: positiveIntArg("radius", 40),
+  };
+}
 
 async function main() {
-  const jobsCount = Math.ceil(TOTAL_RUNS / RUNS_PER_JOB);
-  const jobs = new Array<
-    Promise<
-      {
-        escaped: number;
-        totalRuns: number;
-        sumSteps: number;
-        sumSteps2: number;
-      }
-    >
-  >(jobsCount);
+  const options = readOptions();
+  const jobCount = Math.ceil(options.runs / options.batch);
+  const seed = 0x1234_5678;
 
-  const seedBase = ((Date.now() | 0) ^ 0x9e3779b9) | 0;
+  using pool = createPool({ threads: options.threads })({ walkChunk });
 
-  for (let j = 0; j < jobsCount; j++) {
-    const remaining = TOTAL_RUNS - j * RUNS_PER_JOB;
-    const runs = remaining >= RUNS_PER_JOB ? RUNS_PER_JOB : remaining;
+  const started = performance.now();
+  const jobs: Promise<WalkResult>[] = [];
 
-    // Spread seeds per job so streams differ
-    const seed = (seedBase + (j * 0x6d2b79f5)) | 0;
+  for (let job = 0; job < jobCount; job++) {
+    const offset = job * options.batch;
+    const runs = Math.min(options.batch, options.runs - offset);
+    const jobSeed = (seed + job * 0x6d2b_79f5) | 0;
 
-    jobs[j] = call.walkChunk([seed, runs, MAX_STEPS, RADIUS]);
+    jobs.push(
+      pool.call.walkChunk([
+        jobSeed,
+        runs,
+        options.maxSteps,
+        options.radius,
+      ]),
+    );
   }
 
   const results = await Promise.all(jobs);
+  const total = results.reduce(
+    (summary, result) => ({
+      escaped: summary.escaped + result.escaped,
+      totalRuns: summary.totalRuns + result.totalRuns,
+      sumSteps: summary.sumSteps + result.sumSteps,
+      sumSteps2: summary.sumSteps2 + result.sumSteps2,
+    }),
+    { escaped: 0, totalRuns: 0, sumSteps: 0, sumSteps2: 0 },
+  );
 
-  let escaped = 0;
-  let total = 0;
-  let sumSteps = 0;
-  let sumSteps2 = 0;
+  const escapeProbability = total.escaped / total.totalRuns;
+  const meanSteps = total.escaped ? total.sumSteps / total.escaped : 0;
+  const meanStepsSquared = total.escaped
+    ? total.sumSteps2 / total.escaped
+    : 0;
+  const standardDeviation = Math.sqrt(
+    Math.max(0, meanStepsSquared - meanSteps * meanSteps),
+  );
+  const elapsed = performance.now() - started;
 
-  for (const r of results) {
-    escaped += r.escaped;
-    total += r.totalRuns;
-    sumSteps += r.sumSteps;
-    sumSteps2 += r.sumSteps2;
-  }
-
-  const pEscape = escaped / total;
-
-  let mean = NaN;
-  let stdev = NaN;
-
-  if (escaped > 0) {
-    mean = sumSteps / escaped;
-    const mean2 = sumSteps2 / escaped;
-    const variance = Math.max(0, mean2 - mean * mean);
-    stdev = Math.sqrt(variance);
-  }
-
-  console.log("Monte Carlo: 2D random-walk first-exit");
-  console.log("threads     :", THREADS);
-  console.log("total runs  :", total.toLocaleString());
-  console.log("radius      :", RADIUS);
-  console.log("max steps   :", MAX_STEPS.toLocaleString());
-  console.log("escape prob :", pEscape);
-  console.log("mean steps  :", mean);
-  console.log("stdev steps :", stdev);
+  console.log(`threads:           ${options.threads}`);
+  console.log(`runs:              ${total.totalRuns.toLocaleString()}`);
+  console.log(`batches:           ${jobCount.toLocaleString()}`);
+  console.log(`radius:            ${options.radius}`);
+  console.log(`max steps:         ${options.maxSteps.toLocaleString()}`);
+  console.log(`escape probability: ${escapeProbability.toFixed(4)}`);
+  console.log(`mean escape steps:  ${meanSteps.toFixed(1)}`);
+  console.log(`stdev steps:       ${standardDeviation.toFixed(1)}`);
+  console.log(`elapsed:           ${elapsed.toFixed(0)} ms`);
 }
 
 if (isMain) {
-  main().finally(shutdown);
+  await main();
 }

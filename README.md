@@ -1,59 +1,92 @@
-# Starlight Starter Kit: Basics
+# Knitting documentation
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+This repository contains the Knitting documentation site. Knitting is a
+shared-memory worker runtime for Node.js, Deno, Bun, and browser workers.
 
-```
-bun create astro@latest -- --template starlight
-```
+The guides describe the `0.1.70` public API, including pooled shared-memory
+regions, safe large-binary ownership moves, work-stealing claim disciplines,
+and runtime-specific completion doorbells.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/starlight/tree/main/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/starlight/tree/main/examples/basics)
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/withastro/starlight&create_from_path=examples/basics)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwithastro%2Fstarlight%2Ftree%2Fmain%2Fexamples%2Fbasics&project-name=my-starlight-docs&repository-name=my-starlight-docs)
+## Run the site
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and
-files:
-
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   ├── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+```bash
+npm install
+npm run dev
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory.
-Each file is exposed as a route based on its file name.
+Build and preview the static site with:
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative
-link.
+```bash
+npm run build
+npm run preview
+```
 
-Static assets, like favicons, can be placed in the `public/` directory.
+## Runtime reference
 
-## 🧞 Commands
+Install the runtime package in an application with:
 
-All commands are run from the root of the project, from a terminal:
+```bash
+npm install knitting@0.1.70
+```
 
-| Command               | Action                                           |
-| :-------------------- | :----------------------------------------------- |
-| `bun install`         | Installs dependencies                            |
-| `bun dev`             | Starts local dev server at `localhost:4321`      |
-| `bun build`           | Build your production site to `./dist/`          |
-| `bun preview`         | Preview your build locally, before deploying     |
-| `bun astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `bun astro -- --help` | Get help using the Astro CLI                     |
+The normal task API is unchanged:
 
-## 👀 Want to learn more?
+```ts
+import { createPool, isMain } from "knitting";
 
-Check out [Starlight’s docs](https://starlight.astro.build/), read
-[the Astro documentation](https://docs.astro.build), or jump into the
-[Astro Discord server](https://astro.build/chat).
+export const double = (value: number) => value * 2;
+
+if (isMain) {
+  using pool = createPool({ threads: 2 })({ double });
+  console.log(await pool.call.double(21)); // 42
+}
+```
+
+For compatible multi-worker pools, shared-submit work stealing is enabled by
+default. The relevant host options are:
+
+```ts
+host: {
+  steal?: boolean,
+  stealRegionLanes?: number,
+  stealClaim?: "dekker" | "cas-mask",
+  doorbell?: boolean,
+  nativeDoorbell?: boolean,
+}
+```
+
+`stealClaim` defaults to `"dekker"`; `KNITTING_STEAL_CLAIM` selects the same
+discipline from the environment. `doorbell` defaults to enabled and uses the
+best supported completion wake path, with polling fallback. On Node thread
+workers, `nativeDoorbell` opts into the optional `uv_async_t` addon bridge and
+is ignored when `doorbell` is disabled.
+
+Large top-level `Uint8Array` and `ArrayBuffer` returns use the safe ownership
+path automatically at 256 KiB and above. Use `BufferReference` for an explicit
+thread-only input move.
+
+Advanced shared-byte paths are opt-in:
+
+```ts
+using pool = createPool({
+  threads: 4,
+  unsafe: { SharedArgs: true, SharedBytes: true },
+})({ render });
+
+const input = pool.sharedArgBytes(byteLength);
+input.set(source);
+const output = await pool.call.render(input);
+```
+
+Borrowed argument bytes must be consumed before the task's first `await`, and
+borrowed return views must be copied if they need to outlive the current return
+window. See the [shared memory guide](https://knittingdocs.netlify.app/guides/shared-memory/)
+and [buffer reference guide](https://knittingdocs.netlify.app/guides/buffer-reference/)
+for ownership details.
+
+## Repository layout
+
+- `src/content/docs/` — Starlight guides and examples.
+- `src/lib/llms.ts` — generated documentation summaries for `llms.txt`.
+- `public/knitting.js` — browser bundle used by the browser guide and smoke test.
+- `public/_headers` — cross-origin isolation headers for browser examples.

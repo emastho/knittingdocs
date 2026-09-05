@@ -1,0 +1,269 @@
+---
+title: LaTeX paper indexing
+description: Turn real arXiv LaTeX sources into indexable prose on workers.
+hero:
+  title: 'arXiv corpus'
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+
+export const scan = getCode("data_transforms/latex_papers/tex_scan.ts");
+export const parse = getCode("data_transforms/latex_papers/tex_parse.ts");
+export const corpus = getCode("data_transforms/latex_papers/arxiv_corpus.ts");
+export const run = getCode("data_transforms/latex_papers/run_latex_papers.ts");
+export const bench = getCode("data_transforms/latex_papers/bench_latex_papers.ts");
+
+Downloads the LaTeX source of sixteen well-known arXiv papers and turns each one into
+something you could index or embed: the prose with markup removed, plus the section tree,
+citation keys, and equation, figure and table counts.
+
+Unlike the other examples on this site, the input here is not synthetic. It is sixteen real
+submissions, with everything real submissions contain -- macros authors invented for
+themselves, files that `\input` other files, commented-out paragraphs, and one paper whose
+"source" turns out to be a PDF with a two-line LaTeX wrapper around it.
+
+:::note
+No runtime dependencies. `mitata` is needed for the benchmark script alone.
+
+The first run downloads about 20 MB from arXiv and caches it next to the script; every run
+after that is offline. It fetches one paper at a time with a pause between requests. If you
+want a corpus of thousands rather than sixteen, use [arXiv's bulk
+access](https://info.arxiv.org/help/bulk_data.html) rather than a loop over the e-print
+endpoint.
+:::
+
+## How it works
+
+1. The host makes sure the sixteen archives are cached, then sends each worker a **file path**.
+2. The worker reads its archive, gunzips it, and pulls the `.tex` entries out of the tar.
+3. It finds the entry point, splices in every `\input`, and expands the paper's own macros.
+4. It strips comments, math, tabulars and bibliographies, and unwraps the prose macros.
+5. It returns the extracted text, the section tree, and the counters.
+
+Five files:
+
+- `tex_scan.ts` -- reading TeX: balanced groups, comments, `\input`, macro expansion
+- `tex_parse.ts` -- turning a resolved document into prose and structure, and the task
+- `arxiv_corpus.ts` -- fetching, caching, gunzip and tar, and the task worth copying
+- `run_latex_papers.ts` -- index the corpus and print what came out
+- `bench_latex_papers.ts` -- three placements of the same job, with `mitata`
+
+## Run
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/run_latex_papers.ts"
+  denoCommand="deno run -A src/run_latex_papers.ts"
+  nodeCommand="npx tsx src/run_latex_papers.ts"
+/>
+:::
+
+Expected output, after the first run has filled the cache:
+
+```
+Indexed 16 arXiv submissions on 4 workers in 162 ms
+
+  id           words   sec   eq  fig  tab  cites  title
+  1910.10683 22,775    59    0    6   16    277  Exploring the Limits of Transfer Learning wi
+  2001.08361 10,086    44   47   24    6     76  Scaling Laws for Neural Language Models
+  1512.03385  7,191    14    2    7   11    150  Deep Residual Learning for Image Recognition
+  2010.11929  7,049    32    3   12    9    100  An Image is Worth 16x16 Words: Transformers
+  1810.04805  7,011    29    1    5    8     91  BERT: Pre-training of Deep Bidirectional Tra
+  1409.1556   6,501    22    0    0   12     87  Very Deep Convolutional Networks for Large-S
+  1607.06450  5,630    26   10    5    3     55  Layer Normalization
+  1502.03167  5,553    16   17    4    0     35  Batch Normalization: Accelerating Deep Netwo
+  1503.02531  5,037    17    6    0    5     11  Distilling the Knowledge in a Neural Network
+  1312.6114   4,901    20   30   12    0     23  Auto-Encoding Variational Bayes
+  1301.3781   4,727    19    5    1    8     63  Efficient Estimation of Word Representations
+  1706.03762  4,009    23    5    5    4     58  Attention Is All You Need
+  1406.2661   3,013    10    8    5    2     41  Generative Adversarial Nets
+  1804.02767  2,854    11    1    5    3     19  YOLOv3: An Incremental Improvement
+  1505.04597  2,508     7    2    4    2     23  U-Net: Convolutional Networks for Biomedical
+  1611.03530      0     0    0    0    0      0  (PDF-only submission)
+
+  LaTeX in       : 1,089,931 bytes
+  prose out      : 626,158 bytes
+  words          : 98,845
+  macros expanded: 3,174
+  citations      : 1,109 (551 unique keys)
+  PDF-only       : 1 with no body to index
+```
+
+All three runtimes produce the same 98,845 words.
+
+## The interesting decision is where to cut the job
+
+Indexing a paper is two steps that look very different. Unpacking the archive is I/O and
+decompression; parsing is string work. The obvious move is to offload the parsing, because
+that is the part that looks like computation.
+
+That is the wrong cut, and the benchmark measures all three options.
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/bench_latex_papers.ts"
+  nodeCommand="npx tsx src/bench_latex_papers.ts"
+/>
+:::
+
+Expected output (4 cores / 8 threads, Bun 1.4, 16 papers per iteration):
+
+```
+word parity check: host=98,845 split=98,845 worker=98,845 OK match
+
+LaTeX corpus benchmark (mitata)
+workload: gunzip + untar + inline inputs + expand macros + extract prose
+papers per iteration: 16
+threads: 4
+
+benchmark                             avg (min … max)
+host: unpack + parse                 102.95 ms/iter  (95.50 ms … 110.16 ms)
+worker: parse only, host unpacks      87.58 ms/iter  (80.56 ms …  96.66 ms)
+worker: unpack + parse                61.66 ms/iter  (51.08 ms …  81.98 ms)
+
+summary
+  worker: unpack + parse
+   1.42x faster than worker: parse only, host unpacks
+   1.67x faster than host: unpack + parse
+```
+
+The middle row is the one to look at. Offloading the parse -- the part that looks like the
+real work -- bought `1.18x`, because the decompression stayed on the thread you were trying
+to free, and `gunzipSync` blocks it completely while it runs. Sending a **path** instead of
+a payload moves the whole job across, and the gunzip parallelizes along with everything
+else: `1.67x` from the same pool, on the same corpus.
+
+It is also the smaller piece of code. The host never opens an archive, so `loadArchive` is
+called in exactly one place -- inside the task.
+
+```ts
+// The shape worth copying: the job crosses the boundary as a path.
+export const indexArchive = task<string, PaperRecord>({
+  f: async (path: string) => parsePaperHost(await loadArchive(path)),
+});
+```
+
+## The boundary is cheaper than it looks
+
+The reason to send a path is *not* that the payload was expensive. It is worth knowing how
+cheap the payload actually was, because the fear of the boundary tends to drive worse
+designs than the boundary deserves.
+
+Two measurements from this workload:
+
+- Sending 64 papers' worth of sources -- **3.9 MiB of LaTeX** -- through a task that does
+  nothing but count the files costs about **11 ms**.
+- Returning every paper's extracted prose (626 KB) instead of returning counters only
+  measured the **same, within noise**, in both directions across thread counts.
+
+So the site's usual advice -- return compact summaries, not large payloads -- is a rule
+about ratios, not about sizes. When each item costs milliseconds of CPU, a 40 KB result is
+free. When each item costs microseconds, the same result dominates. Measure the ratio for
+your workload rather than assuming the payload is the problem.
+
+## The stage that refused to parallelize
+
+The first version of this example used `DecompressionStream`, which is the web-standard way
+to gunzip and works on all three runtimes. It also does not get faster when you add workers.
+
+Gunzipping the same sixteen archives inside the pool, changing only the thread count:
+
+| threads | `DecompressionStream` | `node:zlib` `gunzipSync` |
+| ------- | --------------------- | ------------------------ |
+| 1       | 43.9 ms               | 60.8 ms                  |
+| 2       | 39.3 ms               | 58.2 ms                  |
+| 4       | 37.1 ms               | 32.2 ms                  |
+| 8       | 39.2 ms               | 27.0 ms                  |
+
+`DecompressionStream` is flat. `gunzipSync` starts out slower and then scales, because it
+runs on the worker that called it instead of handing the work to something shared.
+
+:::caution
+A stage that does not scale sets the ceiling for everything around it. Before blaming the
+pool for a disappointing speedup, time each stage of your task at one worker and at four --
+a flat stage is the answer, and no amount of tuning the pool will move it.
+:::
+
+## Real submissions are messy
+
+Most of the parser exists because of things real papers do:
+
+- **A submission can contain no LaTeX at all.** One of these sixteen is a PDF with a stub
+  `.tex` that `\includepdf`s it. It parses to zero words, and the record says `pdfOnly`
+  rather than quietly reporting a paper with no content. Adam is another, which is why it
+  is not in the list.
+- **A tarball can hold several `\begin{document}` files.** YOLOv3 ships the paper, a
+  rebuttal, a supplementary and a style demo. Picking the longest file gets you the
+  supplementary; the paper's own entry point is 3 KB that `\input`s everything else. The
+  right rule is the file that resolves to the most document, not the biggest file on disk.
+- **Every author invents macros.** One paper in this corpus expands 1,844 of them. Skip
+  expansion and your index fills up with tokens nobody wrote.
+- **`%` starts a comment, `\%` does not, and papers are full of commented-out drafts.**
+
+The extracted text was checked against `pdftotext` output from arXiv's own PDFs, minus the
+bibliography: the parser lands between 0.84x and 1.17x of the reference word count across
+spot-checked papers. It is an indexing-grade extraction, not a typesetter.
+
+## Do not expect this to scale past a few workers
+
+Sixteen papers is a small corpus, and it shows. One worker measures level with the host.
+Adding workers helps clearly up to about four, and past that two sweeps on the same machine
+disagreed with each other -- one kept improving to eight, the other got worse at six. That
+spread is larger than the effect, so there is no per-thread table here worth printing.
+
+What is stable is the shape, and the reason for it. The sequential cost of the corpus is
+about **119 ms**, and the most expensive single paper is **21 ms**, so a perfect four-way
+split would finish in **30 ms**. The pool lands closer to **55-65 ms**. The corpus simply
+runs out: sixteen items across four workers is four items each, and the round ends when the
+unluckiest worker finishes.
+
+Two things follow, and they are the ones that transfer:
+
+- **Size the corpus to the pool, not the pool to the machine.** If you have sixteen items,
+  four workers is plenty and eight is theatre. The lever is batching more items per round,
+  not more lanes.
+- **The largest item sets a floor you cannot cross.** Here that floor is 21 ms and it is not
+  yet binding. If your corpus has one item that is 10x the median, it will be, and no pool
+  size fixes it -- you would have to split that item.
+
+:::note
+These numbers come from one thermally-limited laptop, and the per-thread behaviour above
+four workers was not reproducible even on that. Measure on yours; the shape is what
+transfers, not the ratios.
+:::
+
+## Code
+
+<Tabs>
+  <TabItem label="arxiv_corpus.ts">
+    <Code code={corpus} lang="ts" title={"arxiv_corpus.ts"} />
+  </TabItem>
+  <TabItem label="tex_scan.ts">
+    <Code code={scan} lang="ts" title={"tex_scan.ts"} />
+  </TabItem>
+  <TabItem label="tex_parse.ts">
+    <Code code={parse} lang="ts" title={"tex_parse.ts"} />
+  </TabItem>
+  <TabItem label="run_latex_papers.ts">
+    <Code code={run} lang="ts" title={"run_latex_papers.ts"} />
+  </TabItem>
+  <TabItem label="bench_latex_papers.ts">
+    <Code code={bench} lang="ts" title={"bench_latex_papers.ts"} />
+  </TabItem>
+</Tabs>
+
+## When this matters
+
+Document ingestion is the shape here: a pile of files on disk or in a bucket, each needing
+a chain of decompress, parse and extract before anything downstream can use it. Search
+indexes, RAG pipelines and dataset builds all look like this, and the per-item cost is high
+enough that doing it on the request thread is not an option.
+
+The pattern to take away is the task signature. `indexArchive` takes a path and returns a
+record, which means the pool owns the whole pipeline for one item -- reading included. That
+is both faster than splitting the pipeline across the boundary and simpler to write.

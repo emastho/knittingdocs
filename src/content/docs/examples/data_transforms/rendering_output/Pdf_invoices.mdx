@@ -1,0 +1,160 @@
+---
+title: PDF invoices
+description: Render PDF documents on workers and return the bytes without the main thread laying them out.
+hero:
+  title: 'PDF generation'
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import { getCode } from '../../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+
+export const bench = getCode("data_transforms/pdf_invoices/bench_invoice_pdf.ts");
+export const render = getCode("data_transforms/pdf_invoices/render_invoice.ts");
+export const fixtures = getCode("data_transforms/pdf_invoices/invoice_fixtures.ts");
+
+Lays out A4 invoices with [`pdf-lib`](https://pdf-lib.js.org/) and returns the finished PDF bytes from a worker. Document generation is the kind of work that is easy to forget about until a billing run lands on the request thread: it is pure CPU, it produces real bytes, and nothing else on the event loop can proceed while it happens.
+
+`pdf-lib` is pure JavaScript with no native dependency, so this runs unchanged on Node, Deno and Bun.
+
+## How it works
+
+1. The host builds a synthetic billing run -- 24 to 83 line items each, so some invoices spill onto a second page.
+2. Invoices go to the worker in batches. Each worker lays out every invoice in its batch and serializes it.
+3. The worker packs the finished documents into **one** buffer and returns that.
+4. The host unpacks the buffer back into individual PDFs.
+
+Three files:
+
+- `render_invoice.ts` -- the layout, the packing helpers, and the tasks
+- `invoice_fixtures.ts` -- the synthetic billing run
+- `bench_invoice_pdf.ts` -- host vs workers, with `mitata`
+
+## Only a top-level Uint8Array comes back as bytes
+
+This is the constraint the example is built around, and it is worth knowing before you
+design a task that returns binary.
+
+A `Uint8Array` returned directly from a task arrives as a `Uint8Array`. The same array
+nested inside an object or an array does not -- it arrives as a plain object with numeric
+keys. There is no error and no warning; the call resolves, and you get something that is
+both useless and much larger than what you sent.
+
+```ts
+// Fine: arrives as a Uint8Array.
+task<Invoice, Uint8Array>({ f: renderInvoiceHost });
+
+// Not fine: each element arrives as { "0": 37, "1": 80, ... }.
+task<Invoice[], Uint8Array[]>({ f: renderBatch });
+```
+
+So a batch has to come home as one contiguous buffer. `packDocuments` writes a small
+header -- a `u32` count, then a `u32` length per document -- and concatenates the rest;
+`unpackDocuments` reverses it with `subarray`, so the individual PDFs are views into the
+returned buffer rather than copies.
+
+:::caution
+Check the type of anything binary you get back from a task the first time you write it.
+`result[0] instanceof Uint8Array` is a one-line check that will save you an afternoon.
+:::
+
+## Deterministic output
+
+`pdf-lib` stamps the current time into every document, so rendering the same invoice twice
+produces different bytes and any parity check between host and worker fails for the wrong
+reason. The task pins the creation and modification dates, which makes output byte-identical
+run to run -- worth doing in production too, if you ever want to cache or deduplicate
+generated documents.
+
+## Minimal usage
+
+```ts
+using pool = createPool({ threads: 4 })({ renderInvoiceBatch });
+
+const packed = await pool.call.renderInvoiceBatch(invoices.slice(0, 12));
+const documents = unpackDocuments(packed);
+
+await writeFile("invoice-0.pdf", documents[0]);
+```
+
+## Optional benchmark
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/bench_invoice_pdf.ts"
+  denoCommand="deno run -A src/bench_invoice_pdf.ts"
+  nodeCommand="npx tsx src/bench_invoice_pdf.ts"
+/>
+:::
+
+```
+pdf parity check: 200 documents, host=1,114,063 bytes worker=1,114,063 bytes OK match
+
+PDF invoice rendering benchmark (mitata)
+workload: lay out an A4 invoice and serialize the PDF
+invoices per iteration: 200
+average document: 5.4 KB
+threads: 4 | batch: 12
+
+benchmark                          avg (min … max)
+host (200 invoices)                874.29 ms/iter (843.70 ms … 928.11 ms)
+knitting (4 threads, 200 invoices) 542.27 ms/iter (479.83 ms … 662.44 ms)
+
+summary
+  knitting (4 threads, 200 invoices)
+   1.61x faster than host (200 invoices)
+```
+
+Because the documents are deterministic, the parity check compares real bytes: the same
+200 invoices, the same 1,114,063 bytes, whichever side rendered them.
+
+## Do not expect this to scale with cores
+
+`1.6x` from four workers on four cores is a modest return, and raising `threads` does not
+fix it. That is not a knitting limit -- swapping this workload for plain arithmetic through
+the same pool, with the same batching, reached `4.8x` on the same laptop. It is a property
+of the library doing the work.
+
+Most of the time here goes into many small `drawText` and `drawLine` calls, each allocating
+as it goes; document creation and font embedding are close to free by comparison. Workloads
+built out of a lot of small allocations tend to flatten out well before they run out of
+cores, and the [prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting)
+example flattens out for a related reason.
+
+Which means the throughput multiplier is the wrong thing to look at for this one:
+
+- **On throughput,** `1.6x` is a real but unremarkable win.
+- **On latency,** it is the whole point. Laying out 200 invoices takes the better part of a
+  second, and on the host that is a second in which nothing else is served. Moving it to a
+  pool takes it off the request thread entirely, and that is true whether the multiplier is
+  `1.6x` or `4x`.
+
+:::note
+Measured on a 4-core laptop with Bun 1.4. Your ratio will differ; the shape -- flat well
+before core count -- is what transfers.
+:::
+
+## Code
+
+<Tabs>
+  <TabItem label="render_invoice.ts">
+    <Code code={render} lang="ts" title={"render_invoice.ts"} />
+  </TabItem>
+  <TabItem label="invoice_fixtures.ts">
+    <Code code={fixtures} lang="ts" title={"invoice_fixtures.ts"} />
+  </TabItem>
+  <TabItem label="bench_invoice_pdf.ts">
+    <Code code={bench} lang="ts" title={"bench_invoice_pdf.ts"} />
+  </TabItem>
+</Tabs>
+
+## When this matters
+
+Invoices, statements, shipping labels, exam papers, contracts -- anything a product
+generates in bulk on a schedule, or on demand while a user waits. The work is CPU-bound and
+produces bytes you have to hand back, which is exactly the shape a worker pool is for. The
+thing to get right is the return: one contiguous buffer per call, not a structure with
+typed arrays buried inside it.

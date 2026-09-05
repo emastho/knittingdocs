@@ -1,11 +1,10 @@
 ---
 title: Physics loop
-description: "A branch-heavy 2D random-walk simulation spread across workers."
+description: "Run a variable-work 2D random walk across Knitting workers."
 hero:
-  title: 'Parallel Monte Carlo Physics Loop'
+  title: 'Parallel random-walk simulation'
 sidebar:
   order: 3
-
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -16,48 +15,65 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/physics_style_loops/walks_runs.ts");
 export const walk_chunk = getCode("maths/physics_style_loops/walk2d.ts");
 
-A physics-style simulation loop: step-by-step state updates with branching and early exits. Unlike the pi example (pure arithmetic), this one simulates a **2D random walk** -- start at the origin, move one unit in a random direction each step, stop when the particle crosses a radius boundary. The work per trial varies (some particles escape early, some don't), which makes chunking important for load balance.
+## What is this about
+
+This example simulates particles taking a random walk from the origin. A
+particle moves one unit at a time and stops when it reaches a radius boundary
+or its step limit.
+
+Every trial can take a different number of steps. That variable work makes this
+a useful example for chunking and load balancing.
 
 ## How it works
 
-1. The host creates a pool and splits the total run count into chunks.
-2. Each worker runs many independent particle trials in a tight inner loop:
-   - Initialize `(x, y)` at the origin
-   - Each step: pick a random direction, update position, check escape condition
-   - Track whether the particle escaped and how many steps it took
-3. Each chunk returns **compact summary stats**: escaped count, total runs, sum of escape steps.
-4. The host aggregates chunk results into final estimates.
+1. The host divides the requested trials into batches.
+2. Each worker runs its batch with a deterministic random seed.
+3. A worker returns only summary values: escaped count, step totals, and squared step totals.
+4. The host combines the summaries into escape probability, mean escape time, and standard deviation.
 
-We measure two things:
-
-- **Escape probability:** what fraction of particles reached the boundary within `maxSteps`?
-- **Mean escape time:** how many steps did it take (for particles that escaped)?
+The task payload is a small tuple, while the simulation loop stays entirely in
+the worker.
 
 ## Run
 
 :::info
 <RuntimeRunTabs
-  bunCommand="bun src/walks_runs.ts --threads 6 --runs 15000000 --batch 5000 --steps 15000 --radius 100"
-  denoCommand="deno run -A src/walks_runs.ts --threads 6 --runs 15000000 --batch 5000 --steps 15000 --radius 100"
-  nodeCommand="npx tsx src/walks_runs.ts --threads 6 --runs 15000000 --batch 5000 --steps 15000 --radius 100"
+  bunCommand="bun src/walks_runs.ts --threads 4 --runs 50000 --batch 2500 --steps 3000 --radius 40"
+  denoCommand="deno run -A src/walks_runs.ts --threads 4 --runs 50000 --batch 2500 --steps 3000 --radius 40"
+  nodeCommand="npx tsx src/walks_runs.ts --threads 4 --runs 50000 --batch 2500 --steps 3000 --radius 40"
 />
 :::
 
 Expected output:
 
+```text
+threads:           4
+runs:              50,000
+batches:           20
+radius:            40
+max steps:         3,000
+escape probability: 0.8896
+mean escape steps:  1,308.8
+stdev steps:       668.3
+elapsed:           2,000 ms
 ```
-threads: 6  runs: 15,000,000  batch: 5,000  steps: 15,000  radius: 100
 
-escape probability: 0.9847
-mean escape steps:  7,312
-elapsed: 3.41s
-```
+The random seed is fixed, so the statistical values are reproducible. Elapsed
+time depends on your runtime, CPU, and worker count.
 
-:::note
-With `--radius 100` and `--steps 15000`, most particles escape. Increase the radius or decrease max steps to see the escape probability drop.
-:::
+## Why this pattern works
+
+- The worker does one thing: run independent random walks.
+- The host owns scheduling and combines compact summaries.
+- No individual path crosses the worker boundary.
+- Smaller batches smooth out differences between short and long walks.
+
+Unlike Monte Carlo pi, this simulation does not do the same amount of work for
+every trial. Particles that reach the boundary early finish cheaply; particles
+that wander longer keep a worker busy.
 
 ## Code
+
 <Tabs>
   <TabItem label="walks_runs.ts">
     <Code code={run} lang="ts" title={"walks_runs.ts"} />
@@ -67,33 +83,29 @@ With `--radius 100` and `--steps 15000`, most particles escape. Increase the rad
   </TabItem>
 </Tabs>
 
-## What makes this different from the pi example
+## The math
 
-The pi example does the same amount of work per sample (two multiplies and a compare). This simulation has **variable work per trial** -- particles that escape early are cheap, particles that hit the step limit are expensive. That variability means chunking matters more: well-sized chunks smooth out the variance so no single worker gets stuck with all the hard trials.
-
-The inner loop is also branch-heavy (escape checks, direction selection), which is closer to real simulation code than a pure arithmetic kernel.
-
-## The science
-
-This is a discrete-time approximation of **Brownian motion** / **diffusion**. The estimates converge by the Law of Large Numbers, and Monte Carlo error shrinks like `1/sqrtN`.
+The escape probability is the fraction of particles that reach the boundary:
 
 $$
-\hat{p} = \frac{\text{escaped}}{\text{total runs}} \qquad \hat{\mu} = \frac{\sum \text{steps}}{\text{escaped}}
+\hat{p} = \frac{\text{escaped particles}}{\text{total particles}}
 $$
 
-Real applications of this pattern: diffusion/Brownian motion, hitting time problems, Monte Carlo transport (particles through materials), agent-based models, game simulation, and uncertainty propagation.
+The mean escape time averages the number of steps for escaped particles. This
+is a discrete approximation of Brownian motion and diffusion, and the same
+pattern applies to transport, agent simulations, and hitting-time problems.
 
-## Practical notes
+## CLI knobs
 
-**Chunk size:** Start with `--batch 5000` to `50000` for heavier loops. Increase if each run is short, decrease if each run is long.
-
-**Keep the inner loop tight:** Avoid allocations per step. Precompute direction tables if possible. Use simple numeric types.
-
-**Validate invariants:** Check that `0 <= escaped <= totalRuns`, totals add up across chunks, and results are stable under fixed seeds.
+- `--runs` — total number of particles.
+- `--batch` — particles per worker task; smaller batches improve load balancing.
+- `--steps` — maximum steps for one particle.
+- `--radius` — distance from the origin that ends a walk.
+- `--threads` — number of workers in the pool.
 
 ## Things to try
 
-1. Increase `--radius` and see how mean escape steps changes.
-2. Compare different `--batch` chunk sizes and measure throughput.
-3. Add variance reporting and compute a 95% confidence interval.
-4. Replace the random walk with a drift term (constant force) and compare escape behavior.
+1. Increase `--radius` to make walks last longer and lower the escape probability.
+2. Lower `--steps` to see more particles hit the step limit.
+3. Compare `--batch 500` with `--batch 20000` and watch the scheduling trade-off.
+4. Change the four-direction step to include a drift term or diagonal moves.
