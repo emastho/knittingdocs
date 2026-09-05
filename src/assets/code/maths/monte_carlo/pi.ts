@@ -1,74 +1,60 @@
 import { createPool, isMain } from "knitting";
 import { piChunk } from "./montecarlo_pi.ts";
 
-function intArg(name: string, fallback: number) {
-  const idx = process.argv.indexOf(`--${name}`);
-  if (idx !== -1 && idx + 1 < process.argv.length) {
-    const v = Number(process.argv[idx + 1]);
-    if (Number.isFinite(v) && v > 0) return Math.floor(v);
-  }
-  return fallback;
+type Options = {
+  threads: number;
+  samples: number;
+  chunk: number;
+};
+
+function positiveIntArg(name: string, fallback: number): number {
+  const index = process.argv.indexOf(`--${name}`);
+  const value = index === -1 ? undefined : Number(process.argv[index + 1]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-// Tunables (pick any numbers you like)
-const TOTAL_SAMPLES = intArg("samples", 50_000_000_000);
-const CHUNK_SAMPLES = intArg("chunk", 10_000_000);
-const THREADS = intArg("threads", 6);
-
-const { call, shutdown } = createPool({
-  threads: THREADS,
-  inliner: {
-    position: "last",
-    batchSize: 8,
-  },
-  balancer: "firstIdle",
-})({ piChunk });
+function readOptions(): Options {
+  return {
+    threads: positiveIntArg("threads", 4),
+    samples: positiveIntArg("samples", 50_000_000),
+    chunk: positiveIntArg("chunk", 1_000_000),
+  };
+}
 
 async function main() {
-  const jobCount = Math.ceil(TOTAL_SAMPLES / CHUNK_SAMPLES);
-  const jobs = new Array<Promise<{ inside: number; samples: number }>>(
-    jobCount,
+  const options = readOptions();
+  const jobCount = Math.ceil(options.samples / options.chunk);
+  const seed = 0x1234_5678;
+
+  using pool = createPool({ threads: options.threads })({ piChunk });
+
+  const started = performance.now();
+  const jobs: Promise<number>[] = [];
+
+  for (let job = 0; job < jobCount; job++) {
+    const samples = Math.min(
+      options.chunk,
+      options.samples - job * options.chunk,
+    );
+    jobs.push(pool.call.piChunk([seed + job, samples]));
+  }
+
+  const inside = (await Promise.all(jobs)).reduce(
+    (total, count) => total + count,
+    0,
   );
+  const elapsed = performance.now() - started;
+  const pi = (4 * inside) / options.samples;
+  const error = Math.abs(Math.PI - pi);
 
-  // Seed base: stable-ish, different each run
-  const seedBase = ((Date.now() | 0) ^ 0x9e3779b9) | 0;
-
-  // Queue one worker task per chunk.
-  for (let i = 0; i < jobCount; i++) {
-    const remaining = TOTAL_SAMPLES - i * CHUNK_SAMPLES;
-    const samples = remaining >= CHUNK_SAMPLES ? CHUNK_SAMPLES : remaining;
-
-    // Spread seeds so chunks don’t reuse the same random stream
-    const seed = (seedBase + (i * 0x6d2b79f5)) | 0;
-
-    jobs[i] = call.piChunk([seed, samples]);
-  }
-
-  const time = performance.now();
-  const results = await Promise.all(jobs);
-  const finished = performance.now();
-
-  let inside = 0;
-  let total = 0;
-  for (const r of results) {
-    inside += r.inside;
-    total += r.samples;
-  }
-
-  const pi = (4 * inside) / total;
-
-  // Quick sanity: expected sampling error scales like ~1/sqrt(N)
-  const approxStdErr = 1 / Math.sqrt(total);
-
-  console.log("Monte Carlo π estimate");
-  console.log("threads      :", THREADS + 1);
-  console.log("total samples:", total.toLocaleString());
-  console.log("chunk size   :", CHUNK_SAMPLES.toLocaleString());
-  console.log("pi           :", pi);
-  console.log("took         :", (finished - time).toFixed(3), " ms");
-  console.log("rough ±err   :", `~${(approxStdErr * 4).toExponential(2)}`);
+  console.log(`threads: ${options.threads}`);
+  console.log(`samples: ${options.samples.toLocaleString()}`);
+  console.log(`chunks:  ${jobCount.toLocaleString()}`);
+  console.log(`pi:      ${pi.toFixed(8)}`);
+  console.log(`error:   ${error.toExponential(2)}`);
+  console.log(`elapsed: ${elapsed.toFixed(0)} ms`);
 }
 
 if (isMain) {
-  main().finally(shutdown);
+  await main();
 }

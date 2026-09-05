@@ -19,8 +19,7 @@ export type PromptPlan = {
   queryWasTrimmed: boolean;
 };
 
-export type PromptPlanFast = Omit<PromptPlan, "prompt">;
-
+/** What a batch of plans adds up to. No prompt strings, so it is cheap to return. */
 export type PromptBudgetSummary = {
   rawTokens: number;
   budgetedTokens: number;
@@ -31,69 +30,41 @@ export type PromptBudgetSummary = {
   turnsDropped: number;
 };
 
-const decoder = new TextDecoder();
 type Encoder = ReturnType<typeof encoding_for_model>;
-const MAX_ENCODER_CACHE = 4;
-const MAX_STATIC_TOKEN_CACHE = 512;
+
+const decoder = new TextDecoder();
 const encoderCache = new Map<string, Encoder>();
 const staticTokenCache = new Map<string, number>();
 
-function normalizeText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function countTokens(enc: Encoder, text: string): number {
-  return enc.encode(text).length;
-}
-
-function touchMapEntry<V>(map: Map<string, V>, key: string, value: V): void {
-  map.delete(key);
-  map.set(key, value);
-}
-
-function evictOldestEncoderIfNeeded(): void {
-  if (encoderCache.size <= MAX_ENCODER_CACHE) return;
-  const oldest = encoderCache.keys().next().value;
-  if (oldest === undefined) return;
-  const enc = encoderCache.get(oldest);
-  if (enc) enc.free();
-  encoderCache.delete(oldest);
-}
-
-function evictOldestStaticTokenIfNeeded(): void {
-  if (staticTokenCache.size <= MAX_STATIC_TOKEN_CACHE) return;
-  const oldest = staticTokenCache.keys().next().value;
-  if (oldest !== undefined) staticTokenCache.delete(oldest);
-}
+// A tiktoken encoder is a WASM instance holding its own BPE table, and it costs
+// tens of megabytes resident. This cache lives per worker, so the real ceiling
+// is MAX_ENCODERS * threads. Keep it small, and free whatever you evict.
+const MAX_ENCODERS = 2;
 
 function getEncoder(model: string): Encoder {
   const cached = encoderCache.get(model);
-  if (cached) {
-    touchMapEntry(encoderCache, model, cached);
-    return cached;
-  }
+  if (cached) return cached;
 
   const enc = encoding_for_model(model as never);
   encoderCache.set(model, enc);
-  evictOldestEncoderIfNeeded();
+
+  if (encoderCache.size > MAX_ENCODERS) {
+    const oldest = encoderCache.keys().next().value!;
+    encoderCache.get(oldest)!.free();
+    encoderCache.delete(oldest);
+  }
+
   return enc;
 }
 
-function getStaticTokens(
-  model: string,
-  systemPrefix: string,
-  enc: Encoder,
-): number {
-  const key = `${model}\x1f${systemPrefix}`;
+/** The system prefix is identical on every request, so tokenize it once. */
+function getStaticTokens(model: string, prefix: string, enc: Encoder): number {
+  const key = `${model}\x1f${prefix}`;
   const cached = staticTokenCache.get(key);
-  if (cached !== undefined) {
-    touchMapEntry(staticTokenCache, key, cached);
-    return cached;
-  }
+  if (cached !== undefined) return cached;
 
-  const value = countTokens(enc, systemPrefix);
+  const value = enc.encode(prefix).length;
   staticTokenCache.set(key, value);
-  evictOldestStaticTokenIfNeeded();
   return value;
 }
 
@@ -101,6 +72,19 @@ export function clearPromptBudgetCaches(): void {
   for (const enc of encoderCache.values()) enc.free();
   encoderCache.clear();
   staticTokenCache.clear();
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function buildPrompt(prefix: string, history: string[], query: string): string {
+  const rows = [prefix.trim(), "", "Conversation context:"];
+  for (let i = 0; i < history.length; i++) {
+    rows.push(`- Turn ${i + 1}: ${history[i]}`);
+  }
+  rows.push("", `User request: ${query}`);
+  return rows.join("\n");
 }
 
 function truncateToTokenBudget(
@@ -112,41 +96,22 @@ function truncateToTokenBudget(
 
   const tokens = enc.encode(text);
   if (tokens.length <= maxTokens) return text;
-  const clipped = tokens.slice(0, maxTokens);
-  return decoder.decode(enc.decode(clipped));
+  return decoder.decode(enc.decode(tokens.slice(0, maxTokens)));
 }
 
-function buildPrompt(
-  systemPrefix: string,
-  history: string[],
-  query: string,
-): string {
-  const rows: string[] = [];
-  rows.push(systemPrefix.trim());
-  rows.push("");
-  rows.push("Conversation context:");
-
-  for (let i = 0; i < history.length; i++) {
-    rows.push(`- Turn ${i + 1}: ${history[i]}`);
-  }
-
-  rows.push("");
-  rows.push(`User request: ${query}`);
-  return rows.join("\n");
-}
-
+/**
+ * Fit a prompt inside `maxInputTokens`: drop the oldest turns first, and only
+ * clip the query if dropping every turn still is not enough.
+ */
 export function preparePromptHost(input: PromptInput): PromptPlan {
-  const model = input.model;
   const maxInputTokens = Math.max(64, input.maxInputTokens);
-  const cleanHistory = input.history.map(normalizeText).filter(Boolean);
-  let history = [...cleanHistory];
+  const history = input.history.map(normalizeText).filter(Boolean);
+  const enc = getEncoder(input.model);
+  const staticTokens = getStaticTokens(input.model, input.systemPrefix, enc);
+
   let query = normalizeText(input.query);
-  const enc = getEncoder(model);
-
-  const staticTokens = getStaticTokens(model, input.systemPrefix, enc);
-
   let prompt = buildPrompt(input.systemPrefix, history, query);
-  const rawInputTokens = countTokens(enc, prompt);
+  const rawInputTokens = enc.encode(prompt).length;
   let inputTokens = rawInputTokens;
   let trimmedTurns = 0;
   let queryWasTrimmed = false;
@@ -155,21 +120,21 @@ export function preparePromptHost(input: PromptInput): PromptPlan {
     history.shift();
     trimmedTurns++;
     prompt = buildPrompt(input.systemPrefix, history, query);
-    inputTokens = countTokens(enc, prompt);
+    inputTokens = enc.encode(prompt).length;
   }
 
+  // No turns left to drop and still over: the query itself is the problem.
   if (inputTokens > maxInputTokens) {
-    const promptWithoutQuery = buildPrompt(input.systemPrefix, history, "");
-    const promptWithoutQueryTokens = countTokens(enc, promptWithoutQuery);
-    const remainingBudget = Math.max(
+    const scaffolding = buildPrompt(input.systemPrefix, history, "");
+    const remaining = Math.max(
       16,
-      maxInputTokens - promptWithoutQueryTokens,
+      maxInputTokens - enc.encode(scaffolding).length,
     );
-    const clipped = truncateToTokenBudget(enc, query, remainingBudget);
+    const clipped = truncateToTokenBudget(enc, query, remaining);
     queryWasTrimmed = clipped.length < query.length;
     query = clipped;
     prompt = buildPrompt(input.systemPrefix, history, query);
-    inputTokens = countTokens(enc, prompt);
+    inputTokens = enc.encode(prompt).length;
   }
 
   return {
@@ -183,37 +148,17 @@ export function preparePromptHost(input: PromptInput): PromptPlan {
   };
 }
 
-export const preparePrompt = task<PromptInput, PromptPlan>({
-  f: (input) => preparePromptHost(input),
-});
-
-export function preparePromptFastHost(input: PromptInput): PromptPlanFast {
-  const plan = preparePromptHost(input);
-  return {
-    rawInputTokens: plan.rawInputTokens,
-    inputTokens: plan.inputTokens,
-    staticTokens: plan.staticTokens,
-    dynamicTokens: plan.dynamicTokens,
-    trimmedTurns: plan.trimmedTurns,
-    queryWasTrimmed: plan.queryWasTrimmed,
-  };
-}
-
-export function preparePromptBatchFastHost(
+/**
+ * Budget a whole batch and return only the counters. Batching amortizes the
+ * per-call dispatch, and dropping the prompt strings keeps the return small.
+ */
+export function summarizeBatchHost(
   inputs: PromptInput[],
 ): PromptBudgetSummary {
-  let totals: PromptBudgetSummary = {
-    rawTokens: 0,
-    budgetedTokens: 0,
-    staticTokens: 0,
-    dynamicTokens: 0,
-    trimmedRuns: 0,
-    queryTrimmedRuns: 0,
-    turnsDropped: 0,
-  };
+  const totals = emptySummary();
 
   for (let i = 0; i < inputs.length; i++) {
-    const plan = preparePromptFastHost(inputs[i]!);
+    const plan = preparePromptHost(inputs[i]!);
     totals.rawTokens += plan.rawInputTokens;
     totals.budgetedTokens += plan.inputTokens;
     totals.staticTokens += plan.staticTokens;
@@ -226,6 +171,38 @@ export function preparePromptBatchFastHost(
   return totals;
 }
 
-export const preparePromptBatchFast = task<PromptInput[], PromptBudgetSummary>({
-  f: (inputs) => preparePromptBatchFastHost(inputs),
+export function emptySummary(): PromptBudgetSummary {
+  return {
+    rawTokens: 0,
+    budgetedTokens: 0,
+    staticTokens: 0,
+    dynamicTokens: 0,
+    trimmedRuns: 0,
+    queryTrimmedRuns: 0,
+    turnsDropped: 0,
+  };
+}
+
+export function mergeSummaries(
+  parts: PromptBudgetSummary[],
+): PromptBudgetSummary {
+  return parts.reduce((a, b) => ({
+    rawTokens: a.rawTokens + b.rawTokens,
+    budgetedTokens: a.budgetedTokens + b.budgetedTokens,
+    staticTokens: a.staticTokens + b.staticTokens,
+    dynamicTokens: a.dynamicTokens + b.dynamicTokens,
+    trimmedRuns: a.trimmedRuns + b.trimmedRuns,
+    queryTrimmedRuns: a.queryTrimmedRuns + b.queryTrimmedRuns,
+    turnsDropped: a.turnsDropped + b.turnsDropped,
+  }), emptySummary());
+}
+
+/** Returns the full plan, prompt string included. */
+export const preparePrompt = task<PromptInput, PromptPlan>({
+  f: preparePromptHost,
+});
+
+/** Returns counters only. This is the one worth benchmarking. */
+export const summarizeBatch = task<PromptInput[], PromptBudgetSummary>({
+  f: summarizeBatchHost,
 });

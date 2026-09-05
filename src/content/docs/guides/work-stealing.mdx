@@ -72,9 +72,12 @@ completion order, not submission order.
 ### Automatic selection
 
 Native stealing is selected automatically when the pool has multiple workers
-and its configuration is compatible with the shared-submit topology. A
-one-worker pool keeps its ordinary private lane because there is nothing to
-steal from.
+and its configuration is compatible with the shared-submit topology. It also
+supports process-worker pools, subject to the same shared-memory and claimant
+limits. A one-worker pool keeps its ordinary private lane because there is
+nothing to steal from. Compiled workers, inliners, explicitly private
+dispatcher/balancer configurations, and pools above the 31-claimant protocol
+limit keep their fallback topology.
 
 An explicit balancer, private-lane dispatcher, inliner, compiled worker, or an
 unsupported worker count can change that compatibility decision. Use
@@ -97,6 +100,32 @@ amortise arbitration and suit many cheap, similarly sized calls. Narrower
 regions expose more independent work and suit expensive or uneven calls. This
 is a throughput/load-balancing knob, not a correctness knob.
 
+### `stealClaim`
+
+`host.stealClaim` chooses how workers claim a region:
+
+| Value | Claim discipline |
+| --- | --- |
+| `"dekker"` | The default. Each consumer has an intent slot and claims with a per-consumer handshake. |
+| `"cas-mask"` | One shared compare-and-swap mask coordinates region claims. |
+
+```ts
+using pool = createPool({
+  threads: 4,
+  host: {
+    steal: true,
+    stealClaim: "cas-mask",
+    stealRegionLanes: 1,
+  },
+})({ transform });
+```
+
+The environment variable `KNITTING_STEAL_CLAIM` accepts the same two values.
+An explicit `host.stealClaim` wins over the environment. The discipline also
+sets the maximum useful `stealRegionLanes`: Dekker needs at least one spare
+region per live consumer, so it can constrain an explicit region width more
+tightly than `"cas-mask"`.
+
 ## The host doorbell
 
 The doorbell is a host completion mechanism. It is separate from the worker
@@ -115,24 +144,24 @@ checks: nothing is scheduled until a worker has something to hand back. The
 less loaded the pool, the larger the share of checks that were empty, which is
 why the doorbell matters most on a pool that is not saturated.
 
-The doorbell is enabled by default only when all of these are true:
-
-- the runtime is Node.js or Bun;
-- `Atomics.waitAsync` is available;
-- `host.doorbell` is not `false`; and
-- workers are not in another process.
+The doorbell is enabled by default when `host.doorbell` is not `false` and the
+runtime has a completion wake path. Unsupported or denied configurations fall
+back to polling.
 
 | Runtime or topology | Completion behavior |
 | --- | --- |
-| Node.js or Bun thread workers | Doorbell when `Atomics.waitAsync` is available |
-| Deno | Polling |
-| Process workers | Polling; another process cannot ring the host isolate's waiter |
+| Node.js or Bun thread workers | `Atomics.waitAsync`; Node can optionally use native `uv_async_t` |
+| Deno thread workers | Thread-safe FFI callback when FFI permission is available; otherwise polling |
+| Process workers | Process-local completion transport; otherwise polling |
 | Compiled workers | Host options are unsupported by the compiled-worker path |
 | Browser web workers | Polling; the browser doorbell is intentionally disabled |
 
-Setting `host.doorbell: true` cannot override a runtime limitation. Set it to
-`false` for an apples-to-apples polling benchmark or when the host is competing
-with workers for every CPU core.
+Set `host.doorbell: false` to force polling for an apples-to-apples benchmark or
+when the host is competing with workers for every CPU core. On Node thread
+workers, `host.nativeDoorbell: true` additionally requests the optional native
+`uv_async_t` bridge from the `knitting_doorbell` addon. It is off by default,
+requires `host.doorbell`, does not apply to process workers, and silently falls
+back when the prebuild or permission is unavailable.
 
 ## Tuning and benchmarking
 

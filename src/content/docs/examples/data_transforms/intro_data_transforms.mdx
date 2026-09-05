@@ -26,6 +26,10 @@ discussion, start with [Hono server routes](/examples/data_transforms/rendering_
 
 **If you're rendering HTML** -- [React SSR](/examples/data_transforms/rendering_output/react_ssr) for basic server rendering, [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) to also test Brotli placement, or [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) for a simpler pipeline without React.
 
+**If you're generating documents** -- [PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) renders PDFs on workers, and shows how to return binary from a task without it silently arriving as a numeric-keyed object.
+
+**If you're ingesting files** -- [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) parses real arXiv sources, and is the one page here about *where to cut* a multi-stage job rather than whether to offload it at all.
+
 **If you want the full picture** -- [Hono server routes](/examples/data_transforms/rendering_output/hono_server) is a real HTTP server that combines SSR, JWT, and health checks. It's the closest to a production setup.
 
 <CardGrid>
@@ -34,13 +38,15 @@ discussion, start with [Hono server routes](/examples/data_transforms/rendering_
     [Schema validation](/examples/data_transforms/validation/schema_validate),
     [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation),
     [Salt hashing](/examples/data_transforms/validation/salt_hashing),
-    [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting).
+    [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting),
+    [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers).
   </Card>
   <Card title="Rendering & output">
     Take validated input and produce final output formats.
     [Hono server routes](/examples/data_transforms/rendering_output/hono_server),
     [React SSR](/examples/data_transforms/rendering_output/react_ssr),
     [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress),
+    [PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices),
     [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html).
   </Card>
 </CardGrid>
@@ -48,5 +54,5 @@ discussion, start with [Hono server routes](/examples/data_transforms/rendering_
 ## What all these examples have in common
 
 - Each includes a host-only baseline so performance comparisons are apples-to-apples.
-- Worker tasks return compact results (counts, compressed buffers, status flags) -- not large raw payloads.
+- Worker tasks usually return compact results (counts, compressed buffers, status flags) rather than large raw payloads -- though [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) measures a case where returning 626 KB of text costs nothing, because the per-item work dwarfs it.
 - The same code runs in both host and worker mode, so you can compare behavior without changing logic.

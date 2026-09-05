@@ -1,9 +1,253 @@
 ---
 title: Shared memory
-description: ProcessSharedBuffer — the lower-level shared-memory channel for passing bytes between workers and processes without copying.
+description: Share byte regions with thread and process workers, choose efficient HTTP body representations, and use ProcessSharedBuffer for cross-process memory.
 sidebar:
   order: 7
 ---
+
+Knitting's shared-memory subpath has two layers:
+
+- `KnittingSharedBuffer` is a pooled, disposable region allocator for byte
+  payloads, especially thread-worker request bodies.
+- `ProcessSharedBuffer` is the lower-level channel for memory that must be
+  mapped by separate processes.
+
+Both avoid copying the bytes into every call frame, but their ownership rules
+are different. A pooled region has one owner and one release obligation; a
+process-shared buffer is an explicitly mapped resource that each process must
+close.
+
+## Pooled regions
+
+Create an allocator once and reuse it for the small bodies or frames that pass
+through a pool. The default arena is 2 MiB; `arenaByteLength` is both the arena
+size and the largest pooled region.
+
+```ts
+import { createKnittingAllocator } from "knitting/shared-memory";
+
+const allocator = createKnittingAllocator({
+  arenaByteLength: 8 * 1024 * 1024,
+});
+
+const region = allocator.alloc(64 * 1024);
+try {
+  region.u8().set(input);
+  // The wire form is a descriptor, never the region handle itself.
+  await pool.call.process(allocator.describe(region));
+} finally {
+  region.release();
+}
+```
+
+A region travels as a descriptor. `describe()` and `moveTo()` produce one; the
+worker turns it back into a region with an attached allocator, as in [Attach a
+worker once](#attach-a-worker-once). Passing a `KnittingSharedBuffer` straight
+to `pool.call.*` is rejected as an unsupported payload type — the handle owns an
+identity in the producer's arena, which a serialized copy cannot carry.
+
+`alloc()` returns a `KnittingSharedBuffer`, not a raw `SharedArrayBuffer`. Use
+`u8()` for bytes or `view(TypedArray)` for a typed view. A region also exposes
+`byteLength`, `byteOffset`, `released`, `moved`, `copy()`, and `[Symbol.dispose]()`.
+The view is non-owning, so release the region only after the consumer is done;
+copy the bytes first if they must survive release.
+
+The allocator also provides:
+
+- `allocUpTo(maxByteLength)` for a reservation that can be shrunk with
+  `region.commit(actualByteLength)` after a stream finishes.
+- `describe(region)` for inspection or a borrowed consumer handle. It does not
+  transfer ownership.
+- `moveTo(region)` for the one-way ownership transfer used when a consumer will
+  release the region. Do not release the original after moving it.
+- `reconcile()`, `stats()`, `resetCounters()`, and `transport()` for allocator
+  maintenance, measurement, and worker attachment.
+
+The subpath also exports `detectRegion(value)` on its own, for inspecting a
+region or a view that crossed a transport. Like `describe()`, it does not
+transfer ownership.
+
+Regions use lazy identities and have a garbage-collection backstop for missed
+releases. Identity exhaustion never evicts a live region or blocks the
+allocator: it falls back to a standalone `SharedArrayBuffer`. A standalone
+overflow region is still owned and must be released.
+
+### Attach a worker once
+
+The host sends `allocator.transport()` through `worker.bootstrap`. The attached
+side can `adopt()` descriptors, but it never allocates; this keeps ownership
+with the producer and makes the release path explicit.
+
+```ts
+// bootstrap.ts
+import {
+  attachKnittingAllocator,
+  type KnittingBufferDescriptor,
+  type KnittingTransport,
+} from "knitting/shared-memory";
+
+let attached: ReturnType<typeof attachKnittingAllocator> | undefined;
+
+export const setup = (transport: KnittingTransport) => {
+  attached = attachKnittingAllocator(transport);
+};
+
+export const openRegion = (descriptor: KnittingBufferDescriptor) => {
+  if (attached === undefined) throw new Error("allocator not attached");
+  return attached.adopt(descriptor, { borrow: true }).u8();
+};
+```
+
+Pass the transport when creating the pool:
+
+```ts
+const pool = createPool({
+  threads: 4,
+  worker: {
+    bootstrap: {
+      href: "./bootstrap.ts",
+      name: "setup",
+      data: allocator.transport(),
+    },
+  },
+})({ processRegion });
+```
+
+The consumer receives bytes, not a body it should recycle. When a descriptor is
+sent with `moveTo()`, the consumer owns the release. When it is sent with
+`describe()`, the producer keeps ownership and the consumer must adopt it with
+`{ borrow: true }`, as in the example. For a moved descriptor, omit `borrow` and
+release the adopted region on the consumer side. Never pair two independent
+releasers with one descriptor.
+
+## HTTP body helpers
+
+The same subpath exports helpers for putting a `Request` body into the right
+representation:
+
+- `readBodyIntoBytes()` fills storage supplied by the caller.
+- `readBodyIntoRegion()` streams or copies into a pooled region.
+- `readBodyOrRefer()` returns a pooled region for smaller bodies and a moved
+  `BufferReference` for larger thread-worker bodies.
+- `allocator.allocOrRefer()` wraps that choice in one disposable `KnittingBody`
+  with a common ownership rule.
+
+The crossover constants are exported so applications can reference them rather
+than duplicate magic numbers:
+
+```ts
+import {
+  HTTP_BODY_REFERENCE_THRESHOLD_BYTES,
+  HTTP_BODY_STREAM_THRESHOLD_BYTES,
+} from "knitting/shared-memory";
+
+// 192 KiB: known-length bodies may stream directly into the arena.
+// 2 MiB: larger bodies use BufferReference in readBodyOrRefer().
+console.log(
+  HTTP_BODY_STREAM_THRESHOLD_BYTES,
+  HTTP_BODY_REFERENCE_THRESHOLD_BYTES,
+);
+```
+
+The defaults are starting points, not universal constants. A known-length body
+at or above 192 KiB can stream directly into the arena. A body at or above 2 MiB
+uses `BufferReference` in the choose-one helper because it is likely large
+enough for the materialize-then-move path to win. `BufferReference` is for
+same-process thread workers; use `ProcessSharedBuffer` for process workers.
+
+Every body-reading helper enforces `maxByteLength` against both a declared
+`Content-Length` and a chunked body. This rejects oversized input before an
+unbounded allocation can grow:
+
+- `readBodyIntoRegion()` defaults the cap to `allocator.arenaByteLength`.
+- `readBodyIntoBytes()` requires the cap because its allocation function belongs
+  to the caller.
+- `readBodyOrRefer()` and `allocator.allocOrRefer()` require the cap because
+  they intentionally handle bodies too large for the arena.
+
+```ts
+import { createKnittingAllocator } from "knitting/shared-memory";
+
+const allocator = createKnittingAllocator({
+  arenaByteLength: 8 * 1024 * 1024,
+});
+
+using body = await allocator.allocOrRefer(request, {
+  maxByteLength: 8 * 1024 * 1024,
+  referenceAboveBytes: 2 * 1024 * 1024,
+});
+
+await pool.call.processBody(body.wire);
+```
+
+`body.wire` is a descriptor, a `BufferReference`, or a standalone
+`SharedArrayBuffer`; the worker can normalize all three with `createBodyReader()`:
+
+```ts
+// bootstrap.ts
+import {
+  createBodyReader,
+  type KnittingBodyWire,
+  type KnittingTransport,
+} from "knitting/shared-memory";
+
+let readBody: ((wire: KnittingBodyWire) => Uint8Array) | undefined;
+
+export const setup = (transport: KnittingTransport) => {
+  readBody = createBodyReader(transport);
+};
+
+export const processBody = (wire: KnittingBodyWire) => {
+  if (readBody === undefined) throw new Error("body reader not attached");
+  return digest(readBody(wire));
+};
+```
+
+The host owns a body until its call settles. Sending `body.wire` holds it for
+the call, so an early `using`-scope exit does not recycle bytes while a worker
+is still reading them. The worker receives a `Uint8Array`; copy it inside the
+task if it must survive the call.
+
+## Shared-byte arguments and returns
+
+Advanced workloads can opt into borrowed arena views. These options are disabled
+by default and fall back to private buffers when the required shared path is not
+available.
+
+`unsafe: { SharedArgs: true }` enables `pool.sharedArgBytes(byteLength)`. The
+returned `Uint8Array` is a borrowed submit-arena view when the pool has a shared
+submit queue; otherwise it is an ordinary private buffer:
+
+```ts
+using pool = createPool({
+  threads: 4,
+  unsafe: { SharedArgs: true },
+})({ render });
+
+const frame = pool.sharedArgBytes(byteLength);
+frame.set(source);
+await pool.call.render(frame);
+```
+
+The task must consume borrowed argument bytes before its first suspension point,
+and must not retain them across an `await`.
+
+The host side has a limit too, and it is the sharper one. A borrowed argument
+lives in the shared submit arena, which is recycled: allocating a new one while
+earlier calls are still in flight can overwrite bytes a worker has not read yet,
+and the result is **silently wrong data rather than an error**. On a
+multi-worker pool this starts well below ten concurrent calls, so keep the
+number in flight small and bounded -- allocate, fill, call, await -- rather than
+building a large array of promises. If you cannot bound it, pass an ordinary
+`Uint8Array` and let the normal payload path copy it.
+
+`unsafe: { SharedBytes: true }` enables `sharedBytes()` for borrowed worker
+returns. See [Buffer reference — explicit borrowed returns](/guides/buffer-reference/#explicit-borrowed-returns)
+for the task example and lifetime rule. Copy a return that must outlive the
+next batch of calls. Compiled workers reject `unsafe` options rather than
+falling back.
+
+## Process-shared buffers
 
 `ProcessSharedBuffer` is the building block under process workers: a block of
 shared memory two processes can read and write **without copying** the payload on

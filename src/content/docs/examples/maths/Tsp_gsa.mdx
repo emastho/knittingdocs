@@ -1,11 +1,10 @@
 ---
 title: TSP (GSA)
-description: "Parallel heuristic restarts for a gravity-inspired TSP solver."
+description: "Improve a traveling-salesman route with parallel heuristic restarts."
 hero:
-  title: 'TSP via Gravity Search (GSA) + 2-opt'
+  title: 'Parallel TSP heuristic'
 sidebar:
   order: 4
-
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -16,44 +15,67 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/gravity/run_tsp.ts");
 export const tsp_gsa = getCode("maths/gravity/tsp_gsa.ts");
 
-The **Traveling Salesman Problem**: given N cities, find the shortest tour that visits each one exactly once and returns to the start. This is NP-hard, so we use heuristics -- specifically, a gravity-inspired population search (GSA) followed by 2-opt local refinement, run as many parallel restarts through Knitting. More restarts = better chance of finding a good solution.
+## What is this about
 
-This is the most computationally intensive example in the set, and it shows what Knitting looks like on a real optimization workload.
+The Traveling Salesman Problem asks for the shortest route that visits every
+city once and returns to the start. Trying every possible route becomes
+impractical quickly, so this example uses a heuristic instead of an exact
+solver.
+
+Each worker runs an independent gravity-inspired search, refines its best route
+with 2-opt, and sends the result back to the host. The host keeps the best
+restart.
+
+The result is a good route, not a proof of the optimum. More restarts improve
+the odds of finding a better route.
 
 ## How it works
 
-1. The host generates (or seeds) a set of cities and a distance matrix.
-2. The host launches many **independent solver runs** ("restarts") through the worker pool.
-3. Each worker runs a gravity-inspired search to produce a candidate tour, then applies 2-opt to sharpen it.
-4. Each worker returns `{ bestLen, bestTour }`.
-5. The host picks the global best, validates the tour, and recomputes the length for correctness.
+1. The host creates one deterministic map of cities.
+2. It starts independent solver restarts with different seeds.
+3. Each worker turns continuous GSA keys into a city permutation, then applies 2-opt.
+4. The host selects the shortest returned tour.
+5. The host validates the permutation and recomputes its length.
 
-The key insight: a single heuristic run can get stuck in a local minimum. Running many independent trials in parallel increases the chance that at least one finds a better region of the search space. This is **embarrassingly parallel** -- restarts are independent, results are small, and the host just picks the best.
+This is an embarrassingly parallel pattern: restarts do not share state, and
+the result of each task is small.
 
 ## Run
 
 :::info
 <RuntimeRunTabs
-  bunCommand="bun src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
-  denoCommand="deno run -A src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
-  nodeCommand="npx tsx src/run_tsp.ts --threads 7 --restarts 64 --cities 64 --pop 10 --iters 10 --worldSeed 123456"
+  bunCommand="bun src/run_tsp.ts --threads 4 --restarts 16 --cities 32 --population 8 --iterations 40 --worldSeed 123456"
+  denoCommand="deno run -A src/run_tsp.ts --threads 4 --restarts 16 --cities 32 --population 8 --iterations 40 --worldSeed 123456"
+  nodeCommand="npx tsx src/run_tsp.ts --threads 4 --restarts 16 --cities 32 --population 8 --iterations 40 --worldSeed 123456"
 />
 :::
 
 Expected output:
 
+```text
+threads:     4
+cities:      32
+restarts:    16
+population:  8
+iterations:  40
+best length: 4.718
+tour valid:  yes
+recomputed:  4.718
+elapsed:     runtime-dependent
 ```
-cities: 64  restarts: 64  threads: 7  pop: 10  iters: 10
-dispatching 64 restarts...
 
-best tour length: 847.32
-tour valid: OK (64 cities, no duplicates, all present)
-recomputed length: 847.32 OK
-random baseline: 2,341.07 (solver is 2.76x better than random)
-elapsed: 2.14s
-```
+The seed makes the city map and restart results reproducible. Elapsed time
+depends on your runtime, CPU, and worker count.
+
+## Why this pattern works
+
+- A heuristic can get stuck in a local minimum.
+- Independent seeds explore different parts of the search space.
+- Restarts are easy to distribute because workers do not coordinate.
+- The host validates the best result instead of trusting a worker blindly.
 
 ## Code
+
 <Tabs>
   <TabItem label="run_tsp.ts">
     <Code code={run} lang="ts" title={"run_tsp.ts"} />
@@ -63,39 +85,28 @@ elapsed: 2.14s
   </TabItem>
 </Tabs>
 
-## How the algorithm works
+## The algorithm
 
-**Representation:** TSP needs a permutation of cities. Each agent stores a real-valued vector -- sorting the keys produces the permutation. This lets "continuous" gravity-like motion work on a discrete problem.
+GSA stores a real-valued key for each city. Sorting the keys produces a tour.
+Better tours receive more mass, and the agents move toward one another using a
+gravity-inspired update. After the global search, 2-opt repeatedly reverses a
+route segment when that makes the tour shorter.
 
-**Global search (GSA):** Each agent has a mass proportional to its tour quality. Better tours = higher mass. Agents attract each other like gravity, gradually pulling the population toward better solutions.
-
-**Local refinement (2-opt):** After global search, pick two edges, reverse a segment if it shortens the tour, repeat until no improvement. Fast and usually provides large gains -- often the difference between "random" and "competitive."
-
-## Correctness checks
-
-This example doesn't just trust the output. It validates:
-
-1. **Tour validity** -- length is N, all integers, no duplicates, all cities present.
-2. **Length recomputation** -- recomputes on the host using the same distance matrix, catching bugs like delta-update drift or corrupted permutations.
-3. **Random baseline** -- compares against a random tour to confirm the solver is actually finding structure, not returning noise.
+The continuous keys are only a convenient search representation; the returned
+value is an ordinary permutation of city indexes.
 
 ## CLI knobs
 
-- `--cities` -- increases difficulty sharply (N! possible tours)
-- `--restarts` -- more restarts = better chance of finding a good tour (cheap parallel wins)
-- `--iters` -- more iterations per run = deeper exploration per restart
-- `--pop` -- population size per run = more exploration (but more compute)
-- `--worldSeed` -- fix the city layout for reproducible comparisons
-
-Start small: `cities=32`, `restarts=threads*4`, `iters=200`. Increase quality via restarts first -- that's the cheapest way to improve results.
-
-## Real-world analogs
-
-TSP shows up in delivery routing, manufacturing toolpath optimization, PCB drilling, robotics path planning, and scheduling problems. The parallel-restart pattern works for any metaheuristic where independent runs are cheap and you just need the best result.
+- `--cities` — number of cities; route difficulty grows rapidly.
+- `--restarts` — independent solver runs; usually the easiest quality knob.
+- `--population` — agents per restart; more exploration costs more work.
+- `--iterations` — GSA updates per restart; deeper search costs more work.
+- `--threads` — worker count.
+- `--worldSeed` — fixed city layout for reproducible comparisons.
 
 ## Things to try
 
-1. Compare `--restarts` vs `--iters`: which improves quality faster per second of compute?
-2. Increase `--cities` to 128 and watch how the search space explodes.
-3. Lower `--pop` to 2-3 and see how much worse it gets (and how much faster).
-4. Change the distance metric to Manhattan distance and compare behavior.
+1. Increase `--restarts` and compare quality per second.
+2. Increase `--cities 64` and watch the problem become harder.
+3. Compare four workers with one worker on the same seeded workload.
+4. Change the city distance metric or replace 2-opt with another local search.

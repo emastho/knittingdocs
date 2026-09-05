@@ -1,87 +1,115 @@
 import { task } from "knitting";
 
-/**
- * Payload-safe:
- * - args: strings + numbers only
- * - return: numbers + strings only
- * This avoids any accidental BigInt/number mixing at the transport boundary.
- */
+type PrimeJob = readonly [
+  start: string,
+  count: number,
+  step: number,
+  rounds: number,
+];
 
-// args: [startOddStr, count, stepNum, offsetNum, rounds]
+export type ScanResult = {
+  prime: string | null;
+  tested: number;
+  aborted: boolean;
+};
+
 export const scanForProbablePrime = task<
-  [string, number, number, number, number],
-  // ret: [found(0/1), primeStrOrEmpty, tested]
-  [number, string, number]
+  PrimeJob,
+  ScanResult,
+  { readonly hasAborted: true }
 >({
-  f: ([startOddStr, count, stepNum, offsetNum, rounds]) => {
-    // Convert once, keep everything BigInt inside.
-    let x = BigInt(startOddStr) + BigInt(offsetNum);
-    if ((x & 1n) === 0n) x += 1n;
-
-    const step = BigInt(stepNum);
-    const rds = rounds | 0;
+  abortSignal: { hasAborted: true },
+  f: ([start, count, step, rounds], signal) => {
+    let candidate = BigInt(start);
+    const increment = BigInt(step);
 
     for (let i = 0; i < count; i++) {
-      if (isProbablePrime(x, rds)) return [1, x.toString(), i + 1];
-      x += step;
+      if (signal.hasAborted()) {
+        return { prime: null, tested: i, aborted: true };
+      }
+
+      if (isProbablePrime(candidate, rounds)) {
+        return { prime: candidate.toString(), tested: i + 1, aborted: false };
+      }
+
+      candidate += increment;
     }
-    return [0, "", count];
+
+    return { prime: null, tested: count, aborted: false };
   },
 });
 
-function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
-  let r = 1n;
-  let b = base % mod;
-  let e = exp; // must be bigint
+function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
+  let result = 1n;
+  let value = base % modulus;
+  let power = exponent;
 
-  while (e > 0n) {
-    if ((e & 1n) === 1n) r = (r * b) % mod;
-    e >>= 1n;
-    if (e) b = (b * b) % mod;
+  while (power > 0n) {
+    if ((power & 1n) === 1n) result = (result * value) % modulus;
+    value = (value * value) % modulus;
+    power >>= 1n;
   }
-  return r;
+
+  return result;
 }
 
-const small = [3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
-const bases = [2n, 325n, 9375n, 28178n, 450775n, 9780504n, 1795265022n];
+const smallPrimes = [
+  3n,
+  5n,
+  7n,
+  11n,
+  13n,
+  17n,
+  19n,
+  23n,
+  29n,
+  31n,
+  37n,
+];
 
-function isProbablePrime(n: bigint, rounds: number): boolean {
-  if (n < 2n) return false;
-  if (n === 2n || n === 3n) return true;
-  if ((n & 1n) === 0n) return false;
+const bases = [
+  2n,
+  325n,
+  9_375n,
+  28_178n,
+  450_775n,
+  9_780_504n,
+  1_795_265_022n,
+];
 
-  // quick small-prime filter
-  for (const p of small) {
-    if (n === p) return true;
-    if (n % p === 0n) return false;
+function isProbablePrime(candidate: bigint, rounds: number): boolean {
+  if (candidate < 2n) return false;
+  if (candidate === 2n || candidate === 3n) return true;
+  if ((candidate & 1n) === 0n) return false;
+
+  for (const prime of smallPrimes) {
+    if (candidate === prime) return true;
+    if (candidate % prime === 0n) return false;
   }
 
-  // n-1 = d * 2^s
-  let d = n - 1n;
-  let s = 0;
-  while ((d & 1n) === 0n) {
-    d >>= 1n;
-    s++;
+  let oddPart = candidate - 1n;
+  let powersOfTwo = 0;
+  while ((oddPart & 1n) === 0n) {
+    oddPart >>= 1n;
+    powersOfTwo++;
   }
 
-  // good practical bases (still "probable prime" for 65-bit+)
+  for (let round = 0; round < rounds; round++) {
+    const base = (bases[round % bases.length] % (candidate - 3n)) + 2n;
+    let value = modPow(base, oddPart, candidate);
 
-  const rds = rounds | 0;
-  for (let i = 0; i < rds; i++) {
-    const a = (bases[i % bases.length] % (n - 3n)) + 2n; // [2, n-2]
-    let x = modPow(a, d, n);
+    if (value === 1n || value === candidate - 1n) continue;
 
-    if (x === 1n || x === n - 1n) continue;
-
-    let composite = true;
-    for (let r = 1; r < s; r++) {
-      x = (x * x) % n;
-      if (x === n - 1n) {
-        composite = false;
+    let passed = false;
+    for (let power = 1; power < powersOfTwo; power++) {
+      value = (value * value) % candidate;
+      if (value === candidate - 1n) {
+        passed = true;
         break;
       }
     }
-    if (composite) return false;
+
+    if (!passed) return false;
   }
 
   return true;

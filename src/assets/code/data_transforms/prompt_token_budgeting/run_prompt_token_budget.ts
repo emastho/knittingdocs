@@ -1,180 +1,62 @@
 import { createPool, isMain } from "knitting";
-import {
-  preparePrompt,
-  preparePromptHost,
-  type PromptInput,
-  type PromptPlan,
-} from "./token_budget.ts";
+import { buildPromptInputs } from "./prompt_fixtures.ts";
+import { preparePrompt } from "./token_budget.ts";
 
-function intArg(name: string, fallback: number): number {
-  const i = process.argv.indexOf(`--${name}`);
-  if (i !== -1 && i + 1 < process.argv.length) {
-    const value = Number(process.argv[i + 1]);
-    if (Number.isFinite(value)) return Math.floor(value);
-  }
-  return fallback;
-}
-
-function strArg(name: string, fallback: string): string {
-  const i = process.argv.indexOf(`--${name}`);
-  if (i !== -1 && i + 1 < process.argv.length) {
-    return String(process.argv[i + 1]);
-  }
-  return fallback;
-}
-
-const THREADS = Math.max(1, intArg("threads", 2));
-const REQUESTS = Math.max(1, intArg("requests", 20_000));
-const MAX_INPUT_TOKENS = Math.max(64, intArg("maxInputTokens", 900));
-const MODE = strArg("mode", "knitting");
-const MODEL = strArg("model", "gpt-4o-mini");
-
-const SYSTEM_PREFIX = [
-  "You are a docs assistant.",
-  "Prefer concrete and short answers.",
-  "If data is missing, say it directly.",
-  "Do not invent unsupported behavior.",
-].join("\n");
-
-const TOPICS = [
-  "token budgeting",
-  "prompt caching",
-  "parallel workers",
-  "schema validation",
-  "rendering pipelines",
-  "markdown output",
-  "compression tradeoffs",
-  "latency under load",
-];
-
-function pick<T>(arr: T[], i: number): T {
-  return arr[i % arr.length]!;
-}
-
-function makeHistory(i: number): string[] {
-  const turns = 3 + (i % 10);
-  const history = new Array<string>(turns);
-
-  for (let t = 0; t < turns; t++) {
-    const topic = pick(TOPICS, i + t);
-    history[t] =
-      `Need guidance on ${topic}. Include practical steps and one small code example.`;
-  }
-
-  return history;
-}
-
-function makeInput(i: number): PromptInput {
-  const topicA = pick(TOPICS, i);
-  const topicB = pick(TOPICS, i + 3);
-  const query = [
-    `Please compare ${topicA} with ${topicB}.`,
-    "I care about cost per request and response quality.",
-    "Give a short recommendation and a migration path.",
-  ].join(" ");
-
-  return {
-    model: MODEL,
-    systemPrefix: SYSTEM_PREFIX,
-    history: makeHistory(i),
-    query,
-    maxInputTokens: MAX_INPUT_TOKENS,
-  };
-}
-
-type Totals = {
-  rawTokens: number;
-  budgetedTokens: number;
-  staticTokens: number;
-  dynamicTokens: number;
-  trimmedRuns: number;
-  queryTrimmedRuns: number;
-  turnsDropped: number;
-};
-
-function summarize(plans: PromptPlan[]): Totals {
-  let totals: Totals = {
-    rawTokens: 0,
-    budgetedTokens: 0,
-    staticTokens: 0,
-    dynamicTokens: 0,
-    trimmedRuns: 0,
-    queryTrimmedRuns: 0,
-    turnsDropped: 0,
-  };
-
-  for (const plan of plans) {
-    totals.rawTokens += plan.rawInputTokens;
-    totals.budgetedTokens += plan.inputTokens;
-    totals.staticTokens += plan.staticTokens;
-    totals.dynamicTokens += plan.dynamicTokens;
-    totals.turnsDropped += plan.trimmedTurns;
-    if (plan.trimmedTurns > 0) totals.trimmedRuns++;
-    if (plan.queryWasTrimmed) totals.queryTrimmedRuns++;
-  }
-
-  return totals;
-}
-
-function runHost(inputs: PromptInput[]): Totals {
-  const plans = inputs.map((input) => preparePromptHost(input));
-  return summarize(plans);
-}
-
-async function runWorkers(inputs: PromptInput[]): Promise<Totals> {
-  const pool = createPool({ threads: THREADS })({ preparePrompt });
-  try {
-    const jobs: Promise<PromptPlan>[] = [];
-    for (let i = 0; i < inputs.length; i++) {
-      jobs.push(pool.call.preparePrompt(inputs[i]!));
-    }
-
-    const plans = await Promise.all(jobs);
-    return summarize(plans);
-  } finally {
-    pool.shutdown();
-  }
-}
-
-function percent(saved: number, base: number): string {
-  if (base <= 0) return "0.0%";
-  return `${((saved / base) * 100).toFixed(1)}%`;
-}
+// A budget only teaches you anything when it actually bites. These
+// conversations run roughly 200-1,450 tokens, so 400 trims about half of them.
+const REQUESTS = 2_000;
+const MAX_INPUT_TOKENS = 400;
+const THREADS = 3;
 
 async function main() {
-  const inputs = new Array<PromptInput>(REQUESTS);
-  for (let i = 0; i < REQUESTS; i++) inputs[i] = makeInput(i);
+  const inputs = buildPromptInputs(REQUESTS, MAX_INPUT_TOKENS);
+  using pool = createPool({ threads: THREADS })({ preparePrompt });
 
   const started = performance.now();
-  const totals = MODE === "host" ? runHost(inputs) : await runWorkers(inputs);
-  const finished = performance.now();
+  const plans = await Promise.all(inputs.map(pool.call.preparePrompt));
+  const elapsedMs = performance.now() - started;
 
-  const tookMs = finished - started;
-  const secs = Math.max(1e-9, tookMs / 1000);
-  const reqPerSec = REQUESTS / secs;
-  const savedTokens = Math.max(0, totals.rawTokens - totals.budgetedTokens);
-  const cacheableTokensEstimate = totals.staticTokens;
+  let rawTokens = 0;
+  let budgetedTokens = 0;
+  let trimmedRuns = 0;
+  let queryTrimmedRuns = 0;
+  let turnsDropped = 0;
+
+  for (const plan of plans) {
+    rawTokens += plan.rawInputTokens;
+    budgetedTokens += plan.inputTokens;
+    turnsDropped += plan.trimmedTurns;
+    if (plan.trimmedTurns > 0) trimmedRuns++;
+    if (plan.queryWasTrimmed) queryTrimmedRuns++;
+  }
+
+  const saved = rawTokens - budgetedTokens;
+  const pct = (part: number) => `${((part / rawTokens) * 100).toFixed(1)}%`;
 
   console.log("Prompt token budgeting");
-  console.log("mode              :", MODE);
-  console.log("model             :", MODEL);
-  console.log("threads           :", MODE === "host" ? 0 : THREADS);
-  console.log("requests          :", REQUESTS.toLocaleString());
-  console.log("maxInputTokens    :", MAX_INPUT_TOKENS.toLocaleString());
-  console.log("raw tokens        :", totals.rawTokens.toLocaleString());
-  console.log("budgeted tokens   :", totals.budgetedTokens.toLocaleString());
+  console.log("  requests         :", REQUESTS.toLocaleString());
+  console.log("  budget           :", MAX_INPUT_TOKENS, "tokens per prompt");
+  console.log("  raw tokens       :", rawTokens.toLocaleString());
+  console.log("  budgeted tokens  :", budgetedTokens.toLocaleString());
   console.log(
-    "saved tokens      :",
-    `${savedTokens.toLocaleString()} (${
-      percent(savedTokens, totals.rawTokens)
-    })`,
+    "  saved            :",
+    `${saved.toLocaleString()} (${pct(saved)})`,
   );
-  console.log("trimmed runs      :", totals.trimmedRuns.toLocaleString());
-  console.log("query trimmed runs:", totals.queryTrimmedRuns.toLocaleString());
-  console.log("turns dropped     :", totals.turnsDropped.toLocaleString());
-  console.log("cacheable estimate:", cacheableTokensEstimate.toLocaleString());
-  console.log("took              :", tookMs.toFixed(2), "ms");
-  console.log("throughput        :", reqPerSec.toFixed(0), "req/s");
+  console.log(
+    "  trimmed          :",
+    `${trimmedRuns.toLocaleString()} / ${REQUESTS.toLocaleString()} requests`,
+  );
+  console.log("  turns dropped    :", turnsDropped.toLocaleString());
+  console.log("  query clipped    :", queryTrimmedRuns.toLocaleString());
+  console.log("  elapsed          :", `${elapsedMs.toFixed(0)} ms`);
+
+  // Every plan carries the bookkeeping needed to explain the decision.
+  const example = plans.find((plan) => plan.queryWasTrimmed) ?? plans[0]!;
+  console.log("\nOne request, in detail:");
+  console.log(`  ${example.rawInputTokens} -> ${example.inputTokens} tokens`);
+  console.log(`  ${example.trimmedTurns} turns dropped`);
+  console.log(`  query clipped: ${example.queryWasTrimmed}`);
+  console.log(`  ${example.staticTokens} of those tokens are the fixed prefix`);
 }
 
 if (isMain) {

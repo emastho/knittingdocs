@@ -11,7 +11,7 @@
         "@codemirror/theme-one-dark": "^6.1.3",
         "@codemirror/view": "^6.40.0",
         "@hono/node-server": "^1.19.9",
-        "@vixeny/knitting": "npm:@jsr/vixeny__knitting@^0.1.62",
+        "@vixeny/knitting": "npm:knitting@^0.1.70",
         "astro": "^5.17.1",
         "codemirror": "^6.0.2",
         "hono": "^4.11.9",
@@ -304,7 +304,7 @@
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.3.0", "", {}, "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g=="],
 
-    "@vixeny/knitting": ["@jsr/vixeny__knitting@0.1.62", "https://npm.jsr.io/~/11/@jsr/vixeny__knitting/0.1.62.tgz", {}, "sha512-/VcAX3g+bXsKs5yjmjtj2P2CQmANLT9H95/VE5bKKM8WIPQwoaGqkp4wJThejSc7Vb6Q5zy7soatGo2FXrselA=="],
+    "@vixeny/knitting": ["knitting@0.1.70", "", { "peerDependencies": { "typescript": "^5.2.0" } }, "sha512-W2CVxjpHDsBaR0EH3G00OlFwcPtyqvjW585XJ91DHW1thJJg0gogtw8aiAto8IiMt3rbmInqllPFrAPlg97PyQ=="],
 
     "acorn": ["acorn@8.15.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg=="],
 

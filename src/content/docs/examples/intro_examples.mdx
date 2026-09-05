@@ -24,7 +24,13 @@ Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_
 [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) trims prompts to fit a token budget before they hit the API.
 
 **"I have a CPU-heavy computation I want to parallelize"**
-The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi) (embarrassingly parallel), [Physics loop](/examples/maths/physics_loop) (variable-work simulation), [Big prime](/examples/maths/big_prime) (long-running search), and [TSP](/examples/maths/tsp_gsa) (NP-hard optimization with parallel restarts).
+The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi) (embarrassingly parallel), [Physics loop](/examples/maths/physics_loop) (variable-work simulation), [Big prime](/examples/maths/big_prime) (long-running search), [Proof of work](/examples/maths/proof_of_work) (signal-cancelled hash search), and [TSP](/examples/maths/tsp_gsa) (NP-hard optimization with parallel restarts).
+
+**"I need to index or ingest a pile of files"**
+[LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) parses real arXiv LaTeX sources on workers, and measures where a decompress-then-parse job should be split.
+
+**"I need to generate documents"**
+[PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) renders PDFs on workers, and covers how to return binary from a task without silently mangling it.
 
 **"I just want to convert some text"**
 [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) is the simplest rendering example -- string in, compressed string out.
@@ -34,6 +40,7 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 ### Math and simulation
 
 - [Big prime](/examples/maths/big_prime) -- long-running BigInt search with Miller-Rabin
+- [Proof of work](/examples/maths/proof_of_work) -- find a SHA-256 hash with leading zeroes
 - [Monte Carlo pi](/examples/maths/monte_pi) -- independent sampling and reduction
 - [Physics loop](/examples/maths/physics_loop) -- branch-heavy simulation with variable work per trial
 - [TSP (GSA)](/examples/maths/tsp_gsa) -- parallel heuristic restarts for NP-hard optimization
@@ -45,8 +52,10 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 - [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) -- HMAC verify + renewal with Web Crypto
 - [Salt hashing](/examples/data_transforms/validation/salt_hashing) -- PBKDF2 password hashing (heaviest per-call workload)
 - [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) -- trim LLM prompts to a token budget
+- [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) -- parse real arXiv sources into indexable prose
 - [React SSR](/examples/data_transforms/rendering_output/react_ssr) -- render React components on workers
 - [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) -- SSR + Brotli, worker vs host comparison
+- [PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) -- generate PDF documents and return the bytes
 - [Hono server routes](/examples/data_transforms/rendering_output/hono_server) -- real HTTP server with offloaded routes
 - [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) -- simple markdown transform pipeline
 
