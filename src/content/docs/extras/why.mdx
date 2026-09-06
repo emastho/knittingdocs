@@ -14,10 +14,10 @@ sidebar:
   order: 1
 ---
 
-Your event loop can be full while your machine is not.
+Your event loop can be busy while other CPU cores sit idle.
 
-A parser grows. A validator picks up rules. A hash, render, or compression step
-starts taking more of the event loop than it should. The expensive function is
+As an application grows, parsing, validation, hashing, rendering, or compression
+can start taking too much time on the event loop. The expensive function is
 doing useful work, but everything else waits behind it — including routes that
 were cheap all along.
 
@@ -34,12 +34,11 @@ CPU time.
 
 On one event loop, those functions do more than slow their own callers. They
 create head-of-line blocking: routing, I/O completions, and cheap requests all
-wait for the same serialized path. A `/ping` handler can take almost no work and
-still have a bad p99 because it arrived behind a render or hash.
+wait for the same thread. A `/ping` handler can do almost no work and
+still have high p99 latency because it arrived behind a render or hash.
 
-That changes the size of the fix. When the cost is concentrated in a few
-functions, the boundary can be concentrated there too. The whole application
-does not need to move merely because one part needs somewhere else to run.
+When a few functions account for most of the CPU time, moving those functions
+to workers can be enough. The rest of the application can stay where it is.
 
 ## The work doesn’t get cheaper. The waiting does.
 
@@ -58,7 +57,7 @@ At a fixed mixed load of 2,000 requests per second per route:
 
 An equivalent repeat of the one-worker configuration recorded 1.06 cores and a
 2.18 ms `/ping` p99. Read the CPU result as approximately 1.1 cores for both
-shapes, not as a meaningful difference between 1.08 and 1.10.
+configurations, not as a meaningful difference between 1.08 and 1.10.
 
 The computation did not disappear. SSR and JWT still consumed CPU; they
 consumed it on another lane. Knitting kept the transport, waiting, and
@@ -75,7 +74,7 @@ hardware, harness, repeat variance, raw measurements, and limitations.
 
 ## A function-level execution boundary
 
-Knitting keeps the function in your repo, language, types, and deploy unit. You
+The function stays in the same repository and deployment, with its types intact. You
 export it, hand it to a pool, and call it like an async function. What changes
 is where it runs and what it can touch.
 
@@ -100,8 +99,9 @@ extracting everything around them.
 
 ## The CPU cost of the boundary is part of the product
 
-We are not selling parallelism at any cost. We are selling performance
-isolation whose overhead is low enough to preserve the capacity it unlocks.
+Moving work to another thread only helps if communication and coordination
+leave enough CPU time for the application. Keeping that overhead low is a
+central design goal.
 
 Useful task work should consume CPU. Waiting, polling, unnecessary copying, and
 oversized pools should not. That principle shapes the runtime:
@@ -117,8 +117,7 @@ oversized pools should not. That principle shapes the runtime:
 A pool intended to recover usable capacity should consume almost none when it
 has no work. In the Hono measurements, the current policy held a fifteen-worker
 pool to 0.164 idle cores; the rejected spinning policy consumed 6.368. That 39x
-difference is not tuning trivia. A pool that burns the capacity it exists to
-recover contradicts its own purpose.
+difference shows how much CPU an idle waiting policy can consume.
 
 The [Multi-threading](/guides/multi-threading/) guide explains the shipped
 defaults and how to choose a worker count. The
@@ -134,7 +133,7 @@ the right answer while the task is cheap. Once it becomes expensive, every
 millisecond it occupies the event loop is a millisecond unavailable to
 unrelated work.
 
-**Run more application processes.** Cluster mode is a real way to use more
+**Run more application processes.** Cluster mode lets an application use more
 cores, and a load balancer can reduce some queueing. It also duplicates the
 whole application and gives each process the same mixed workload. Each event
 loop can still receive a cheap request behind an expensive one. Knitting draws
@@ -150,7 +149,7 @@ original reason Knitting exists.
 **Make the function a service.** This is right when the work needs independent
 ownership, deployment, cross-machine scale, or a separate failure domain. It is
 an expensive answer when one function, owned by the same team in the same repo,
-merely needs another execution lane. The function did not ask for a hostname.
+merely needs another execution lane. A local worker avoids the network and deployment overhead of a service.
 
 Knitting occupies the space between inline execution and a network service: a
 local execution boundary around the work that needs one.
@@ -167,7 +166,7 @@ process with runtime permissions, a bootstrap hook, `bwrap`, or a container.
 the host entirely.
 
 Knitting does not replace distributed systems. If you need cross-machine scale,
-independent deploy cadence, team ownership, or a separate network failure
+independent release schedules, team ownership, or a separate network failure
 domain, use a service. Knitting is for the point before that: the code still
 belongs in the application, but the work no longer belongs on its event loop.
 
@@ -180,11 +179,10 @@ belongs in the application, but the work no longer belongs on its event loop.
 - It does not guarantee that more workers mean more throughput. A single event
   loop may remain the producer, so measure worker counts against the workload.
 - It does not turn one benchmark into a universal cost claim. Runtime,
-  hardware, traffic mix, payload size, and latency target all move the result.
+  hardware, traffic mix, payload size, and latency target all affect the result.
 
-The promise is narrower and more useful: give expensive functions their own
-execution lane without making the rest of the application pay heavily for the
-boundary.
+Knitting gives expensive functions their own execution lane while keeping
+communication and coordination overhead low.
 
 ## Read next
 

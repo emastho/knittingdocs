@@ -13,7 +13,7 @@ signals.
 - Define tasks at module scope — no conditional or dynamic exports.
 - Export them from the module where they are defined.
 - One argument in, one value out. Use a tuple or object for multiple values.
-- Keep tasks in their own file(s) so workers load only what they need.
+- Keep tasks in separate files so workers load only what they need.
 
 ## Module loading
 
@@ -70,7 +70,7 @@ export const add = task({
 ```
 
 Return types are inferred, but argument types are not — annotate the parameter,
-or pin both with generics:
+or specify both with generics:
 
 ```ts
 export const add = task<[number, number], number>({
@@ -111,7 +111,7 @@ const lines = await pool.call.world(pool.call.hello());
 
 ## Options
 
-Beyond `f`, there are two:
+`task()` accepts two options in addition to `f`:
 
 | Option | Purpose |
 | --- | --- |
@@ -129,7 +129,7 @@ export const maybeSlow = task<string, string>({
 });
 ```
 
-The shape of `timeout` decides what happens when the budget runs out:
+The form of `timeout` determines what happens when the time limit is reached:
 
 | Form | Outcome |
 | --- | --- |
@@ -167,8 +167,8 @@ export const cpuWork = task({
 });
 ```
 
-The toolkit is not a DOM `AbortSignal`. There is no `.aborted`, no
-`addEventListener`, and you cannot hand it to `fetch`. It carries two methods:
+The toolkit differs from a DOM `AbortSignal`: it has no `.aborted` property or
+`addEventListener` method, and it cannot be passed to `fetch`. It provides two methods:
 
 | Method | What it gives you |
 | --- | --- |
@@ -194,7 +194,7 @@ export const budgeted = task({
 ```
 
 `abortSignal: { hasAborted: true }` is accepted as well, and does exactly the
-same thing. Reach for the plain `true`.
+same thing. Use `true` for brevity.
 
 The promise returned by an abort-aware call also exposes `.reject()`, so the
 **host** can cancel without touching the worker:
@@ -302,8 +302,7 @@ remote module changes.
 
 ## A task can make its own pool
 
-One task in a short script? Chain `.createPool()` onto it and skip the separate
-call:
+For a short script with one task, chain `.createPool()` onto its definition:
 
 ```ts
 import { isMain, task } from "knitting";

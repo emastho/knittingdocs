@@ -8,7 +8,7 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 `BufferReference` is useful when you need to send a large `ArrayBuffer` to a
-**thread** worker without paying for a copy. It moves the bytes instead of
+**thread** worker without copying its bytes. It moves the bytes instead of
 sharing them. Import it from the `knitting/unsafe` subpath:
 
 ```ts
@@ -85,7 +85,7 @@ Use either accessor to read the bytes:
 Both methods can be called more than once while the reference is active. Keep
 the reference alive while you use the returned view or buffer, and call
 `release()` when you are done. Releasing the reference detaches any views it
-created first, so an escaped view becomes empty or throws instead of reading
+created first, so a view retained after release becomes empty or throws instead of reading
 freed memory.
 
 ---

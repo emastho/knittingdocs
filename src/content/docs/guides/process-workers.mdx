@@ -21,8 +21,8 @@ const pool = createPool({
 })({ add });
 ```
 
-That's the whole switch: the same `call` API and the same tasks, now running in
-another process. Everything below is about wrapping that process.
+The tasks and `call` API stay the same. The following sections explain how to
+run the worker process inside a sandbox or container.
 
 ## Keep isolated code out of the host
 
@@ -204,9 +204,9 @@ if (isMain) {
 }
 ```
 
-Why `permission: "unsafe"` here? The container — not Knitting's per-worker flags —
-is the isolation boundary, so the in-container worker runs without extra
-permission flags. Keep the image and mounts tight instead. See
+This example uses `permission: "unsafe"` because the container provides the
+isolation boundary. The worker runs without extra runtime permission flags, so
+restrict access through the container image and volume mounts. See
 [Permissions](/guides/permissions/).
 
 ## Choosing a wrapper

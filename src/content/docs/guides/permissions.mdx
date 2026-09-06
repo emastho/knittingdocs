@@ -91,7 +91,7 @@ stronger isolation, combine them with [process workers](/guides/process-workers/
 
 Strict mode starts with a conservative policy:
 
-- reads and writes are limited to the current `cwd`;
+- reads and writes are limited to the current working directory (`cwd`);
 - writes to `node_modules` are denied;
 - sensitive files and directories are denied, including `.env`, `.git`,
   `.npmrc`, `.docker`, `.secrets`, `~/.ssh`, `~/.gnupg`, `~/.aws`,

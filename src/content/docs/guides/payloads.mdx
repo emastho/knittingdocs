@@ -39,7 +39,7 @@ Promise values are accepted at the `call.*()` boundary, but promises
 themselves are runtime state and are not transferred through IPC as payloads.
 Only resolved values are serialized and sent to workers.
 If a promise input rejects, the host call rejects and the worker task is not
-executed. Only native `Promise` is accepted; thenables are treated as regular
+executed. Only native `Promise` instances are awaited; thenables are treated as regular
 values.
 
 See [Promise inputs are awaited on the host](/guides/defining-tasks/#promise-inputs-are-awaited-on-the-host) for details.
@@ -95,7 +95,7 @@ header.
 
 **Dynamic payload (allocator path):** `Object`, `Array` (JSON-serialized),
 `Error`, `Date`, and larger strings. These need allocation, serialization, and
-copying. Still faster than `postMessage`, but measurably heavier in hot loops.
+copying, which adds measurable overhead in hot loops.
 
 See the [Performance guide](/guides/performance) for per-type benchmarks and
 batching guidance.

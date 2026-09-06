@@ -18,7 +18,7 @@ export const bench = getCode("data_transforms/react_ssr/bench_react_ssr.ts");
 export const component = getCode("data_transforms/react_ssr/render_user_card.tsx");
 export const utils = getCode("data_transforms/react_ssr/utils.ts");
 
-Renders React components to HTML strings on workers using `renderToString`. If your server does SSR, this is probably the example closest to your real workload -- parse JSON input, normalize data, render a component, return HTML.
+This example renders React components to HTML strings on workers using `renderToString`. If your server does SSR, this is probably the example closest to your real workload -- parse JSON input, normalize data, render a component, return HTML.
 
 ## How it works
 
@@ -105,8 +105,8 @@ summary
    1.94x faster than host (2,000 req)
 ```
 
-Your ratio will differ. The shape of the result is what matters: the render is
-CPU-bound, so it scales with workers until the machine runs out of cores.
+Rendering is CPU-bound, so workers can run it in parallel. The speedup depends
+on your component, payloads, available cores, and other work on the host.
 
 :::note
 The byte parity check runs once before benchmarking to confirm host and worker produce identical HTML. If it doesn't match, something is wrong with your setup.
@@ -130,10 +130,10 @@ The byte parity check runs once before benchmarking to confirm host and worker p
 
 ## Sizing the pool
 
-This example used to run one worker plus an inliner, and in that shape it was
+This example used to run one worker plus an inliner, and with that configuration it was
 slower than rendering on the host. Two things were working against it:
 
-- **One worker cannot outrun the host it competes with.** A single lane pays the
+- **A single worker still pays the full transport cost.** A single lane pays the
   full cost of moving a payload out and HTML back, and gets one core's worth of
   rendering in exchange. Multi-worker pools also enable shared-submit work
   stealing by default, which a one-worker pool never engages.
@@ -141,13 +141,13 @@ slower than rendering on the host. Two things were working against it:
   the host between dispatches, so the event loop you moved SSR off is busy
   again -- and it is the same thread awaiting every result.
 
-Dropping the inliner and moving to four workers flipped the same benchmark from
-losing to the host to roughly `1.8-1.9x` faster than it, and cut per-iteration
-allocation by about two thirds. Neither number is a target to copy: `threads` is
-a measurement, not a constant, and the right value depends on your component,
-your payloads, and what else the host is doing. Start at 2-4, measure, and only
+Dropping the inliner and moving to four workers made the same benchmark
+roughly `1.8-1.9x` faster than the host, and cut per-iteration
+allocation by about two thirds. Choose `threads` from your own measurements:
+the right value depends on your component, your payloads, and what else the
+host is doing. Start at 2-4, measure, and only
 add the inliner if it earns its place on your workload.
 
 ## Why SSR is a great fit for workers
 
-`renderToString` is synchronous and CPU-bound -- it walks your component tree and builds an HTML string. On a request-per-request basis it's not usually slow, but under load it blocks the event loop and everything else waits. Moving SSR to a worker pool means your main thread stays free to accept requests and handle I/O while rendering happens in parallel. The Hono server example shows what this looks like in a real HTTP server context.
+`renderToString` is synchronous and CPU-bound -- it walks your component tree and builds an HTML string. For an individual request, it may be fast, but under load it blocks the event loop and everything else waits. Moving SSR to a worker pool means your main thread stays free to accept requests and handle I/O while rendering happens in parallel. The Hono server example shows what this looks like in a real HTTP server context.

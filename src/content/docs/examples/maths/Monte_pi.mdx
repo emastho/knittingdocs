@@ -15,9 +15,9 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/monte_carlo/pi.ts");
 export const pi_chunk = getCode("maths/monte_carlo/montecarlo_pi.ts");
 
-## What is this about
+## What is this about?
 
-This example estimates pi by throwing random points at a square. Points inside
+This example estimates pi by sampling random points in a square. Points inside
 the unit circle count as hits:
 
 $$
@@ -68,7 +68,7 @@ runtime, CPU, and worker count.
 - The task does one thing: simulate a chunk of points.
 - The host owns orchestration and reporting.
 - Results stay tiny instead of transferring every generated point.
-- The same shape works for numerical integration, sampling, and simulations.
+- The same pattern works for numerical integration, sampling, and simulations.
 
 This is the map-reduce pattern in its simplest form: map independent chunks to
 workers, then reduce their summaries on the host.

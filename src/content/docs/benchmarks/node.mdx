@@ -1,6 +1,6 @@
 ---
 title: Node.js
-description: "Knitting on Node.js: message overhead, a head-to-head with a plain worker, latency as calls grow, heavy-task efficiency, and payload type costs."
+description: "Knitting on Node.js: message overhead, a comparison with a plain worker, latency as call counts grow, heavy-task efficiency, and payload type costs."
 sidebar:
   order: 2
 ---
@@ -20,10 +20,11 @@ import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPri
 This page summarizes Node.js benchmark runs for Knitting on `node 24.12.0 (arm64-darwin)`.
 
 ## IPC (Node)
-This benchmark compares one round-trip between a main thread and workers using different transports.
+This benchmark measures round-trip communication between the main thread and
+workers using different transports.
 Knitting has the lowest overhead in this setup:
 
-- `1` message: Knitting is about `6x` faster than worker `postMessage`, `15x` faster than websocket, and `57x` faster than HTTP.
+- `1` message: Knitting is about `6x` faster than worker `postMessage`, `15x` faster than WebSocket, and `57x` faster than HTTP.
 - `25` messages: Knitting is about `4x` faster than worker `postMessage`.
 - `50` messages: Knitting is about `3.5x` faster than worker `postMessage`.
 
@@ -44,10 +45,10 @@ Knitting has the lowest overhead in this setup:
 </Tabs>
 
 ## Knitting vs Worker (Node)
-These charts compare the same payload families sent through Knitting and `worker_threads`.
+These charts compare the same payload types sent through Knitting and `worker_threads`.
 
 ### One message
-With a single value per call, Knitting is consistently faster:
+With a single value per call, Knitting is faster in these measurements:
 
 - For small primitives, Knitting is roughly `10-14x` faster than worker `postMessage`.
 - Worker `postMessage` stays near `~10 µs/iter` even for tiny payloads.
@@ -69,11 +70,11 @@ With a single value per call, Knitting is consistently faster:
 </Tabs>
 
 ### 100 messages
-At `100` messages per iteration, the gap remains strong:
+At `100` messages per iteration:
 
-- Typical primitives stay around `~6-8x` faster with Knitting.
-- Heavier payloads still keep a clear edge at roughly `~2.4-4.2x` faster.
-- Batching improves throughput for both, but Knitting remains lower-overhead across payload classes.
+- Primitive payloads are `~6-8x` faster with Knitting.
+- Heavier payloads are about `~2.4-4.2x` faster.
+- Batching improves throughput for both, but Knitting has lower overhead across the tested payload types.
 
 <Tabs>
   <TabItem label="Knitting vs Worker (100)">
@@ -92,7 +93,7 @@ At `100` messages per iteration, the gap remains strong:
 
 ## Call growth throughput (Node)
 This benchmark increases payload size from `32 B` up to `1,048,576 B` (1 MiB) and reports
-batched cost with `batch=64`.
+the time per batch with `batch=64`.
 
 Using the `1048576 B` row (`avg`) from the `batch=64` run, one-way transfer throughput is:
 
@@ -101,7 +102,7 @@ Using the `1048576 B` row (`avg`) from the `batch=64` run, one-way transfer thro
 
 Interpretation:
 
-- In this batched shape, Node's `Uint8Array` path is much stronger than its string path.
+- In this batch test, Node transfers `Uint8Array` payloads much faster than strings.
 - For 1 MiB binary payloads, Node lands in the `~7.5 GB/s` range in this run.
 
 ### Data
@@ -128,13 +129,15 @@ Even under this heavier workload, parallel workers scale well:
 <Code code={nodeHeavyLoad} lang="md" title={"node_withload.md"} />
 
 ## All types in Knitting
-This benchmark covers primitive, structured, collection, typed-array, error/date/symbol, promise-arg, and static-vs-dynamic allocator paths.
+This benchmark covers primitives, structured values, collections, typed arrays,
+errors, dates, symbols, and promise arguments. It also compares static and
+dynamic payload allocation.
 Results are reported for count `1` and count `100` to show both per-call latency and batched throughput.
 
 Quick takeaways:
 
-- In count `100`, primitive-style payloads are usually in the `~15-30 µs` range, while heavier structured/collection payloads can be `~120-300+ µs`.
-- The static payload path is usually around `2x-4x` faster than dynamic allocator paths (for example: string `~3.4x`, json `~3.0x`, `Uint8Array` `~3.6x`, symbol `~4.1x` at count `100`).
+- At count `100`, primitive payloads are usually in the `~15-30 µs` range, while heavier structured/collection payloads can be `~120-300+ µs`.
+- The static payload path is usually around `2x-4x` faster than dynamic allocator paths (for example: string `~3.4x`, JSON `~3.0x`, `Uint8Array` `~3.6x`, symbol `~4.1x` at count `100`).
 
 Payload sizes (approximate):
 

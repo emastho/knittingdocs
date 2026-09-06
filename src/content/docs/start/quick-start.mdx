@@ -24,14 +24,13 @@ export const parallel = getCode('multi_thread.ts');
 export const multi = getCode('multi_task.ts');
 export const options = getCode('task_options.ts');
 
-Define some tasks, create a pool, call the tasks like async functions, let the
-pool close itself. That is the whole loop, and it takes a few minutes.
+Define your tasks, create a pool, and call them like async functions. The pool
+closes automatically when you are done. This guide walks through each step.
 
 ## Introduction
 
-If you have used workers before: Knitting is workers with a function-call API
-and much less overhead. If you haven’t, the terms below are all the
-vocabulary you need.
+Knitting gives workers a function-call API with low communication overhead.
+If you are new to workers, start with these terms.
 
 ### Quick definitions
 
@@ -42,14 +41,14 @@ vocabulary you need.
 - **`isMain`**: `true` on the host, `false` inside a worker. Workers re-import
   your module, so anything that should happen once — creating the pool, starting
   a server — belongs behind this check.
-- **`createPool()`**: starts the workers and hands back a typed `call` object and
-  a `shutdown`. It is disposable too, which is what lets `using` close it.
+- **`createPool()`**: starts the workers and returns a pool with a typed `call`
+  object and a `shutdown()` method. The pool is disposable, so `using` can close it.
 - **Host ↔ Worker**: the host is the process that creates the pool. The workers
   are the threads (or processes) that run the tasks.
 
 ### Examples
 
-Four snippets, roughly in the order you will need them.
+These four examples cover a single task, parallel calls, multiple tasks, and task options.
 
 <Tabs>
   <TabItem label="One task"><Code code={hello} lang="ts" title={"hello_world.ts"} /></TabItem>
@@ -105,9 +104,9 @@ Four snippets, roughly in the order you will need them.
 
 5. Shut down when you are done.
 
-   With `using` that already happened at the end of the block: the workers stop
-   and the process can exit. Call `shutdown()` yourself when you want to pick
-   the moment, or when your runtime has no `using`:
+   With `using`, the workers stop when the block ends and the process can exit.
+   Call `shutdown()` yourself to close the pool earlier, or if your runtime
+   does not support `using`:
 
    ```ts
    const pool = createPool({ threads: 2 })({ square, greet });
@@ -122,8 +121,7 @@ Four snippets, roughly in the order you will need them.
 
 ### A task can make its own pool
 
-One task in a short script? Skip the separate `createPool` and let the task
-carry its own:
+For a short script with one task, chain `.createPool()` onto the task definition:
 
 ```ts
 import { isMain, task } from "knitting";
@@ -143,12 +141,12 @@ if (isMain) {
 
 ## Good habits
 
-None of this is required. All of it saves you an afternoon later.
+These habits help keep worker startup fast and make common problems easier to avoid.
 
 ### Keep tasks in their own module(s)
 
-Workers import that module and nothing around it, so they start fast and stay
-out of the way of your app code.
+Workers load the task module and its imports. Keeping that module small helps
+them start quickly without loading unrelated application code.
 
 <FileTree>
 
@@ -183,16 +181,16 @@ runs.
 
 ### Pick the cheapest payload that fits
 
-Smaller and flatter travels faster. Numbers, booleans and short strings first,
-then typed arrays and `Buffer`, then compact JSON. When you have bytes plus some
+Small, flat payloads are cheaper to transfer. Prefer numbers, booleans, and
+short strings when they fit your data, then typed arrays, `Buffer`, or compact JSON. When you have bytes plus some
 metadata to describe them, use `Envelope`. See
 [Supported payloads](/guides/payloads/).
 
 ### Start strict, open up later
 
 Worker permissions start restricted. Sensitive paths like `.env`, `.git`,
-`~/.ssh` and `/etc` are blocked, and `node_modules` is deny-write. Open up only
-what your tasks actually touch. See [Permissions](/guides/permissions/).
+`~/.ssh` and `/etc` are blocked, and writes to `node_modules` are denied. Grant
+only the access your tasks need. See [Permissions](/guides/permissions/).
 
 ## Footguns
 
@@ -217,25 +215,17 @@ that defines your tasks.**
   set `KNITTING_DEBUG=*`. Setup, import and lifecycle diagnostics go to
   **stderr**, each line tagged with its worker and a millisecond timer. If that
   is too much, name the parts you care about: `debug: { host: true, imports: true }`.
-  Turned off, it costs nothing.
+  When diagnostics are disabled, the logger module is not imported.
 - **Only supported payloads cross the boundary.** `Map`, `Set`, class instances,
   and functions are rejected — see [Payloads](/guides/payloads/).
 - **Dynamic payloads cap at ~8 MiB** by default; raise `payload.maxPayloadBytes`
   (and `payload.payloadMaxByteLength`) for larger ones.
 
 :::tip[Building with an AI agent?]
-Great question — and you're absolutely right to be thinking about context.&nbsp;🚀
+Give your agent the Knitting docs before asking it to write worker code:
 
-Knitting ships machine-readable documentation, so let's dive in:
-
-- **[`/llms.txt`](/llms.txt)** — the essentials, distilled for maximum signal.
-- **[`/llms-full.txt`](/llms-full.txt)** — every page, inlined into a single file.
-
-It's not just documentation — it's a force multiplier. By leveraging these
-resources, your agent can unlock a deeper understanding of the footguns above
-and avoid them far more often.&nbsp;✨
-
-Would you like me to break any of this down further?
+- **[`/llms.txt`](/llms.txt)** — a concise reference to the API and common pitfalls.
+- **[`/llms-full.txt`](/llms-full.txt)** — all documentation pages in one file.
 :::
 
 ## Where to go next
@@ -245,8 +235,8 @@ Would you like me to break any of this down further?
 - [Payloads](/guides/payloads/) — what crosses the boundary, and `Envelope`.
 - [Performance](/guides/performance/) and the [inliner](/guides/inliner/) — when to let the host run some work too.
 
-Two things worth knowing about before you need them. Workers can each run as a
+For stronger isolation, workers can each run as a
 [separate process](/guides/process-workers/), inside a `bwrap` sandbox or a
-container, when threads are not enough isolation. And large buffers can skip the
+container, when threads do not provide enough isolation. Large buffers can skip the
 copy entirely with [`ProcessSharedBuffer`](/guides/shared-memory/), which puts
 the bytes in shared memory instead of sending them.

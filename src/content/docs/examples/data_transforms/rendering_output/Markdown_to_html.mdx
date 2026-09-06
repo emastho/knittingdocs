@@ -1,6 +1,6 @@
 ---
 title: Markdown to HTML
-description: Convert markdown to HTML and Brotli-compress it in the same worker call.
+description: Convert Markdown to HTML and Brotli-compress it in the same worker call.
 hero:
   title: 'Markdown rendering'
 sidebar:
@@ -16,11 +16,13 @@ export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_htm
 export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
 export const utils = getCode("data_transforms/markdown_to_html/utils.ts");
 
-Converts markdown documents to HTML using `marked`, then compresses the output with Brotli. A straightforward transform pipeline -- parse, render, compress -- that shows how well workers handle chained operations.
+This example converts Markdown to HTML with `marked`, then compresses the
+output with Brotli. It keeps parsing, rendering, and compression in one worker
+call.
 
 ## How it works
 
-The host generates markdown documents. Both the host and worker paths parse the markdown, render HTML, then Brotli-compress the result. Compressed byte totals are compared for parity before the benchmark runs.
+The host generates Markdown documents. Both the host and worker paths parse the Markdown, render HTML, then Brotli-compress the result. Compressed byte totals are compared for parity before the benchmark runs.
 
 Three files:
 
@@ -97,4 +99,4 @@ knitting          17,800     15,600 ... 24,300
 
 ## A clean pipeline example
 
-This is the simplest rendering example -- no component tree, no JSX, just string in, string out. It's a good reference if you want to understand the worker pattern without the React SSR complexity. The same approach works for any transform chain: parse input, process it, compress or encode the result.
+This is the simplest rendering example -- no component tree, no JSX, just Markdown in and compressed bytes out. It's a good reference if you want to understand the worker pattern without the React SSR complexity. The same approach works for any transform chain: parse input, process it, compress or encode the result.

@@ -13,7 +13,7 @@ Knitting's shared-memory subpath has two layers:
   mapped by separate processes.
 
 Both avoid copying the bytes into every call frame, but their ownership rules
-are different. A pooled region has one owner and one release obligation; a
+are different. A pooled region has one owner responsible for releasing it; a
 process-shared buffer is an explicitly mapped resource that each process must
 close.
 
@@ -113,7 +113,7 @@ const pool = createPool({
 })({ processRegion });
 ```
 
-The consumer receives bytes, not a body it should recycle. When a descriptor is
+In this example, the consumer borrows the bytes while the producer owns the region. When a descriptor is
 sent with `moveTo()`, the consumer owns the release. When it is sent with
 `describe()`, the producer keeps ownership and the consumer must adopt it with
 `{ borrow: true }`, as in the example. For a moved descriptor, omit `borrow` and
@@ -151,8 +151,8 @@ console.log(
 
 The defaults are starting points, not universal constants. A known-length body
 at or above 192 KiB can stream directly into the arena. A body at or above 2 MiB
-uses `BufferReference` in the choose-one helper because it is likely large
-enough for the materialize-then-move path to win. `BufferReference` is for
+uses `BufferReference` in `readBodyOrRefer()` because reading the body into a
+buffer and moving it can be faster at that size. `BufferReference` is for
 same-process thread workers; use `ProcessSharedBuffer` for process workers.
 
 Every body-reading helper enforces `maxByteLength` against both a declared
@@ -232,7 +232,7 @@ await pool.call.render(frame);
 The task must consume borrowed argument bytes before its first suspension point,
 and must not retain them across an `await`.
 
-The host side has a limit too, and it is the sharper one. A borrowed argument
+The host must also limit concurrent calls to avoid overwriting borrowed arguments. A borrowed argument
 lives in the shared submit arena, which is recycled: allocating a new one while
 earlier calls are still in flight can overwrite bytes a worker has not read yet,
 and the result is **silently wrong data rather than an error**. On a
@@ -356,9 +356,9 @@ Shared memory is not garbage-collected for you:
 - For named channels, the owner also calls
   `primitives.unlinkSharedMemory?.(name)` once nobody needs the name anymore.
 
-This is a same-host, fast path — both sides map the same bytes — not a network
-transport. Anonymous is the safe default; reach for named only when processes
-can't inherit a handle.
+Both processes must run on the same host so they can map the same bytes. Use
+anonymous buffers by default, and named buffers when processes cannot inherit
+a handle.
 
 For thread-only zero-copy transfers within the same process, see
 [Buffer reference](/guides/buffer-reference/).

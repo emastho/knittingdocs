@@ -18,8 +18,8 @@ export const corpus = getCode("data_transforms/latex_papers/arxiv_corpus.ts");
 export const run = getCode("data_transforms/latex_papers/run_latex_papers.ts");
 export const bench = getCode("data_transforms/latex_papers/bench_latex_papers.ts");
 
-Downloads the LaTeX source of sixteen well-known arXiv papers and turns each one into
-something you could index or embed: the prose with markup removed, plus the section tree,
+This example downloads the LaTeX source of sixteen well-known arXiv papers and turns each one into
+a record ready for indexing or embedding: the prose with markup removed, plus the section tree,
 citation keys, and equation, figure and table counts.
 
 Unlike the other examples on this site, the input here is not synthetic. It is sixteen real
@@ -102,7 +102,8 @@ Indexing a paper is two steps that look very different. Unpacking the archive is
 decompression; parsing is string work. The obvious move is to offload the parsing, because
 that is the part that looks like computation.
 
-That is the wrong cut, and the benchmark measures all three options.
+In this benchmark, moving both steps to workers was faster. The following
+comparison measures all three options.
 
 :::info
 <RuntimeRunTabs
@@ -150,11 +151,9 @@ export const indexArchive = task<string, PaperRecord>({
 
 ## The boundary is cheaper than it looks
 
-The reason to send a path is *not* that the payload was expensive. It is worth knowing how
-cheap the payload actually was, because the fear of the boundary tends to drive worse
-designs than the boundary deserves.
-
-Two measurements from this workload:
+Sending a path lets the worker handle decompression as well as parsing. Payload
+transfer was a relatively small cost in this workload, as two additional
+measurements show.
 
 - Sending 64 papers' worth of sources -- **3.9 MiB of LaTeX** -- through a task that does
   nothing but count the files costs about **11 ms**.
@@ -162,14 +161,14 @@ Two measurements from this workload:
   measured the **same, within noise**, in both directions across thread counts.
 
 So the site's usual advice -- return compact summaries, not large payloads -- is a rule
-about ratios, not about sizes. When each item costs milliseconds of CPU, a 40 KB result is
-free. When each item costs microseconds, the same result dominates. Measure the ratio for
+about ratios, not about sizes. When each item costs milliseconds of CPU, a 40 KB result may add
+no measurable overhead. When each item costs microseconds, the same result dominates. Measure the ratio for
 your workload rather than assuming the payload is the problem.
 
 ## The stage that refused to parallelize
 
 The first version of this example used `DecompressionStream`, which is the web-standard way
-to gunzip and works on all three runtimes. It also does not get faster when you add workers.
+to gunzip and works on all three runtimes. In these measurements, adding workers did not make it faster.
 
 Gunzipping the same sixteen archives inside the pool, changing only the thread count:
 
@@ -186,7 +185,7 @@ runs on the worker that called it instead of handing the work to something share
 :::caution
 A stage that does not scale sets the ceiling for everything around it. Before blaming the
 pool for a disappointing speedup, time each stage of your task at one worker and at four --
-a flat stage is the answer, and no amount of tuning the pool will move it.
+a stage that does not improve may be limiting the whole pipeline.
 :::
 
 ## Real submissions are messy
@@ -198,9 +197,9 @@ Most of the parser exists because of things real papers do:
   rather than quietly reporting a paper with no content. Adam is another, which is why it
   is not in the list.
 - **A tarball can hold several `\begin{document}` files.** YOLOv3 ships the paper, a
-  rebuttal, a supplementary and a style demo. Picking the longest file gets you the
-  supplementary; the paper's own entry point is 3 KB that `\input`s everything else. The
-  right rule is the file that resolves to the most document, not the biggest file on disk.
+  rebuttal, supplementary material, and a style demo. Picking the longest file gets you the
+  supplementary material; the paper's own entry point is 3 KB that `\input`s everything else. The
+  parser chooses the file that produces the largest document after resolving its inputs.
 - **Every author invents macros.** One paper in this corpus expands 1,844 of them. Skip
   expansion and your index fills up with tokens nobody wrote.
 - **`%` starts a comment, `\%` does not, and papers are full of commented-out drafts.**
@@ -211,7 +210,7 @@ spot-checked papers. It is an indexing-grade extraction, not a typesetter.
 
 ## Do not expect this to scale past a few workers
 
-Sixteen papers is a small corpus, and it shows. One worker measures level with the host.
+Sixteen papers is a small corpus, and it shows. One worker performs about the same as the host.
 Adding workers helps clearly up to about four, and past that two sweeps on the same machine
 disagreed with each other -- one kept improving to eight, the other got worse at six. That
 spread is larger than the effect, so there is no per-thread table here worth printing.
@@ -220,21 +219,20 @@ What is stable is the shape, and the reason for it. The sequential cost of the c
 about **119 ms**, and the most expensive single paper is **21 ms**, so a perfect four-way
 split would finish in **30 ms**. The pool lands closer to **55-65 ms**. The corpus simply
 runs out: sixteen items across four workers is four items each, and the round ends when the
-unluckiest worker finishes.
+last worker finishes.
 
-Two things follow, and they are the ones that transfer:
+Two practical lessons follow:
 
 - **Size the corpus to the pool, not the pool to the machine.** If you have sixteen items,
-  four workers is plenty and eight is theatre. The lever is batching more items per round,
-  not more lanes.
+  four workers were enough in these measurements. Try processing more items per round
+  before adding workers.
 - **The largest item sets a floor you cannot cross.** Here that floor is 21 ms and it is not
   yet binding. If your corpus has one item that is 10x the median, it will be, and no pool
   size fixes it -- you would have to split that item.
 
 :::note
-These numbers come from one thermally-limited laptop, and the per-thread behaviour above
-four workers was not reproducible even on that. Measure on yours; the shape is what
-transfers, not the ratios.
+These numbers come from one thermally limited laptop. Results above four
+workers varied between runs, so measure your own corpus and hardware.
 :::
 
 ## Code
@@ -259,8 +257,8 @@ transfers, not the ratios.
 
 ## When this matters
 
-Document ingestion is the shape here: a pile of files on disk or in a bucket, each needing
-a chain of decompress, parse and extract before anything downstream can use it. Search
+This pattern applies to document ingestion: files on disk or in a bucket that
+need decompression, parsing, and text extraction before further processing. Search
 indexes, RAG pipelines and dataset builds all look like this, and the per-item cost is high
 enough that doing it on the request thread is not an option.
 

@@ -16,14 +16,16 @@ export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
 export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
 export const utils = getCode("data_transforms/salt_hashing/utils.ts");
 
-Derives password hashes with PBKDF2-SHA256 and verifies them with constant-time comparison. This is the heaviest per-call workload in the validation set -- each hash derivation is genuinely CPU-expensive by design (that's the point of PBKDF2).
+This example derives password hashes with PBKDF2-SHA256 and verifies them using
+constant-time comparison. It is the most expensive per-call workload in the
+validation examples because PBKDF2 deliberately requires substantial computation.
 
 ## How it works
 
 1. Generate a random salt per password.
 2. Derive a hash using `PBKDF2-SHA256` via Web Crypto.
-3. Store as a compact record: `algorithm$iterations$keyBytes$salt$hash`.
-4. Verify login attempts by recomputing and constant-time comparing.
+3. Store the result as a compact record: `algorithm$iterations$keyBytes$salt$hash`.
+4. Verify login attempts by recomputing the hash and comparing it in constant time.
 
 The benchmark uses `Uint8Array` payloads to reduce serialization noise in hot loops.
 
@@ -50,7 +52,7 @@ login attempt -> derive again with stored salt -> constant-time compare
 
 That makes the worker boundary simple: small input, small output, expensive CPU work in the middle.
 
-Uses built-in Web Crypto APIs -- no extra crypto package required.
+The example uses built-in Web Crypto APIs, so no extra crypto package is required.
 
 ## Run
 
@@ -81,7 +83,9 @@ Expected output:
 />
 :::
 
-Compares hashing typed-array packets through direct imports (`host`) vs worker task calls (`knitting`). Because PBKDF2 is intentionally slow (high iteration count), this is where workers shine most -- each call does enough real work to easily justify dispatch overhead.
+The benchmark compares hashing typed-array packets through direct imports
+(`host`) with worker task calls (`knitting`). The high PBKDF2 iteration count
+makes dispatch overhead small relative to the work in each call.
 
 ## Code
 
@@ -99,4 +103,6 @@ Compares hashing typed-array packets through direct imports (`host`) vs worker t
 
 ## The ideal offload candidate
 
-Password hashing is one of those tasks where workers are almost always worth it. The work is CPU-bound, each call is independent, the input and output are small, and -- critically -- you *want* it to be slow (high iterations = harder to brute force). That's a perfect storm for offloading: expensive per-call work that would otherwise block your event loop during login/signup spikes.
+Password hashing combines independent calls, small inputs and outputs, and
+substantial CPU work. This makes it a useful workload for comparing host and
+worker execution, especially during bursts of logins or signups.
