@@ -15,7 +15,7 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/gravity/run_tsp.ts");
 export const tsp_gsa = getCode("maths/gravity/tsp_gsa.ts");
 
-## What is this about
+## What is this about?
 
 The Traveling Salesman Problem asks for the shortest route that visits every
 city once and returns to the start. Trying every possible route becomes
@@ -98,7 +98,7 @@ value is an ordinary permutation of city indexes.
 ## CLI knobs
 
 - `--cities` — number of cities; route difficulty grows rapidly.
-- `--restarts` — independent solver runs; usually the easiest quality knob.
+- `--restarts` — independent solver runs; increase this to explore more possible routes.
 - `--population` — agents per restart; more exploration costs more work.
 - `--iterations` — GSA updates per restart; deeper search costs more work.
 - `--threads` — worker count.
@@ -107,6 +107,6 @@ value is an ordinary permutation of city indexes.
 ## Things to try
 
 1. Increase `--restarts` and compare quality per second.
-2. Increase `--cities 64` and watch the problem become harder.
+2. Increase `--cities` to `64` and watch the problem become harder.
 3. Compare four workers with one worker on the same seeded workload.
 4. Change the city distance metric or replace 2-opt with another local search.

@@ -16,11 +16,13 @@ export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
 export const bench = getCode("data_transforms/jwt_revalidation/bench_jwt_revalidation.ts");
 export const utils = getCode("data_transforms/jwt_revalidation/utils.ts");
 
-Verifies JWT signatures with HMAC SHA-256, checks expiry, and optionally reissues tokens -- all using built-in Web Crypto, no external JWT package. This example shows what it looks like to offload auth-related crypto work to a worker pool.
+This example verifies JWT signatures with HMAC SHA-256, checks expiry, and
+optionally reissues tokens in a worker pool. It uses built-in Web Crypto APIs
+without an external JWT package.
 
 ## How it works
 
-The host builds a batch of JWTs (mix of valid and expired). Each job verifies the signature, checks the renewal window (`renewWindowSec`, `renewUntil`), and either returns the validated claims or issues a fresh token. The result comes back as a stringified JSON response -- keeping structured-clone overhead low.
+The host builds a batch containing both valid and expired JWTs. Each job verifies the signature, checks the renewal window (`renewWindowSec`, `renewUntil`), and either returns the validated claims or issues a fresh token. The result comes back as a stringified JSON response -- keeping structured-clone overhead low.
 
 Three files:
 
@@ -58,8 +60,6 @@ The task returns a JSON string. A successful non-renewed response looks like:
 If the token is near expiry but still renewable, the same shape comes back with `renewed: true`
 and a replacement `token`.
 
-Uses built-in Web Crypto APIs -- no extra JWT package required.
-
 ## Run
 
 :::info
@@ -89,8 +89,8 @@ Expected output:
 />
 :::
 
-Compares verify + optional renewal + `JSON.stringify` via direct imports (`host`) against the same
-workload through worker task calls (`knitting`). Batched dispatch keeps the comparison stable.
+The benchmark compares verification, optional renewal, and `JSON.stringify`
+through direct imports (`host`) with the same workload through worker calls (`knitting`). Batched dispatch keeps the comparison stable.
 
 :::note
 Both paths use the same logic. The only variable is whether execution happens on the main thread or in a worker.
@@ -112,4 +112,4 @@ Both paths use the same logic. The only variable is whether execution happens on
 
 ## Why offload JWT work
 
-HMAC verification and key derivation are CPU-bound. On a busy API server handling hundreds of authenticated requests per second, that crypto work competes with route handling on the main thread. Moving it to a pool keeps your event loop responsive -- especially under mixed traffic where some routes are cheap and others hit the auth path hard.
+HMAC verification and key derivation are CPU-bound. On a busy API server handling hundreds of authenticated requests per second, that crypto work competes with route handling on the main thread. Moving it to a pool keeps your event loop responsive -- especially under mixed traffic where some routes are cheap and others do substantial authentication work.

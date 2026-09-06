@@ -22,7 +22,7 @@ tasks.
 
 ## Enable Porffor
 
-Let's say your task module is `tasks.ts`. Knitting will look beside it for two
+If your task module is `tasks.ts`, Knitting will look beside it for two
 files: the compiled program, `tasks.knt`, and its manifest,
 `tasks.knt.json`.
 
@@ -69,7 +69,7 @@ There are two rules worth knowing:
   does not provide them, and some unsupported imports can hang the compiler
   instead of producing a useful error. Plain local modules are fine.
 
-The short version: compiled workers are a good match for focused, synchronous
+Compiled workers are a good match for focused, synchronous
 computation. If a task needs I/O, timers, or the wider Node.js runtime, a
 regular thread or process worker will be a better fit.
 

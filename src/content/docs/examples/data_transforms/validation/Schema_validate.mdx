@@ -1,5 +1,5 @@
 ---
-title: Schema validate
+title: Schema validation
 description: Validate JSON payloads against a Zod schema on workers.
 hero:
   title: 'Validation + parsing'
@@ -16,7 +16,8 @@ export const run = getCode("data_transforms/schema_validate/schema_knitting.ts")
 export const bench = getCode("data_transforms/schema_validate/bench_schema_validate.ts");
 export const utils = getCode("data_transforms/schema_validate/utils.ts");
 
-Parses JSON strings, validates them against a Zod schema, and returns typed results -- either on the main thread or through a Knitting worker pool. If your app already does `JSON.parse` + validation and you want to see what offloading looks like, start here.
+This example parses JSON strings, validates them against a Zod schema, and
+returns typed results on either the main thread or a Knitting worker pool. If your app already does `JSON.parse` + validation and you want to see what offloading looks like, start here.
 
 ## How it works
 
@@ -24,7 +25,7 @@ The host generates JSON strings (some valid, some intentionally broken). Each jo
 
 Three files:
 
-- `schema_knitting.ts` -- runs parse+validate in host and Knitting modes
+- `schema_knitting.ts` -- runs parsing and validation in host and Knitting modes
 - `utils.ts` -- schema logic, payload builders, task exports
 - `bench_schema_validate.ts` -- host-vs-worker benchmark with `mitata`
 
@@ -97,7 +98,8 @@ knitting           6,890      6,100 ... 11,200
 ```
 
 :::note
-Exact numbers depend on your hardware and batch size. The shape of the result -- workers winning on batched validation -- is what matters.
+These results show a speedup for batched validation on the measured setup.
+Compare both paths on your own hardware and batch size.
 :::
 
 ## Code
@@ -116,4 +118,6 @@ Exact numbers depend on your hardware and batch size. The shape of the result --
 
 ## When to use this pattern
 
-Schema validation is a textbook case for worker offloading: each call is independent, the input/output is small, and Zod's internals are CPU-bound (type checking, error formatting). If you're validating hundreds of payloads per second -- API gateway, webhook ingestion, form processing -- batching them through a pool can free your main thread without changing any validation logic.
+Schema validation can work well in a pool: each call is independent, inputs and
+outputs are small in this example, and Zod's type checking and error formatting
+use CPU time. If you're validating hundreds of payloads per second -- API gateway, webhook ingestion, form processing -- batching them through a pool can free your main thread without changing any validation logic.

@@ -9,8 +9,8 @@ sidebar:
 Tasks, typed-array payloads, parallel calls, abort signals, and shutdown all work the
 way they do on Node, Deno, and Bun.
 
-What follows is the part that does not carry over: what a page cannot do, what you see
-when you try, and why.
+This guide covers browser setup, unsupported features, and the errors you may
+encounter.
 
 <div class="browser-page-actions">
   <a class="sl-link-button primary" href="/knitting.js" download="knitting.js">Download Latest Stable Browser Build</a>
@@ -19,8 +19,8 @@ when you try, and why.
 </div>
 
 :::danger
-Do not use this website as a resource. `/knitting.js` is served open
-(`Access-Control-Allow-Origin: *`) so the smoke test can run, not as a CDN. It is
+Host your own copy of `/knitting.js`. This site serves the file with
+`Access-Control-Allow-Origin: *` for the smoke test; it is not a CDN. It is
 unversioned, it changes whenever these docs are rebuilt, and it carries no uptime,
 caching, or integrity guarantees. Download the file or install `knitting` from npm,
 then serve it from your own origin.
@@ -34,7 +34,7 @@ so you can watch the build work before you install anything.
 
 ### Serve the page cross-origin isolated
 
-A browser only hands out `SharedArrayBuffer` when the page arrives with both of these
+The page needs cross-origin isolation to use `SharedArrayBuffer`. Set these
 headers:
 
 ```
@@ -48,8 +48,8 @@ Without them, `createPool` throws before it starts a worker:
 > (Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy:
 > require-corp).
 
-That is the browser's rule, not Knitting's, and there is no way around it. No shared
-memory means no pool.
+Knitting requires shared memory, so the pool cannot start without cross-origin
+isolation.
 
 Turning isolation on affects the whole page, not just Knitting. Every cross-origin
 image, script, or font now needs `Cross-Origin-Resource-Policy` or CORS, or the
@@ -63,10 +63,10 @@ the reason.
 ### Call `setModuleUrl(import.meta.url)` in every task module
 
 A worker has to import the module your tasks live in, so Knitting needs that module's
-URL. On Node, Deno, and Bun it finds the URL by reading the call stack. That does not
-survive a browser: it depends on `Error.prepareStackTrace`, which only V8 provides,
-and a bundler rewrites the paths anyway. So in a browser the module says where it
-lives:
+URL. On Node, Deno, and Bun it finds the URL by reading the call stack. That is not
+reliable in browsers: it depends on `Error.prepareStackTrace`, which only V8 provides,
+and a bundler rewrites the paths anyway. In a browser, register the module URL
+explicitly:
 
 ```js
 import { setModuleUrl, task } from "knitting/browser";
@@ -111,7 +111,7 @@ try {
 }
 ```
 
-The module on the other end names itself the same way:
+The task module also registers its URL:
 
 ```js
 import { setModuleUrl, task } from "./knitting.js";
@@ -123,7 +123,7 @@ export const add = task({
 });
 ```
 
-That is the whole wiring. The page loads `knitting.js` by URL, each task module
+With this setup, the page loads `knitting.js` by URL, each task module
 reports its own URL, and the workers import from there.
 
 ## What a page cannot do

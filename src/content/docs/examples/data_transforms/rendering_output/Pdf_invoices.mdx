@@ -16,7 +16,8 @@ export const bench = getCode("data_transforms/pdf_invoices/bench_invoice_pdf.ts"
 export const render = getCode("data_transforms/pdf_invoices/render_invoice.ts");
 export const fixtures = getCode("data_transforms/pdf_invoices/invoice_fixtures.ts");
 
-Lays out A4 invoices with [`pdf-lib`](https://pdf-lib.js.org/) and returns the finished PDF bytes from a worker. Document generation is the kind of work that is easy to forget about until a billing run lands on the request thread: it is pure CPU, it produces real bytes, and nothing else on the event loop can proceed while it happens.
+This example lays out A4 invoices with [`pdf-lib`](https://pdf-lib.js.org/) and returns the finished PDF bytes from a worker. Generating a batch of documents takes CPU time that can delay other requests
+if the layout work runs on the main thread.
 
 `pdf-lib` is pure JavaScript with no native dependency, so this runs unchanged on Node, Deno and Bun.
 
@@ -35,13 +36,13 @@ Three files:
 
 ## Only a top-level Uint8Array comes back as bytes
 
-This is the constraint the example is built around, and it is worth knowing before you
-design a task that returns binary.
+This is the constraint the example is built around, and it affects how you
+design tasks that return binary data.
 
 A `Uint8Array` returned directly from a task arrives as a `Uint8Array`. The same array
 nested inside an object or an array does not -- it arrives as a plain object with numeric
 keys. There is no error and no warning; the call resolves, and you get something that is
-both useless and much larger than what you sent.
+no longer a typed array and may be much larger than what you sent.
 
 ```ts
 // Fine: arrives as a Uint8Array.
@@ -51,14 +52,15 @@ task<Invoice, Uint8Array>({ f: renderInvoiceHost });
 task<Invoice[], Uint8Array[]>({ f: renderBatch });
 ```
 
-So a batch has to come home as one contiguous buffer. `packDocuments` writes a small
+This example returns each batch as one contiguous buffer. `packDocuments` writes a small
 header -- a `u32` count, then a `u32` length per document -- and concatenates the rest;
 `unpackDocuments` reverses it with `subarray`, so the individual PDFs are views into the
 returned buffer rather than copies.
 
 :::caution
 Check the type of anything binary you get back from a task the first time you write it.
-`result[0] instanceof Uint8Array` is a one-line check that will save you an afternoon.
+`result[0] instanceof Uint8Array` can catch an unexpected object before it reaches
+your PDF-writing code.
 :::
 
 ## Deterministic output
@@ -114,9 +116,9 @@ Because the documents are deterministic, the parity check compares real bytes: t
 ## Do not expect this to scale with cores
 
 `1.6x` from four workers on four cores is a modest return, and raising `threads` does not
-fix it. That is not a knitting limit -- swapping this workload for plain arithmetic through
-the same pool, with the same batching, reached `4.8x` on the same laptop. It is a property
-of the library doing the work.
+fix it. Replacing this workload with plain arithmetic in
+the same pool, with the same batching, reached `4.8x` on the same laptop. This
+suggests that PDF generation is limiting scaling here.
 
 Most of the time here goes into many small `drawText` and `drawLine` calls, each allocating
 as it goes; document creation and font embedding are close to free by comparison. Workloads
@@ -124,17 +126,17 @@ built out of a lot of small allocations tend to flatten out well before they run
 cores, and the [prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting)
 example flattens out for a related reason.
 
-Which means the throughput multiplier is the wrong thing to look at for this one:
+Throughput and request latency tell different parts of the story:
 
-- **On throughput,** `1.6x` is a real but unremarkable win.
-- **On latency,** it is the whole point. Laying out 200 invoices takes the better part of a
+- **Throughput:** the pool completed the batch about `1.6x` faster.
+- **Request latency:** moving layout work off the host frees the request thread. Laying out 200 invoices takes the better part of a
   second, and on the host that is a second in which nothing else is served. Moving it to a
   pool takes it off the request thread entirely, and that is true whether the multiplier is
   `1.6x` or `4x`.
 
 :::note
-Measured on a 4-core laptop with Bun 1.4. Your ratio will differ; the shape -- flat well
-before core count -- is what transfers.
+Measured on a 4-core laptop with Bun 1.4. Measure both throughput and
+request latency on your own hardware.
 :::
 
 ## Code
@@ -155,6 +157,6 @@ before core count -- is what transfers.
 
 Invoices, statements, shipping labels, exam papers, contracts -- anything a product
 generates in bulk on a schedule, or on demand while a user waits. The work is CPU-bound and
-produces bytes you have to hand back, which is exactly the shape a worker pool is for. The
-thing to get right is the return: one contiguous buffer per call, not a structure with
+produces bytes you have to hand back, making it a useful workload for a worker pool. Pay
+attention to the return type: one contiguous buffer per call, not a structure with
 typed arrays buried inside it.

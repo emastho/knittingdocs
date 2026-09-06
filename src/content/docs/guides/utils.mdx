@@ -22,8 +22,8 @@ import {
 ```
 
 All functions accept `ArrayBuffer`, `SharedArrayBuffer`, or any typed-array
-view as input (`BufferLike`). Encode functions return `SharedArrayBuffer` so
-the result can be handed to a worker payload or stored in shared memory without
+view as input (`BufferLike`). Encoding functions return `SharedArrayBuffer` so
+the result can be used in a worker payload or stored in shared memory without
 an extra copy.
 
 ---

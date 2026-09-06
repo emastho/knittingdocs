@@ -10,19 +10,21 @@ const { caption = "" } = Astro.props as {
 // Server-rendered first frame (plain text). The client script takes over and
 // re-renders it with highlighting the moment it boots.
 const firstFrame = [
+  'import { serve } from "@hono/node-server";',
+  'import { Hono } from "hono";',
   'import { createPool, isMain } from "knitting";',
   "",
-  'export const countWords = (text: string) => {',
-  '  return text.match(/\\S+/g)?.length ?? 0;',
-  '};',
+  'export const double = (n: number) => n * 2;',
   "",
   "if (isMain) {",
-  "  using pool = createPool({",
+  "  const pool = createPool({",
   "    threads: 1,",
-  "  })({ countWords });",
+  "  })({ double });",
   "",
-  '  const text = "workers keep apps responsive";',
-  '  console.log(await pool.call.countWords(text));',
+  '  const app = new Hono().get("/", async (c) =>',
+  "    c.json({ result: await pool.call.double(21) })",
+  "  );",
+  "  serve({ fetch: app.fetch, port: 3000 });",
   "}",
 ].join("\n");
 ---
@@ -31,15 +33,15 @@ const firstFrame = [
   <div class="pc-win">
     <div class="pc-bar">
       <span class="pc-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="pc-name">pool.ts</span>
+      <span class="pc-name">server.ts</span>
     </div>
 
     <div class="pc-body">
       <div class="pc-pane pc-pane--code">
         <pre class="pc-code"><code data-code>{firstFrame}</code></pre>
         <div class="pc-out" data-out>
-          <div><span class="pc-prompt">❯</span> bun run pool.ts</div>
-          <div class="pc-out-res">4</div>
+          <div><span class="pc-prompt">❯</span> bun run server.ts</div>
+          <div class="pc-out-res">&#123; result: 42 &#125;</div>
         </div>
       </div>
 
@@ -48,7 +50,7 @@ const firstFrame = [
           <span class="pc-k">host</span>
           <span class="pc-v">bun · main thread</span>
         </div>
-        <div class="pc-call"><code>await <span class="pc-call-fn">pool.call.countWords</span><span class="pc-call-punc">(</span>text<span class="pc-call-punc">)</span></code></div>
+        <div class="pc-call"><code>await <span class="pc-call-fn">pool.call.double</span><span class="pc-call-punc">(</span>21<span class="pc-call-punc">)</span></code></div>
         <div class="pc-link"><span data-bridge-label>shared memory</span></div>
         <div class="pc-workers" data-workers></div>
         <p class="pc-note" data-note>same process, shared memory</p>
@@ -76,20 +78,22 @@ const firstFrame = [
     if (!roots.length) return;
 
     const BASE_HEAD = [
+      'import { serve } from "@hono/node-server";',
+      'import { Hono } from "hono";',
       'import { createPool, isMain } from "knitting";',
       "",
-      'export const countWords = (text: string) => {',
-      '  return text.match(/\\S+/g)?.length ?? 0;',
-      '};',
+      'export const double = (n: number) => n * 2;',
       "",
       "if (isMain) {",
-      "  using pool = createPool({",
+      "  const pool = createPool({",
     ];
     const BASE_TAIL = [
-      "  })({ countWords });",
+      "  })({ double });",
       "",
-      '  const text = "workers keep apps responsive";',
-      '  console.log(await pool.call.countWords(text));',
+      '  const app = new Hono().get("/", async (c) =>',
+      "    c.json({ result: await pool.call.double(21) })",
+      "  );",
+      "  serve({ fetch: app.fetch, port: 3000 });",
       "}",
     ];
 

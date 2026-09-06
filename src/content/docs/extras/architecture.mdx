@@ -5,14 +5,17 @@ sidebar:
   order: 7
 banner:
   content: |
-    A simplified mental model — plenty of real-world detail is left out for the sake of sanity.
+    A simplified overview of the runtime. Implementation details and platform-specific cases are omitted.
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-This page follows one `call.myTask(args)` from your code down to shared memory and back. You don't need any of it to *use* Knitting -- the [Quick start](/start/quick-start/) and [Creating pools](/guides/creating-pools/) guides have you covered -- but it helps when you are curious why things are fast, chasing a strange bug, or reaching for the advanced knobs.
+This page follows one `call.myTask(args)` from your code through shared memory
+and back. It explains the design behind performance, scheduling, and advanced
+options. For everyday usage, see [Quick start](/start/quick-start/) and
+[Creating pools](/guides/creating-pools/).
 
-The real implementation has many more moving parts -- fast paths, edge cases, platform quirks -- left out here so the big picture stays readable. Take the numbers and steps below as the shape of things rather than a contract.
+The real implementation has many more moving parts -- fast paths, edge cases, platform quirks -- left out here so the big picture stays readable. The numbers and steps below illustrate the design rather than define an API contract.
 
 ## High-level picture
 
@@ -249,7 +252,7 @@ Once the handler has picked a lane, that lane's **tx-queue** drives the round tr
 2. **Host tx-queue:** encodes the call header + payload into a free request slot. (`[1, 2]` is a small tuple, so it takes the static-payload path at a known offset.)
 3. **Host tx-queue:** toggles `hostBits` to publish the slot.
 4. **Worker loop:** had been spinning, then parked on the signal word. The signal word changed, so it wakes.
-5. **Worker loop:** decodes the args and runs the task fn -- `([a, b]) => a + b` returns `3`.
+5. **Worker loop:** decodes the arguments and runs the task function -- `([a, b]) => a + b` returns `3`.
 6. **Worker loop:** writes the result into a response slot and toggles `workerBits` to publish.
 7. **Host:** drains the result from shared memory and toggles its bit to release the slot.
 8. **Host:** resolves (or rejects) the `Promise` returned in step 1.
@@ -274,8 +277,8 @@ If the task throws, step 6 writes an error result instead, and step 8 rejects th
 
 ### Shutdown
 
-A `using` pool shuts down on its own when the scope ends. Calling `shutdown()`
-yourself runs the same teardown -- just earlier, the moment you ask for it.
+A pool declared with `using` shuts down when its scope ends. Calling
+`shutdown()` directly runs the same teardown at the time you choose.
 Either way:
 
 1. `shutdown()` signals all workers to stop.
@@ -308,7 +311,10 @@ Payload buffers grow on demand up to `payloadMaxByteLength` if the runtime suppo
 
 ## Safety layers
 
-Workers run code the host may or may not trust, so isolation is a dial, not a switch. Knitting stacks four independent layers -- cheapest and softest first, costliest and hardest last. They compose: trusted local tasks can stop at Layer 1, while an untrusted plugin can be pushed all the way to a sandboxed process. This is defence in depth; no single layer is assumed sufficient on its own.
+Knitting provides four layers of protection, from guards inside a worker to
+an OS sandbox around a separate process. You can combine them according to the
+task’s access needs and how much you trust its code. These layers provide
+defence in depth; no single layer is assumed sufficient on its own.
 
 <svg role="img" aria-label="The four safety layers, from in-process guards to a full OS sandbox" viewBox="0 0 1000 124" width="100%" style="max-width: 920px; height: auto; display: block; margin: 1.25rem auto;" font-family="var(--sl-font, system-ui, sans-serif)" fill="currentColor">
   <defs>
@@ -340,8 +346,8 @@ Workers run code the host may or may not trust, so isolation is a dial, not a sw
   <line x1="778" y1="60" x2="800" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#safety-arrow)" />
 </svg>
 
-- **Layer 1 -- in-process guards (always on).** Before any task module loads, the worker neutralizes the most dangerous calls: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are redefined to throw, and the raw shared-memory handles are scrubbed from the data object visible to task code. Cheap, but a guardrail against accidental misuse -- not a wall against a hostile co-resident.
-- **Layer 2 -- bootstrap hook.** `worker.bootstrap` runs a privileged module once per worker, *before* task imports -- the right place to strip env vars, install your own guards, or freeze globals.
+- **Layer 1 -- in-process guards (always on).** Before any task module loads, the worker neutralizes the most dangerous calls: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are redefined to throw, and the raw shared-memory handles are scrubbed from the data object visible to task code. These guards help prevent accidental misuse; they do not contain hostile code running in the same process.
+- **Layer 2 -- bootstrap hook.** `worker.bootstrap` runs a privileged module once per worker, *before* task imports -- use it to remove environment variables, install your own guards, or freeze globals.
 - **Layer 3 -- runtime permissions (strict by default).** The policy is translated into each runtime's native enforcement (Deno's permission flags, Node's permission model, Bun's equivalents), so the boundary is the runtime's, not a library check task code could bypass.
 - **Layer 4 -- process + real sandbox.** The only OS-enforced boundary: `worker.runtime: "process"`, optionally launched through `bwrap`, Docker, or `systemd-run` via `processCommandPrefix`. Pair it with `importTask` so the isolated code never loads in the host at all.
 

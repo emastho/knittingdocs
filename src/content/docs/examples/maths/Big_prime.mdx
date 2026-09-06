@@ -15,7 +15,7 @@ import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 export const run = getCode("maths/big_prime/run_prime.hunt.ts");
 export const prime_scan = getCode("maths/big_prime/prime_scan.ts");
 
-## What is this about
+## What is this about?
 
 This example searches a seeded region of large odd integers for a probable
 prime. Each candidate is checked with the Miller–Rabin primality test, and the
@@ -72,7 +72,7 @@ signal, as well as your runtime, CPU, and worker count.
 - Task payloads are strings and numbers, so BigInt conversion stays inside the worker.
 - Abort-aware tasks stop wasted BigInt work as soon as another worker finds a result.
 - A finite region keeps the no-hit case safe and testable.
-- The same shape scales from a quick 64-bit demo to a much larger search.
+- The same pattern scales from a quick 64-bit demo to a much larger search.
 
 ## Code
 

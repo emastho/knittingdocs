@@ -109,7 +109,7 @@ as they become free. Responses still use private return lanes, so the task API
 and promise behavior do not change.
 
 This helps most when many CPU-bound calls compete for workers and task durations
-are uneven. It is unlikely to be the main lever for tasks that mostly wait on
+are uneven. It is unlikely to help much with tasks that mostly wait on
 databases, networks, or other external I/O. Set `host.steal: false` for a
 private-lane baseline, or tune `host.stealRegionLanes` for the workload:
 
@@ -206,8 +206,8 @@ app.post("/jwt", async (c) => {
 });
 ```
 
-The promise itself is not faster. The benefit is that the request thread can
-hand the body to Knitting immediately:
+Knitting awaits the body promise on the host before dispatch. Passing it
+directly simplifies the handler while keeping decoding and parsing in the worker:
 
 - `c.req.arrayBuffer()` already returns a promise, so forwarding it skips an
   `await` in the handler.

@@ -17,7 +17,9 @@ export const bench = getCode("data_transforms/prompt_token_budgeting/bench_promp
 export const budget = getCode("data_transforms/prompt_token_budgeting/token_budget.ts");
 export const fixtures = getCode("data_transforms/prompt_token_budgeting/prompt_fixtures.ts");
 
-Shapes LLM prompts to fit within a token budget before they hit the API. Uses `tiktoken` for token counting, drops the oldest conversation turns first, and clips the query only if dropping every turn still is not enough. The budgeting logic is model-agnostic -- the example targets `gpt-4o-mini` as the tokenizer, but the pattern is the same for any model with an input limit.
+This example trims LLM prompts to fit a token budget before an API call. It
+counts tokens with `tiktoken`, drops the oldest conversation turns first, and
+shortens the query only if removing every turn is still not enough. The budgeting logic is model-agnostic -- the example uses the tokenizer for `gpt-4o-mini`, but the pattern is the same for any model with an input limit.
 
 :::note
 This example never calls an LLM. It only builds prompts and counts tokens, so `tiktoken` is the
@@ -75,7 +77,7 @@ Output shape:
 
 The useful part is not just the final `prompt`. You also get the bookkeeping needed to explain
 why a prompt was trimmed and by how much -- which turns were dropped, whether the query itself
-had to be clipped, and how much of the budget the fixed prefix is eating.
+had to be clipped, and how much of the budget the fixed prefix uses.
 
 ## Run
 
@@ -108,9 +110,8 @@ One request, in detail:
   47 of those tokens are the fixed prefix
 ```
 
-Pick a budget that actually bites. A limit no prompt ever reaches costs you the tokenization
-work and changes nothing, and it makes the example look like it works when it has never once
-taken a decision.
+Choose a budget that some sample prompts exceed. Otherwise, the example only
+measures token counting and never exercises the trimming logic.
 
 ## Optional benchmark
 
@@ -121,7 +122,7 @@ taken a decision.
 />
 :::
 
-Compares budgeting throughput on the host against the same work on workers. Batches are sent
+The benchmark compares budgeting throughput on the host with the same work on workers. Batches are sent
 through `summarizeBatch`, so only counters come back, never prompt strings.
 
 ```
@@ -145,40 +146,35 @@ summary
 
 ## Why more workers make this slower
 
-Every other example on this site gets faster as you add workers, up to your core
-count. This one does not, and it is worth knowing why before you copy the config.
+This workload stops getting faster after a few workers. The measurements below
+show why choosing a pool size requires more than counting cores.
 
 On a 4-core laptop the best setting measured here was **three workers plus the
-inliner** -- four lanes for four cores -- at roughly `3x`. Past that it goes
-backwards: eight workers measured consistently slower than three or four. One
-worker is not worth having at all; it lands within noise of just doing the work
-on the host.
+inliner** -- four lanes for four cores -- at roughly `3x`. Beyond that, performance drops: eight workers measured consistently slower than three or four. One
+worker performed about the same as the host, within measurement noise.
 
-The limit is not knitting and not the machine. Swapping the tokenizer for plain
-arithmetic, through the same pool with the same batching, scaled to `4.8x` at
-eight threads on the same laptop. The tokenizer is what refuses to scale.
+With plain arithmetic in place of tokenization, the same pool and batching
+reached `4.8x` at eight threads on the same laptop. This suggests that the
+tokenizer is limiting scaling in this workload.
 
 The reason is that `tiktoken` is a WASM module with a large BPE table, and every
 worker instantiates **its own copy**. Resident memory here went from 67 MB at
 baseline to 630 MB with eight workers -- roughly 55-60 MB per worker. Those
-tables do not share, and they are far bigger than the CPU cache they are
-competing for, so past a handful of workers you are buying cache pressure
-instead of throughput.
+tables are not shared and exceed the available CPU cache. Adding workers can
+therefore increase cache pressure without improving throughput.
 
 Two practical consequences:
 
 - **Size the pool for the tokenizer, not for `os.cpus().length`.** Start at 2-4
-  lanes and measure. This is the one example here where the inliner is worth
-  keeping -- it adds a lane without adding another encoder-sized worker.
+  lanes and measure. The inliner helped in this benchmark -- it adds a lane without adding another encoder-sized worker.
 - **Keep many more batches than lanes.** Batching amortizes dispatch, but one
   giant batch per lane cannot rebalance. At 1,000 requests in batches of 250 the
   pool measured *slower than the host* (`0.81x`); the same work in batches of 32
   was the fastest setting tried.
 
 :::note
-These ratios come from one thermally-limited laptop and will not transfer.
-The shape is what transfers: flat past a few workers, and a real memory cost per
-worker that a CPU-bound example would not have.
+These ratios were measured on one thermally limited laptop. On your own
+machine, check both throughput and memory use as you add workers.
 :::
 
 ## Code
@@ -205,5 +201,3 @@ the thread you most want free. On a busy chat service -- many users, long histor
 enough to add latency to requests that are otherwise just waiting on the model. Moving it to a
 pool keeps the main thread on routing and I/O, and gives you predictable input sizes, which is
 what makes cost per request predictable too.
-
-Just size the pool for the tokenizer, not for your core count.

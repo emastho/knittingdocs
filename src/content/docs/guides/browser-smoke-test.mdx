@@ -8,11 +8,11 @@ pagefind: false
 
 import BrowserKnittingDebug from "../../../components/BrowserKnittingDebug.astro";
 
-This page runs the browser build in your own browser, right now. It loads
+This page tests the browser build in your browser. It loads
 `/knitting.js`, imports a task module that uses both `task()` and `importTask()`,
-starts one-thread pools, and puts real calls through each of them.
+starts single-worker pools, and calls a task in each pool.
 
-The check runs on its own when the page loads. For what the build can and cannot do,
+The check runs automatically when the page loads. For what the build can and cannot do,
 read [Browser](/guides/browser/).
 
 <BrowserKnittingDebug />

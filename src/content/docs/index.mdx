@@ -39,11 +39,11 @@ import { getCode } from "../../lib/code-snippets";
 
 export const homeUrl = (path) => `${import.meta.env.BASE_URL.replace(/\/$/, "")}${path}`;
 
-export const quickStart = getCode("home_word_count.ts");
+export const quickStart = getCode("home_hono_compress.ts");
 
-export const install = `npm install knitting
-deno add --npm knitting
-bun add knitting`;
+export const install = `npm install hono @hono/node-server knitting
+deno add --npm hono @hono/node-server knitting
+bun add hono @hono/node-server knitting`;
 
 <div data-knit-home-marker hidden></div>
 
@@ -60,7 +60,7 @@ bun add knitting`;
   <div class="kh-hero-grid">
     <div class="kh-hero-copy" data-reveal>
       <h1 id="kh-hero-title">Move JavaScript<br /> <span>off the main thread.</span></h1>
-      <p class="kh-hero-lede">Knitting runs your functions in workers and gives you a typed promise back. Keep CPU-heavy work from holding up the rest of your application, in Node.js, Deno, or Bun.</p>
+      <p class="kh-hero-lede">Knitting runs your functions in workers and returns a typed promise. Keep CPU-heavy work from holding up the rest of your application, in Node.js, Deno, or Bun.</p>
     </div>
 
     <div class="kh-hero-bottom" data-reveal>
@@ -117,8 +117,8 @@ bun add knitting`;
   <section class="kh-section kh-start" data-reveal aria-labelledby="kh-start-title">
     <div class="kh-section-intro kh-section-intro--center">
       <p class="kh-kicker">Start small</p>
-      <h2 id="kh-start-title">You already know how to write the task.</h2>
-      <p>Export a function, add it to a pool, and await the result. These tiny tasks show the API; in your application, use it for work that takes enough CPU time to justify the trip to a worker.</p>
+      <h2 id="kh-start-title">Move response processing into a worker.</h2>
+      <p>This Hono route sends HTML to a Knitting worker for Brotli compression and returns the size. Swap <code>compress</code> for your renderer or transform.</p>
     </div>
 
     <div class="kh-start-grid">
@@ -136,22 +136,22 @@ bun add knitting`;
         <li>
           <span>01</span>
           <div>
-            <strong>Export the task</strong>
-            <p>Workers re-import this module. Export your functions and keep host setup inside <code>isMain</code>.</p>
+            <strong>Export the work</strong>
+            <p>Export your renderer, compressor, or transform at the top level of its module.</p>
           </div>
         </li>
         <li>
           <span>02</span>
           <div>
             <strong>Create the pool</strong>
-            <p>Choose threads for speed or processes for stronger isolation.</p>
+            <p>One thread is enough for the demo; size the pool from your measurements.</p>
           </div>
         </li>
         <li>
           <span>03</span>
           <div>
-            <strong>Call it like any function</strong>
-            <p>The result is a promise. Errors come back as standard <code>Error</code> objects.</p>
+            <strong>Await it in Hono</strong>
+            <p>A pool call returns a promise, so the route can await its result like any other async function.</p>
           </div>
         </li>
       </ol>
@@ -175,7 +175,7 @@ bun add knitting`;
     <div class="kh-server-proof-copy">
       <p class="kh-kicker">What changes in a server?</p>
       <h2 id="kh-server-proof-title">Keep fast routes fast.</h2>
-      <p>A fast route can still wait behind expensive work. In this Hono benchmark, moving React SSR and JWT into a worker brought <code>/ping</code> p99 from 16.93 ms to 2.31 ms at 6,000 requests per second. The ping route never used the pool, and both configurations used about 1.1 CPU cores.</p>
+      <p>A fast route can still wait behind expensive work. In this Hono benchmark, moving React rendering and JWT signing into a worker brought <code>/ping</code> p99 from 16.93 ms to 2.31 ms at 6,000 requests per second. The ping route never used the pool, and both configurations used about 1.1 CPU cores.</p>
       <p class="kh-benchmark-caveat">These were 15-second runs of one workload. They show what changed here; measure your own routes before choosing a pool size.</p>
       <div class="kh-server-proof-links">
         <a href={homeUrl("/examples/data_transforms/rendering_output/hono_server/")}>
@@ -204,7 +204,7 @@ bun add knitting`;
         <div class="kh-feature-icon" aria-hidden="true">↔</div>
         <p class="kh-feature-label">Large inputs</p>
         <h3>Avoid copying buffers when you can.</h3>
-        <p>Start with ordinary values. When copying large buffers becomes a bottleneck, use shared memory or a buffer reference suited to your worker boundary. You can also pass a promise directly into a call.</p>
+        <p>Start with ordinary values. When copying large buffers becomes a bottleneck, use shared memory or a buffer reference supported by your worker type. You can also pass a promise directly into a call.</p>
         <ul class="kh-chip-list" aria-label="Call and payload features">
           <li>Promise inputs</li>
           <li>SharedArrayBuffer</li>

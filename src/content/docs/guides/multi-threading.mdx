@@ -7,7 +7,7 @@ sidebar:
 
 import HonoCpuEfficiency from '../../../components/HonoCpuEfficiency.astro';
 
-Moving work into a worker does not remove it from the host. Only the task body
+Moving a task into a worker still leaves coordination work on the host. Only the task body
 leaves the request thread: the host still accepts the request, routes it,
 encodes the arguments, submits the call, receives the result, and writes the
 response. All of that costs CPU, so pick a worker count that leaves room for
@@ -23,7 +23,7 @@ it.
 | Mostly network, database, or filesystem work | Keep it async; do not add workers just for I/O | A worker does not make an external dependency faster. |
 
 Treat these as places to start. Task duration, payload size, request rate, and
-the runtime itself all move the answer.
+the runtime itself all affect the right worker count.
 
 ## A server starting point
 
@@ -49,7 +49,7 @@ and its [16-core measurements](/documents/hono-16core-benchmark.md).
 
 ## When a second worker helps
 
-A second worker earns its place when heavy calls are queueing behind the first
+A second worker helps when heavy calls are queueing behind the first
 one and the host still has CPU to spare. Each worker you add competes with the
 host for cores and brings its own scheduling, memory, and result draining.
 
@@ -59,10 +59,10 @@ they could not make the host a faster producer, and that is what a saturated
 run measures. This is the usual outcome when a single event loop feeds the
 pool.
 
-Past one compatible worker, [native work stealing](/guides/work-stealing/) is
+In compatible pools with more than one worker, [native work stealing](/guides/work-stealing/) is
 automatic. Workers pull from shared work instead of each sitting on a private
-backlog, so whichever one is free takes the next task. That evens out uneven
-task durations. The host-side cost stays where it is.
+backlog, so whichever one is free takes the next task. That helps balance tasks with different
+durations. The host-side cost stays where it is.
 
 ## What a worker does when it runs out of work
 
@@ -109,20 +109,20 @@ requires the regular doorbell, and does not apply to process workers.
 Each bar is total server CPU divided by completed requests under saturating
 mixed Hono load, so a shorter bar leaves more CPU for the host and for
 everything else on the machine. One worker is the efficient point for this
-workload: 100 CPU-µs per request at 18,014 RPS. A larger pool can still be the
-right call if what you are buying with that CPU is tail latency.
+workload: 100 CPU-µs per request at 18,014 RPS. A larger pool can still be useful
+if lower tail latency is worth the extra CPU cost.
 
-Read those bars knowing that nothing above one worker is saturated here. The
+In these measurements, pools with more than one worker are not saturated. The
 host is the only producer, so the extra workers spend most of their time
 waiting for a call that may never arrive. A pool that spun through that wait
 would look busy without being useful: at fifteen workers, the old 750 µs spin
 budget burned 6.4 idle cores and 954 CPU-µs per request to serve fewer requests
-than the current policy serves at 236. The bars stay short because a worker
-with nothing to do parks instead of billing the machine for waiting.
+than the current policy serves at 236. Parking idle workers keeps
+that CPU cost down.
 
 ## Measure the choice
 
-Two runs per candidate thread count are enough:
+Measure each candidate thread count under two types of load:
 
 1. **Saturating mixed load** shows the ceiling, and whether cheap endpoints are
    still delayed by expensive ones.

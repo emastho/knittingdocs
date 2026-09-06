@@ -5,15 +5,14 @@ sidebar:
   order: 2
 ---
 
-`createPool(options)(tasks)` starts the worker threads and hands back three
-things:
+`createPool(options)(tasks)` starts the workers and returns a pool with:
 
 - `call.<task>(args)` enqueues a task and returns a promise.
 - `shutdown(delayMs?)` stops the workers, either now or after a delay.
 - `[Symbol.dispose]`, which is what lets a `using` declaration close the pool
   when its scope ends.
 
-Reach for `using pool = createPool(...)({ ... })` and let the pool close itself.
+Use `using pool = createPool(...)({ ... })` to close the pool automatically.
 `await pool.shutdown()` is for the cases `using` cannot cover: closing **before**
 the scope ends, awaiting teardown, or running where `using` does not exist.
 
@@ -135,7 +134,7 @@ Borrowed argument bytes must be consumed before the task's first suspension
 point, and the host must keep only a few calls in flight at a time -- the submit
 arena is recycled, so over-allocating corrupts in-flight arguments silently. See
 [Shared memory](/guides/shared-memory/#shared-byte-arguments-and-returns) before
-reaching for it. For borrowed worker returns, enable `unsafe.SharedBytes` and use
+using this option. For borrowed worker returns, enable `unsafe.SharedBytes` and use
 `sharedBytes()` from `knitting/unsafe`; see [Buffer reference](/guides/buffer-reference/)
 for its lifetime rules. Both unsafe options are disabled by default.
 
@@ -167,9 +166,9 @@ Picks how the shared buffer is allocated:
   `payloadMaxByteLength`.
 - `"fixed"`: allocates `payloadMaxByteLength` at startup and stays that size.
 
-Growable is the default wherever growable `SharedArrayBuffer`s exist, fixed
-everywhere else. Asking for `"growable"` on a runtime without them gets you
-`"fixed"` regardless — the request is downgraded, not refused.
+The default is `"growable"` when the runtime supports growable
+`SharedArrayBuffer`s, and `"fixed"` otherwise. If you request `"growable"` on an
+unsupported runtime, Knitting falls back to `"fixed"`.
 
 ### payloadMaxByteLength
 
@@ -185,9 +184,9 @@ to `payloadMaxByteLength`; fixed mode ignores it and allocates the full
 
 A hard ceiling on any one dynamically encoded payload. Must be `> 0` and
 `<= payloadMaxByteLength >> 3`, which is also the default (`8 MiB` with
-everything else left alone).
+the default settings).
 
-Go over it and the call is rejected with `KNT_ERROR_3`, before a slot is even
+Calls that exceed this limit are rejected with `KNT_ERROR_3` before a slot is
 reserved.
 
 In `"fixed"` mode a payload can sit under the cap and still not fit what is left
@@ -202,8 +201,8 @@ allowance.
 
 ## abortSignalCapacity
 
-How many abort-aware calls the pool can track at once, default `258`. It only
-matters if a task declares `abortSignal` in the first place.
+How many abort-aware calls the pool can track at once, default `258`. It applies only
+when at least one task declares `abortSignal`.
 
 Only tasks defined with `abortSignal: true` or
 `abortSignal: { hasAborted: true }` count against the limit.
@@ -273,8 +272,8 @@ See [Inliner guide](/guides/inliner) for detail.
 `"thread"` (default) runs workers as runtime-local threads — the lowest-overhead
 option. `"process"` runs each worker as a separate OS process for stronger
 isolation, and unlocks `processRuntime`, `processCommandPrefix`, and
-`processSharedMemory`. See [Process workers](/guides/process-workers) for the
-full story — sandboxes, containers, and the stdin / fd-0 handshake.
+`processSharedMemory`. See [Process workers](/guides/process-workers) for
+sandbox and container configuration, including the stdin / fd-0 handshake.
 
 `"compiled"` builds the task module into a native executable with Porffor and
 runs that as a child process. It is experimental, and supports a smaller feature
@@ -302,8 +301,8 @@ What a worker does while it has nothing to run:
 
 ### hardTimeoutMs
 
-A wall-clock timeout on every task call. Tripping it shuts the whole pool down,
-which is the only way to stop a worker already burning CPU in a tight loop.
+A wall-clock timeout on every task call. When it expires, Knitting shuts down
+the whole pool, stopping even a worker stuck in a tight CPU loop.
 
 ### resourceLimits
 
@@ -443,7 +442,7 @@ Deprecated alias of `host`.
 
 Streams diagnostics to **stderr**, each line tagged with the worker (`host`, or
 `w0`, `w1`, … for the thread/process workers), the runtime, and a millisecond
-timer relative to when that worker's debug initialised. Pass `true` to enable
+timer measured from when diagnostics were initialized for that worker. Pass `true` to enable
 everything, or turn on individual namespaces:
 
 - `host`: host-side pool setup — cwd and caller, each registered task, runtime /
@@ -456,9 +455,8 @@ everything, or turn on individual namespaces:
 
 Enable the same namespaces without touching code through the `KNITTING_DEBUG`
 environment variable — a comma-separated list (`KNITTING_DEBUG=host,imports`) or
-`*` for all. The option and the env var merge; either one can turn a namespace
-on. Debug is zero-cost when off: with no namespace active, the logger module is
-never even imported.
+`*` for all. The option and the environment variable are merged; either can enable a
+namespace. When no namespace is active, the logger module is not imported.
 
 ## source
 
@@ -468,4 +466,4 @@ for you.
 ## Limits
 
 One pool holds up to **65,536 tasks** — function IDs are `Uint16`, so the range
-is `0..0xFFFF`. Hand it more than that and you get a `RangeError`.
+is `0..0xFFFF`. Registering more than that throws a `RangeError`.

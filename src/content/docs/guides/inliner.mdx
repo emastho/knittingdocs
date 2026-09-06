@@ -7,8 +7,8 @@ sidebar:
 
 The `inliner` option adds the host (main thread) as one extra lane in the pool.
 Instead of sending everything to workers, the host participates in execution
-too -- useful when every task is pure computation and you want to squeeze one
-more core out of the machine.
+too -- useful when every task is pure computation and you want the host core to help
+process it.
 
 ```ts
 const pool = createPool({
@@ -24,10 +24,10 @@ Use it to complement workers, not to avoid them.
 
 ## When to use it
 
-The inliner shines for **math and pure-compute workloads** that run on the host
+The inliner works well for **math and pure-compute workloads** that run on the host
 without touching the network or filesystem:
 
-- Number crunching, scoring, hashing, matrix ops.
+- Number crunching, scoring, hashing, and matrix operations.
 - Batch transforms over arrays of primitives.
 - Short, synchronous functions where IPC overhead matters more than the work itself.
 - Bursty queues where one extra lane helps drain work faster.
@@ -63,7 +63,7 @@ This delay is intentional: by that point, the dispatcher has had a chance to
 send/receive worker tasks first, then the host drains inline work.
 
 `batchSize` controls how many inline tasks run per macro-queue turn.
-For compute workloads, higher values let the host churn through more work
+For compute workloads, higher values let the host process more work
 per tick without yielding back to the event loop unnecessarily.
 
 ## Options
@@ -110,8 +110,8 @@ Minimum in-flight calls before the inline lane becomes eligible for scheduling.
 - Higher values -- host lane stays excluded until concurrency rises past the
   threshold, then joins to help drain the burst.
 
-This is a pressure-relief valve: at low concurrency, workers handle everything;
-once a burst builds up, the host pitches in.
+At low concurrency, workers handle all calls. Once concurrency reaches the
+threshold, the host also runs tasks.
 
 ## Exact behavior
 

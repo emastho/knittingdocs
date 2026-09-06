@@ -16,12 +16,12 @@ export const server = getCode("data_transforms/hono_server/hono_knitting.ts");
 export const renderSsrPage = getCode("data_transforms/hono_server/hono_componets_ssr.tsx");
 export const issueJwt = getCode("data_transforms/hono_server/hono_components_jwt.ts");
 
-## What is this about
+## What is this about?
 
-This example builds a small Hono API with 3 routes:
+This example builds a small Hono API with three routes:
 
 1. `GET /ping` for health checks.
-2. `POST /ssr` to SSR a user card.
+2. `POST /ssr` to render a user card as HTML.
 3. `POST /jwt` to issue a valid signed JWT for a user.
 
 This example is split into three files:
@@ -35,8 +35,8 @@ This example is split into three files:
 - **Hono**: a small, fast routing layer. It keeps the request path minimal so most overhead is in your actual route work.
 - **`@hono/node-server`**: a thin adapter that runs a Hono `fetch` handler on Node/Bun.
 - **React SSR (`react-dom/server`)**: renders a tiny HTML page for `/ssr` so you can simulate CPU-heavy server work.
-- **`hono/jwt`**: signs a JWT (HS256) for `/jwt` so the example includes common auth-like CPU work.
-- **Knitting (`knitting`)**: runs selected transforms in a worker pool (threads). This is the core “offload expensive work” technique the example demonstrates.
+- **`hono/jwt`**: signs a JWT (HS256) for `/jwt` so the example includes CPU work typical of authentication routes.
+- **Knitting (`knitting`)**: runs selected transforms in a worker pool (threads). This keeps expensive route work off the request thread.
 
 The JWT route uses `hono/jwt` and signs with HS256.
 Set `JWT_SECRET` in production.
@@ -116,11 +116,11 @@ One worker, with each route offered `2,000 rps`.
 ### CPU cost at the fixed load
 
 The latency improvement did not come from doing materially more CPU work. The
-host-only server used `1.08` server-process cores. The canonical one-worker run
+host-only server used `1.08` server-process cores. The primary one-worker run
 used `1.10`, and an equivalent repeat of the same one-worker configuration used
 `1.06`.
 
-Read those measurements as approximately `1.1` cores for both shapes, not as a
+Read those measurements as approximately `1.1` cores for both configurations, not as a
 meaningful difference between `1.08` and `1.10`. The SSR and JWT computation
 does not disappear when it moves to the worker. Knitting keeps the transport,
 waiting, and coordination cost low enough that the same work costs about the

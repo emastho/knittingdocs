@@ -14,11 +14,9 @@ Knitting has two independent host-side scheduling features:
   runtimes can arm an asynchronous waiter instead of repeatedly polling the
   response mailbox.
 
-Both exist for the same reason. Threading in JavaScript usually buys its
-throughput with CPU, and Knitting is built to keep that bill small: a worker
-with nothing to claim parks instead of spinning, and a host with nothing to
-drain waits on the doorbell instead of polling. An idle thread should cost
-close to nothing. [Multi-threading](/guides/multi-threading/) shows what that
+Both features reduce CPU time spent waiting. A worker with no available work
+parks instead of spinning, and a host with no results to collect waits on the
+doorbell instead of polling. This keeps idle CPU use low. [Multi-threading](/guides/multi-threading/) shows what that
 looks like in measurements.
 
 Neither feature changes the task API. Tasks are still exported functions or
@@ -98,7 +96,7 @@ Use a positive power of two. Knitting chooses the widest valid region by
 default, leaving a spare region alongside the worker claimants. Wider regions
 amortise arbitration and suit many cheap, similarly sized calls. Narrower
 regions expose more independent work and suit expensive or uneven calls. This
-is a throughput/load-balancing knob, not a correctness knob.
+setting affects throughput and load balancing, but not correctness.
 
 ### `stealClaim`
 
@@ -121,7 +119,7 @@ using pool = createPool({
 ```
 
 The environment variable `KNITTING_STEAL_CLAIM` accepts the same two values.
-An explicit `host.stealClaim` wins over the environment. The discipline also
+An explicit `host.stealClaim` takes precedence over the environment variable. The discipline also
 sets the maximum useful `stealRegionLanes`: Dekker needs at least one spare
 region per live consumer, so it can constrain an explicit region width more
 tightly than `"cas-mask"`.

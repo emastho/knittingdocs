@@ -5,14 +5,14 @@ sidebar:
   order: -1
 ---
 
-These examples are real patterns you can copy into your project -- not toy snippets. Most pages
-also point to an optional host-vs-worker benchmark script, but the example code is the main thing
-to copy. The Hono server page is the one that keeps the fuller performance story.
+These examples show how to use Knitting in an application. Most include an optional
+benchmark comparing host and worker execution. For a detailed look at server
+performance, start with the Hono server example.
 
 ## Pick the right example for your use case
 
 **"I have a web server and want to keep it responsive under load"**
-Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It's the most realistic example -- a real HTTP server with SSR, JWT, and health check routes.
+Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It combines SSR, JWT, and health check routes in one HTTP server.
 
 **"I do SSR and want to offload rendering"**
 [React SSR](/examples/data_transforms/rendering_output/react_ssr) shows the basic pattern. [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
@@ -30,10 +30,10 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) parses real arXiv LaTeX sources on workers, and measures where a decompress-then-parse job should be split.
 
 **"I need to generate documents"**
-[PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) renders PDFs on workers, and covers how to return binary from a task without silently mangling it.
+[PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) renders PDFs on workers, and shows how to preserve the binary type when returning data from a task.
 
 **"I just want to convert some text"**
-[Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) is the simplest rendering example -- string in, compressed string out.
+[Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) is the simplest rendering example -- Markdown in, compressed bytes out.
 
 ## All examples
 

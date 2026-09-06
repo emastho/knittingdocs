@@ -17,7 +17,10 @@ import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
 export const bench = getCode("data_transforms/react_ssr_compress/bench_react_ssr_compress.ts");
 export const component = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
 
-Takes the React SSR example one step further: after rendering HTML, compress it with Brotli. This tests whether it's better to compress on the worker (render + compress in one shot) or on the host (render on worker, compress on main thread). Spoiler: doing both on the worker usually wins because you avoid sending uncompressed HTML back across the thread boundary.
+This example adds Brotli compression to the React SSR example. It compares
+rendering and compression on the worker with rendering on the worker and
+compression on the host. Keeping both steps together also reduces the amount
+of data returned to the host.
 
 ## How it works
 
@@ -82,8 +85,8 @@ summary
 The middle row is the interesting one: moving only the render to a worker is
 barely faster than doing everything on the host. You pay to ship the full HTML
 back, and every Brotli call still lands on the thread you were trying to keep
-free. Compression is not a step you bolt on after the boundary -- put it on the
-same side as the render and the return payload gets smaller too.
+free. Keeping compression in the
+worker frees the host from that work and reduces the return payload.
 
 Brotli is also far more expensive than `renderToString` alone, which changes the
 pool shape: the plain SSR example is faster **without** an inliner, while this
@@ -106,4 +109,5 @@ measure it on yours.
 
 ## Compression placement matters
 
-Where you compress affects both throughput and data transfer. If you compress on the worker, you send a small compressed buffer back to the host. If you compress on the host, you first transfer the full uncompressed HTML string across the thread boundary, then compress it. For response compression in a real server, doing render + compress on the worker is almost always the right call.
+Where you compress affects both throughput and data transfer. If you compress on the worker, you send a small compressed buffer back to the host. If you compress on the host, you first transfer the full uncompressed HTML string across the thread boundary, then compress it. For a server, measure rendering and compression together on the worker to see
+whether that reduces request latency and transfer overhead.
