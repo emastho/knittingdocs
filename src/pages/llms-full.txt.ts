@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import {
+  AGENT_GUIDANCE,
   cleanBody,
   docUrl,
   ESSENTIALS,
@@ -24,6 +25,8 @@ export const GET: APIRoute = async ({ site }) => {
     POSITIONING,
     "",
     ESSENTIALS,
+    "",
+    AGENT_GUIDANCE,
   ];
 
   for (const group of groups) {

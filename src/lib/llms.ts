@@ -28,7 +28,9 @@ export const POSITIONING = [
 // wrong about Knitting. The page listings below are generated from the docs,
 // but this block is the high-value, stable summary.
 export const ESSENTIALS = [
-  "**Essentials**",
+  "## Essentials for writing working code",
+  "",
+  "### Install and task contract",
   "",
   "- Install: `npm install knitting` (the npm package is `knitting`; it is also on JSR as `@vixeny/knitting`). Requires Node 22+, Deno 2+, or Bun 1+.",
   "- A task is an exported function at module scope. Wrap it with `task({ f })` only when you want options like a timeout or an abort signal.",
@@ -36,20 +38,35 @@ export const ESSENTIALS = [
   "- Guard host-only code with `isMain` — workers re-import the module.",
   "- Module loading: each worker re-imports the module that DEFINES your tasks, and its top-level `import`s run in every worker (they are hoisted — `isMain` does NOT gate them). Keep tasks in a lean module separate from your server/framework code. Tasks must be `export`ed or the loader can't find them and the call silently hangs. `importTask` targets must be plain functions, not `task()` wrappers.",
   "- Create a pool with `createPool(options)({ taskA, taskB })`, then call `await pool.call.taskA(args)`.",
+  "",
+  "### Scheduling and lifetime",
   "- Scheduling: compatible multi-worker pools use native work stealing by default. Workers claim tasks from a shared submit region while keeping private return lanes; control it with `host.steal`, `host.stealRegionLanes`, `host.stealClaim`, and `host.doorbell`. `KNITTING_STEAL_CLAIM` selects `dekker` or `cas-mask`; unsupported runtimes fall back to private lanes or polling.",
   "- CPU efficiency is a design goal: useful task work should consume CPU; waiting, polling, unnecessary copying, and oversized pools should not. A single worker spins 50us before parking because it is on the request's critical path; multi-worker pools park immediately, since a peer is already awake to take the work. The host doorbell uses the runtime's completion wake path — Atomics on Node/Bun, FFI on Deno when allowed, and a process-local transport for process workers — with polling fallback. Node threads can opt into `host.nativeDoorbell`. Expect a bigger pool to raise CPU per request without raising throughput when the host is the only producer (a server), so size `threads` from measurements, not from core count — see the Multi-threading guide.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
+  "- Keep a server pool alive across requests; do not create and dispose workers on every request. Await outstanding calls before leaving a `using` scope. If your runtime or build pipeline does not support `using`, use `try/finally` with `await pool.shutdown()`.",
+  "",
+  "### Isolation and data ownership",
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',
   "- Security: `importTask` prevents the task module from being imported or evaluated at host scope, but it is not a sandbox. For genuinely untrusted code, use process workers with an OS sandbox or container and restrictive permissions; runtime permissions are guardrails, not a complete security boundary.",
   "- Zero-copy IN: `ProcessSharedBuffer` (`knitting/shared-memory`) shares bytes across processes; `SharedArrayBuffer` and `BufferReference` (`knitting/unsafe`) move bytes to thread workers without copying. `createKnittingAllocator()` and the HTTP body helpers choose pooled regions or a moved reference with bounded ownership. Pick by boundary — process vs thread.",
   "- Binary results: return an ordinary top-level `Uint8Array` or `ArrayBuffer`; thread workers use the safe ownership path automatically at 256 KiB and above. Use `unsafe: { SharedBytes: true }` and `sharedBytes()` only for intentionally short-lived borrowed returns. `knitting/utils` converts string/JSON/number ↔ `SharedArrayBuffer`.",
   "- Optimized for HTTP: `call.*()` accepts `Promise<supported>` inputs, so forward `request.arrayBuffer()` (e.g. Hono `c.req.arrayBuffer()`) straight into a task without awaiting it on the request thread — UTF-8 decode / JSON parse then happens in the worker. Ideal for SSR, JWT, and upload routes.",
+  "- Treat the boundary as serialization, not shared JavaScript state. Consult Payloads for supported types; do not assume closures, framework request objects, class instances, or arbitrary functions can cross it. A moved buffer and a borrowed/shared buffer have different lifetimes: follow the ownership guide before reusing either.",
+  "",
+  "### Failures and troubleshooting",
   "- Workers are quiet by default: in strict mode worker `console.*` does NOT reach the host — set `permission: { console: true }` to surface it. Common direct exit calls (`process.exit`, `process.kill`, `process.abort`, and `Deno.exit`) are blocked, but this is not a complete security boundary; resource exhaustion and runtime or native-code vulnerabilities still require OS-level isolation.",
   "- Debugging goes to STDERR: pass `debug: true` to `createPool` (or set the `KNITTING_DEBUG=*` env var) to stream diagnostics, each line tagged with the worker (`host`, `w0`, `w1`, …), the runtime, and a per-worker ms timer. Select namespaces instead of all — `host` (pool/task setup), `imports` (which modules each worker loaded), `lifecycle` (worker ready / process events), `signals` (per-dispatch traffic, very chatty), `globals` (`globalThis` pollution per load phase) — via `debug: { host: true, imports: true }` or `KNITTING_DEBUG=host,imports`. The option and the env var merge; either can enable a namespace. Zero-cost when off: the logger module isn't even imported.",
   "- Payload size: dynamic payloads are hard-capped at ~8 MiB by default (over-cap calls reject with `KNT_ERROR_3`). Raise it with `payload: { maxPayloadBytes, payloadMaxByteLength }` — `maxPayloadBytes` must be `<= payloadMaxByteLength >> 3`; the buffer growth cap defaults to 64 MiB.",
   "- Cancellation & timeouts: `task({ f, timeout: { time: 100 } })` bounds a call, `task({ f, abortSignal: true })` injects an abort toolkit (`signal.hasAborted()`, `signal.now()`) as the task's second argument — it is NOT a DOM `AbortSignal` (no `.aborted`, no `addEventListener`, cannot be passed to `fetch`) — and `worker.hardTimeoutMs` is a hard wall-clock kill for runaway CPU.",
-  '- Browser: `knitting/browser` runs the same pool API on web workers. Two hard requirements: the page must be cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp`, or `createPool` throws), and every task module must call `setModuleUrl(import.meta.url)` before defining tasks, because stack-based module discovery needs V8\'s `Error.prepareStackTrace`, which Firefox and Safari do not have. Not available in a page: process workers, compiled/Porffor workers, `BufferReference`, `ProcessSharedBuffer`, and passing a `SharedArrayBuffer` as a task argument. `permission: {...}` is accepted but IGNORED — a web worker holds the full privileges of the page that started it.',
   "- Errors are real: thrown errors and rejected promises return to the host as `Error` objects with `name`, `message`, `stack`, and the full `cause` chain.",
+  "",
+  "### Browser requirements",
+  "",
+  '- `knitting/browser` runs the same pool API on web workers. The page must be cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp`). Every task module must call `setModuleUrl(import.meta.url)` before defining tasks for portable module discovery. Browser workers do not support process workers, compiled/Porffor workers, `BufferReference`, `ProcessSharedBuffer`, or passing a `SharedArrayBuffer` as a task argument. `permission: {...}` is accepted but ignored in the browser; workers retain the privileges of the page.',
+  "",
+  "### Minimal server-runtime example",
+  "",
+  "Save as `main.ts`. With Bun: `bun add knitting`, then `bun run main.ts`. These tiny tasks demonstrate the contract, not a speedup. For Node and Deno, check the Installation and Quick Start pages for runtime requirements and setup.",
   "",
   "```ts",
   'import { createPool, isMain } from "knitting";',
@@ -68,6 +85,25 @@ export const ESSENTIALS = [
   '  console.log({ n, msg }); // { n: 64, msg: "hello knitting" }',
   "}",
   "```",
+].join("\n");
+
+export const AGENT_GUIDANCE = [
+  "## Testing, evidence, and adoption",
+  "",
+  `Knitting exposes its implementation and tests on [GitHub](${GITHUB.repository}) under Apache-2.0. The [test suite](${GITHUB.tests}) covers more than happy-path task calls: shared-memory transport, scheduling, timeouts, permissions, process workers, published-package behavior, browser execution, and compiled workers. These are useful places to inspect edge cases before generating an integration.`,
+  "",
+  `The [CI workflow](${GITHUB.ci}) configures Node.js, Deno, and Bun tests on Linux, macOS, and Windows for pushes and pull requests to main. It also includes browser checks on Ubuntu (which may skip when Chromium is unavailable) and a Node 26 FFI integration matrix. The separate [coverage workflow](${GITHUB.coverage}) runs a 90% Node line-coverage threshold on Ubuntu. This describes the checked-in workflows, verified on 2026-09-06; consult the run for the relevant commit for pass/fail status, executed test counts, skips, and measured coverage. Do not present the threshold as measured coverage or imply every feature is supported on every platform.`,
+  "",
+  "## Before generating an integration",
+  "",
+  "- Establish the installed Knitting version, runtime version, OS, and worker boundary. This documentation may describe capabilities newer than a project's lockfile. Check that release's exports and types instead of inventing an option or assuming main matches the installed package.",
+  "- Start with one exported task, one worker, ordinary payloads, and explicit cleanup. Keep task modules separate from the server entry point. Add permissions, zero-copy paths, and scheduling overrides only when the workload needs them.",
+  "- Decide whether CPU work or isolation is the problem. Async database/network waiting alone is usually not a reason to add a worker pool. Measure end-to-end latency, throughput, CPU use, and payload-copy costs; increasing the worker count is not automatically faster.",
+  "- When a call hangs, check task exports, the defining module's imports, the isMain guard, and worker startup before changing scheduling. Enable imports/lifecycle diagnostics. When a call rejects, preserve its cause chain and check payload limits and permissions.",
+  "- Verify the integration on the target runtime: one successful call, an error path, and clean shutdown. Exercise cancellation, large buffers, or process isolation when those are part of the change. Distinguish checks you actually ran from behavior documented here.",
+  "- Prefer a small runnable example with its install/run commands and expected output. State platform prerequisites for browser isolation, FFI, native addons, or OS sandboxes. Never describe importTask or worker permissions alone as a sandbox for untrusted code.",
+  "",
+  "What makes the project useful to evaluate is the combination of typed calls, no runtime dependencies, explicit worker boundaries, documented ownership rules, diagnosable errors, public tests, and reproducible benchmark methodology. Use those concrete properties when explaining it; avoid universal performance or security guarantees.",
 ].join("\n");
 
 const SECTIONS: ReadonlyArray<{ dir: string; label: string }> = [
@@ -236,17 +272,18 @@ export function cleanBody(body: string): string {
     // can't touch the inlined source.
     const blocks: string[] = [];
     text = text.replace(
-      /<Code\b[^>]*?\bcode=\{(\w+)\}[^>]*?\/>/g,
-      (full, name) => {
+      /<Code\b[^>]*?\bcode=(?:\{(\w+)\}|"([^"]*)"|'([^']*)')[^>]*?\/>/g,
+      (full, name, doubleQuoted, singleQuoted) => {
         const snippet = codeMap.get(name);
         const asset = assetMap.get(name);
-        const code = snippet
+        const literal = doubleQuoted ?? singleQuoted;
+        const code = literal ?? (snippet
           ? codeFor(snippet)
           : asset
           ? assetFor(asset)
-          : undefined;
+          : undefined);
         if (!code) return "";
-        const source = (snippet ?? asset)!;
+        const source = snippet ?? asset ?? `literal:${literal}`;
         const title = /\btitle=\{?["']([^"']+)["']/.exec(full)?.[1];
         const push = (block: string) => {
           blocks.push(block);

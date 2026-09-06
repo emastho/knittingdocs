@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import {
+  AGENT_GUIDANCE,
   docUrl,
   ESSENTIALS,
   fileUrl,
@@ -28,6 +29,8 @@ export const GET: APIRoute = async ({ site }) => {
     }) for the complete documentation; most implementation questions only need a few targeted pages.`,
     "",
     ESSENTIALS,
+    "",
+    AGENT_GUIDANCE,
     "",
   ];
 

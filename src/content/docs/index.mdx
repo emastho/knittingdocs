@@ -35,25 +35,15 @@ head:
 import PoolCycle from "../../components/PoolCycle.astro";
 import ImpactBars from "../../components/ImpactBars.astro";
 import { Code } from "@astrojs/starlight/components";
+import { getCode } from "../../lib/code-snippets";
 
-export const quickStart = `import { createPool, isMain } from "knitting";
+export const homeUrl = (path) => `${import.meta.env.BASE_URL.replace(/\/$/, "")}${path}`;
 
-export const square = (value: number) => value * value;
-export const greet = (name: string) => \`hello \${name}\`;
-
-if (isMain) {
-  using pool = createPool({ threads: 2 })({ square, greet });
-
-  const [four, message] = await Promise.all([
-    pool.call.square(2),
-    pool.call.greet("knitting"),
-  ]);
-
-  console.log({ four, message });
-}`;
+export const quickStart = getCode("home_word_count.ts");
 
 export const install = `npm install knitting
-deno add --npm knitting`;
+deno add --npm knitting
+bun add knitting`;
 
 <div data-knit-home-marker hidden></div>
 
@@ -69,19 +59,13 @@ deno add --npm knitting`;
   />
   <div class="kh-hero-grid">
     <div class="kh-hero-copy" data-reveal>
-      <h1 id="kh-hero-title">
-        Move JavaScript<br />
-        <span>off the main thread.</span>
-      </h1>
-    </div>
-
-    <div class="kh-hero-visual" data-reveal>
-      <PoolCycle caption="One call site, whether work runs in a thread or an isolated process." />
+      <h1 id="kh-hero-title">Move JavaScript<br /> <span>off the main thread.</span></h1>
+      <p class="kh-hero-lede">Knitting runs your functions in workers and gives you a typed promise back. Keep CPU-heavy work from holding up the rest of your application, in Node.js, Deno, or Bun.</p>
     </div>
 
     <div class="kh-hero-bottom" data-reveal>
       <div class="kh-actions">
-        <a class="kh-button kh-button--primary kh-button--cloud" href="/start/quick-start/">
+        <a class="kh-button kh-button--primary kh-button--cloud" href={homeUrl("/start/quick-start/")}>
           <img
             class="kh-cloud"
             src={`${import.meta.env.BASE_URL}brand/wool-cloud.png`}
@@ -100,41 +84,41 @@ deno add --npm knitting`;
       <div class="kh-install-line" aria-label="Install Knitting with npm">
         <span aria-hidden="true">$</span>
         <code>npm install knitting</code>
-        <span>npm + JSR</span>
+        <span>Node · Deno · Bun</span>
       </div>
     </div>
 
+    <div class="kh-hero-visual" data-reveal>
+      <PoolCycle caption="One call site, whether work runs in a thread or an isolated process." />
+    </div>
   </div>
 </section>
 
 <section class="kh-proof" aria-label="Project highlights" data-reveal>
   <div>
-    <strong>0</strong>
-    <span>runtime dependencies</span>
+    <strong>Just Knitting</strong>
+    <span>No runtime dependencies</span>
   </div>
   <div>
-    <strong>1</strong>
-    <span>typed API</span>
+    <strong>Typed calls</strong>
+    <span>Arguments in, promises out</span>
   </div>
   <div>
-    <strong>2</strong>
-    <span>worker boundaries</span>
+    <strong>Your choice</strong>
+    <span>Threads or separate processes</span>
   </div>
   <div>
-    <strong>3</strong>
-    <span>JavaScript runtimes</span>
+    <strong>Open source</strong>
+    <span>Apache-2.0 licensed</span>
   </div>
 </section>
 
 <div class="kh-main">
   <section class="kh-section kh-start" data-reveal aria-labelledby="kh-start-title">
     <div class="kh-section-intro kh-section-intro--center">
-      <p class="kh-kicker">A simpler worker API</p>
-      <h2 id="kh-start-title">From an exported function to a worker call.</h2>
-      <p>
-        No worker entry point, message router, or response plumbing. Define tasks
-        at the module level, pass them to a pool, and keep the call site typed.
-      </p>
+      <p class="kh-kicker">Start small</p>
+      <h2 id="kh-start-title">You already know how to write the task.</h2>
+      <p>Export a function, add it to a pool, and await the result. These tiny tasks show the API; in your application, use it for work that takes enough CPU time to justify the trip to a worker.</p>
     </div>
 
     <div class="kh-start-grid">
@@ -153,7 +137,7 @@ deno add --npm knitting`;
           <span>01</span>
           <div>
             <strong>Export the task</strong>
-            <p>Plain functions are tasks. Add <code>task()</code> only when you need options.</p>
+            <p>Workers re-import this module. Export your functions and keep host setup inside <code>isMain</code>.</p>
           </div>
         </li>
         <li>
@@ -176,10 +160,10 @@ deno add --npm knitting`;
     <div class="kh-install-box">
       <div>
         <span>Install</span>
-        <strong>Ready in one dependency.</strong>
+        <strong>Add it to your project.</strong>
       </div>
       <pre class="kh-install-code"><code>{install}</code></pre>
-      <a href="/start/installation/">Installation details <span aria-hidden="true">→</span></a>
+      <a href={homeUrl("/start/installation/")}>Installation details <span aria-hidden="true">→</span></a>
     </div>
   </section>
 
@@ -189,22 +173,18 @@ deno add --npm knitting`;
     aria-labelledby="kh-server-proof-title"
   >
     <div class="kh-server-proof-copy">
-      <p class="kh-kicker">The loop is full. The machine isn’t.</p>
+      <p class="kh-kicker">What changes in a server?</p>
       <h2 id="kh-server-proof-title">Keep fast routes fast.</h2>
-      <p>
-        In the Hono mixed workload, React SSR and JWT move off the request
-        thread. <code>/ping</code> never touches the pool, yet at the same fixed
-        6,000 rps its p99 falls from 16.93 ms to 2.31 ms while both server
-        shapes use approximately 1.1 cores. It was never slow. It was waiting.
-      </p>
+      <p>A fast route can still wait behind expensive work. In this Hono benchmark, moving React SSR and JWT into a worker brought <code>/ping</code> p99 from 16.93 ms to 2.31 ms at 6,000 requests per second. The ping route never used the pool, and both configurations used about 1.1 CPU cores.</p>
+      <p class="kh-benchmark-caveat">These were 15-second runs of one workload. They show what changed here; measure your own routes before choosing a pool size.</p>
       <div class="kh-server-proof-links">
-        <a href="/examples/data_transforms/rendering_output/hono_server/">
+        <a href={homeUrl("/examples/data_transforms/rendering_output/hono_server/")}>
           View the Hono server <span aria-hidden="true">→</span>
         </a>
-        <a href="/guides/multi-threading/">
+        <a href={homeUrl("/guides/multi-threading/")}>
           Tune multi-worker pools <span aria-hidden="true">→</span>
         </a>
-        <a href="/documents/hono-16core-benchmark.md">
+        <a href={homeUrl("/documents/hono-16core-benchmark.md")}>
           Read the 16-core results <span aria-hidden="true">→</span>
         </a>
       </div>
@@ -214,173 +194,99 @@ deno add --npm knitting`;
 
   <section class="kh-section kh-features" data-reveal aria-labelledby="kh-features-title">
     <div class="kh-section-intro">
-      <p class="kh-kicker">The mechanics around the call</p>
-      <h2 id="kh-features-title">The boundary is part of the API.</h2>
-      <p>
-        Knitting handles the mechanics that make workers useful in production:
-        moving data, isolating code, scheduling work, and preserving stack traces
-        and error causes.
-      </p>
+      <p class="kh-kicker">When the example becomes an application</p>
+      <h2 id="kh-features-title">A few things you’ll need next.</h2>
+      <p>Real tasks have large inputs, slow paths, and errors. Here’s how Knitting handles those, and where to read more.</p>
     </div>
 
     <div class="kh-feature-grid kh-grid">
       <article class="kh-feature kh-feature--wide">
         <div class="kh-feature-icon" aria-hidden="true">↔</div>
-        <p class="kh-feature-label">Fast by construction</p>
-        <h3>Move the work, not all the bytes.</h3>
-        <p>
-          Pass typed payloads and promises. Move large buffers through zero-copy
-          handles. Set timeouts, cancel with abort signals, and keep stack traces
-          and error causes intact. Knitting's native work stealing lets
-          compatible multi-worker pools claim tasks from a shared submit region
-          instead of waiting in private request lanes.
-        </p>
+        <p class="kh-feature-label">Large inputs</p>
+        <h3>Avoid copying buffers when you can.</h3>
+        <p>Start with ordinary values. When copying large buffers becomes a bottleneck, use shared memory or a buffer reference suited to your worker boundary. You can also pass a promise directly into a call.</p>
         <ul class="kh-chip-list" aria-label="Call and payload features">
           <li>Promise inputs</li>
           <li>SharedArrayBuffer</li>
           <li>ProcessSharedBuffer</li>
           <li>BufferReference</li>
-          <li>Task timeouts</li>
-          <li>Abort signals</li>
           <li>Typed arrays</li>
-          <li>Error cause chains</li>
-          <li>Native work stealing</li>
         </ul>
-        <a href="/guides/payloads/">Explore payloads <span aria-hidden="true">→</span></a>
+        <a href={homeUrl("/guides/payloads/")}>Explore payloads <span aria-hidden="true">→</span></a>
       </article>
 
       <article class="kh-feature kh-feature--dark">
         <div class="kh-feature-icon" aria-hidden="true">⌁</div>
         <p class="kh-feature-label">Choose your boundary</p>
         <h3>Use threads for trusted work. Use processes for isolation.</h3>
-        <p>
-          The same task API works with runtime threads or isolated processes.
-          Combine <code>importTask</code> with permissions, bubblewrap, or a container.
-        </p>
+        <p>The same task API works with runtime threads or isolated processes. Combine <code>importTask</code> with permissions, bubblewrap, or a container.</p>
         <div class="kh-boundary-dial" aria-label="Isolation options from thread to sandbox">
           <span>thread</span><i></i><span>process</span><i></i><span>sandbox</span>
         </div>
-        <a href="/guides/process-workers/">Choose a boundary <span aria-hidden="true">→</span></a>
+        <a href={homeUrl("/guides/process-workers/")}>Choose a boundary <span aria-hidden="true">→</span></a>
       </article>
 
       <article class="kh-feature">
         <div class="kh-feature-icon" aria-hidden="true">✓</div>
-        <p class="kh-feature-label">Failure is part of the API</p>
-        <h3>Deadlines, cancellation, and clear errors.</h3>
-        <p>
-          Limit cooperative work with timeouts and abort signals, or hard-kill
-          runaway CPU work after a deadline. Stack traces and error causes come back intact.
-        </p>
-        <a href="/guides/defining-tasks/">Define resilient tasks <span aria-hidden="true">→</span></a>
+        <p class="kh-feature-label">When work goes wrong</p>
+        <h3>Set a deadline. Keep the error details.</h3>
+        <p>Limit cooperative work with timeouts and abort signals, or hard-kill runaway CPU work after a deadline. Stack traces and error causes come back intact.</p>
+        <a href={homeUrl("/guides/defining-tasks/")}>Define resilient tasks <span aria-hidden="true">→</span></a>
       </article>
 
       <article class="kh-feature">
         <div class="kh-feature-icon" aria-hidden="true">◎</div>
-        <p class="kh-feature-label">Observable on demand</p>
-        <h3>Quiet by default. Detailed when debugging.</h3>
-        <p>
-          Enable only the diagnostics you need: host setup, imports, lifecycle,
-          signals, or global state. When disabled, the logger is not imported.
-        </p>
-        <a href="/guides/creating-pools/">Configure a pool <span aria-hidden="true">→</span></a>
+        <p class="kh-feature-label">Debugging</p>
+        <h3>See what your workers are doing.</h3>
+        <p>Enable only the diagnostics you need: host setup, imports, lifecycle, signals, or global state. When disabled, the logger is not imported.</p>
+        <a href={homeUrl("/guides/creating-pools/")}>Configure a pool <span aria-hidden="true">→</span></a>
       </article>
 
       <article class="kh-feature">
         <div class="kh-feature-icon" aria-hidden="true">⇄</div>
         <p class="kh-feature-label">Adaptive scheduling</p>
-        <h3 id="kh-stealing-title">Keep every worker moving.</h3>
-        <p>
-          Compatible multi-worker pools share one submit region, so workers can
-          claim tasks as they become free. On Node.js and Bun thread pools, the
-          host doorbell can wait for completions instead of repeatedly polling.
-          The task API stays the same.
-        </p>
+        <h3 id="kh-stealing-title">Let free workers pick up the next task.</h3>
+        <p>Compatible multi-worker pools share one submit region, so workers can claim tasks as they become free. Start with a small pool and measure: more workers won’t help if the host is already the bottleneck.</p>
         <ul class="kh-chip-list" aria-label="Adaptive scheduling features">
           <li>Work stealing</li>
-          <li>Shared submit region</li>
-          <li>Private return lanes</li>
-          <li>Host doorbell</li>
         </ul>
-        <a href="https://github.com/mimiMonads/knitting/blob/main/STEALING_DOORBELL.md">
-          Explore scheduling details <span aria-hidden="true">→</span>
+        <a href={homeUrl("/guides/work-stealing/")}>
+          How scheduling works <span aria-hidden="true">→</span>
         </a>
       </article>
     </div>
   </section>
 
-  <div class="kh-main-rule" aria-hidden="true"></div>
-
-  <section id="benchmarks" class="kh-benchmark" data-reveal aria-labelledby="kh-benchmark-title">
-    <div class="kh-benchmark-head">
-      <div>
-        <p class="kh-kicker">Measured in practice</p>
-        <h2 id="kh-benchmark-title">Low-latency IPC.</h2>
-      </div>
-      <p>
-        These measurements come from the public benchmark suite. Review the
-        methodology, hardware, and raw results before comparing workloads.
-      </p>
-    </div>
-
-    <div class="kh-metric-grid kh-grid">
-      <article>
-        <span>Scheduling roundtrip</span>
-        <strong>538<small>ns</small></strong>
-        <p>Node · 53.8 μs per batch of 100</p>
-      </article>
-      <article>
-        <span>Zero-copy roundtrip</span>
-        <strong>816<small>ns</small></strong>
-        <p>Node · 81.6 μs per batch of 100</p>
-      </article>
-      <article>
-        <span>1 MiB copied round-trip</span>
-        <strong>313<small>μs</small></strong>
-        <p>Bun · 31.3 ms per batch of 100</p>
-      </article>
-    </div>
-
-    <div class="kh-benchmark-links">
-      <a class="kh-button kh-button--primary" href="/benchmarks/introduction/">
-        Read the benchmarks <span aria-hidden="true">→</span>
-      </a>
-      <a href="https://github.com/mimiMonads/knitting-vs-tokio-bench">Open the source suite →</a>
-    </div>
-  </section>
 
   <section class="kh-section" data-reveal aria-labelledby="kh-use-title">
     <div class="kh-section-intro kh-section-intro--split">
       <div>
-        <p class="kh-kicker">Keep the function. Move the heavy work.</p>
-        <h2 id="kh-use-title">Keep CPU-heavy work off the event loop.</h2>
+        <p class="kh-kicker">Try a real workload</p>
+        <h2 id="kh-use-title">Start with something your app already does.</h2>
       </div>
-      <p>
-        Knitting is the middle ground between running CPU-heavy work on the
-        request thread and moving it to a separate service. Keep the work in your
-        application without blocking the event loop.
-      </p>
+      <p>Rendering, parsing, and compression are good places to investigate. If your code mostly waits for a database or a network response, a worker pool may add overhead without helping. These examples include code and measurements so you can make the comparison.</p>
     </div>
 
     <div class="kh-use-grid kh-grid">
-      <a href="/examples/data_transforms/rendering_output/react_ssr/">
+      <a href={homeUrl("/examples/data_transforms/rendering_output/react_ssr/")}>
         <span>Rendering</span>
         <strong>React SSR</strong>
         <p>Render components away from the request thread.</p>
         <i aria-hidden="true">→</i>
       </a>
-      <a href="/examples/data_transforms/validation/jwt_revalidation/">
+      <a href={homeUrl("/examples/data_transforms/validation/jwt_revalidation/")}>
         <span>Security</span>
         <strong>JWT revalidation</strong>
         <p>Verify and reissue tokens with Web Crypto.</p>
         <i aria-hidden="true">→</i>
       </a>
-      <a href="/examples/data_transforms/validation/salt_hashing/">
+      <a href={homeUrl("/examples/data_transforms/validation/salt_hashing/")}>
         <span>Cryptography</span>
         <strong>Password hashing</strong>
         <p>Run PBKDF2 without stalling other requests.</p>
         <i aria-hidden="true">→</i>
       </a>
-      <a href="/examples/data_transforms/rendering_output/markdown_to_html/">
+      <a href={homeUrl("/examples/data_transforms/rendering_output/markdown_to_html/")}>
         <span>Pipelines</span>
         <strong>Markdown + Brotli</strong>
         <p>Transform and compress in the same worker call.</p>
@@ -391,78 +297,34 @@ deno add --npm knitting`;
 
   <section class="kh-quality" data-reveal aria-labelledby="kh-quality-title">
     <div class="kh-quality-copy">
-      <p class="kh-kicker">Tested on every push</p>
-      <h2 id="kh-quality-title">The hard parts are the tested parts.</h2>
-      <p>Tests cover what is easy to get wrong: shared-memory transport, work stealing, deadlines, payload limits, permissions, and the published package itself. More than 400 tests run for every runtime on every supported operating system: Node.js, Deno, and Bun across Linux, macOS, and Windows — including Bun on Windows.</p>
+      <p class="kh-kicker">Check the work</p>
+      <h2 id="kh-quality-title">The code and measurements are open.</h2>
+      <p>Read the benchmarks with their methodology, or look through the tests for shared memory, deadlines, permissions, and worker failures. If something doesn’t behave as documented, please open an issue.</p>
       <div class="kh-quality-links">
+        <a href={homeUrl("/benchmarks/introduction/")}>Read the benchmarks <span aria-hidden="true">→</span></a>
         <a href="https://github.com/mimiMonads/knitting/tree/main/test">Browse the tests</a>
-        <a href="https://github.com/mimiMonads/knitting/actions/workflows/test.yml">View CI <span aria-hidden="true">→</span></a>
-      </div>
-    </div>
-    <div class="kh-test-matrix" aria-label="Continuous-integration test matrix">
-      <div class="kh-test-matrix-head">
-        <span>CI test matrix</span>
-        <span>400+ tests / lane</span>
-      </div>
-      <div class="kh-test-matrix-scroll">
-        <table>
-          <caption>Every supported runtime passes more than 400 tests on Linux, macOS, and Windows.</caption>
-          <thead>
-            <tr>
-              <th scope="col">Runtime</th>
-              <th scope="col">Linux</th>
-              <th scope="col">macOS</th>
-              <th scope="col">Windows</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th scope="row">Node.js</th>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-            </tr>
-            <tr>
-              <th scope="row">Deno</th>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-            </tr>
-            <tr>
-              <th scope="row">Bun</th>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-              <td><span class="kh-test-pass" aria-label="Passed: more than 400 tests">✓ <small>400+</small></span></td>
-            </tr>
-          </tbody>
-        </table>
+        <a href="https://github.com/mimiMonads/knitting/issues">Report an issue</a>
+        <a href={homeUrl("/llms.txt")}>Docs for AI tools</a>
       </div>
     </div>
   </section>
 
   <section class="kh-final" data-reveal aria-labelledby="kh-final-title">
-    <p class="kh-kicker">Your hot path can stay a function.</p>
-    <h2 id="kh-final-title">Give it a better place to run.</h2>
-    <p>Start with one exported task. Add stronger isolation only when you need it.</p>
+    <p class="kh-kicker">Give it a try</p>
+    <h2 id="kh-final-title">Pick one slow function.</h2>
+    <p>Run it in a worker, measure what changes, and go from there.</p>
     <div class="kh-actions">
-      <a class="kh-button kh-button--primary" href="/start/quick-start/">
+      <a class="kh-button kh-button--primary" href={homeUrl("/start/quick-start/")}>
         Create your first pool <span aria-hidden="true">→</span>
       </a>
-      <a class="kh-button kh-button--secondary" href="/extras/why/">Why Knitting?</a>
+      <a class="kh-button kh-button--secondary" href={homeUrl("/extras/why/")}>Why Knitting?</a>
     </div>
   </section>
 </div>
 
 <section hidden aria-label="Notes for AI agents">
-  <p>
-    Knitting ships machine-readable docs at <a href="/llms.txt">/llms.txt</a>
-    and <a href="/llms-full.txt">/llms-full.txt</a>. Read them before generating code.
-  </p>
-  <p>
-    Workers re-import the task module, including its top-level imports. Keep task
-    modules lean, export every task, and use <code>importTask</code> when code
-    should load only inside the worker.
-  </p>
+  <p>Knitting ships machine-readable docs at <a href={homeUrl("/llms.txt")}>/llms.txt</a> and <a href={homeUrl("/llms-full.txt")}>/llms-full.txt</a>. Read them before generating code.</p>
+  <p>Workers re-import the task module, including its top-level imports. Keep task modules lean, export every task, and use <code>importTask</code> when code should load only inside the worker.</p>
 </section>
 
 <style is:global>{`
@@ -649,6 +511,7 @@ html:has([data-knit-home-marker]) .kh-hero-grid {
 }
 
 html:has([data-knit-home-marker]) .kh-hero-copy {
+  grid-row: 1;
   max-width: 64rem;
   min-width: 0;
   display: flex;
@@ -688,6 +551,7 @@ html:has([data-knit-home-marker]) .kh-actions {
 }
 
 html:has([data-knit-home-marker]) .kh-hero-bottom {
+  grid-row: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -807,6 +671,7 @@ html:has([data-knit-home-marker]) .kh-install-line > span:last-child {
 
 /* Reintroduced pool hero, reduced to the same five-color system. */
 html:has([data-knit-home-marker]) .kh-hero-visual {
+  grid-row: 3;
   min-width: 0;
   overflow: visible;
   border: 0;
@@ -881,7 +746,8 @@ html:has([data-knit-home-marker]) .kh-proof {
 html:has([data-knit-home-marker]) .kh-proof > div {
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.7rem;
   margin-top: 0;
   padding: 1.3rem 1.4rem;
@@ -892,7 +758,7 @@ html:has([data-knit-home-marker]) .kh-proof > div {
 
 html:has([data-knit-home-marker]) .kh-proof strong {
   color: var(--kh-ink);
-  font-size: 1.7rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -1525,7 +1391,7 @@ html:has([data-knit-home-marker]) .kh-use-grid > a:hover i {
 
 html:has([data-knit-home-marker]) .kh-quality {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(20rem, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(2rem, 5vw, 4.5rem);
   align-items: center;
   margin-bottom: clamp(3rem, 6vw, 5rem);

@@ -12,14 +12,17 @@ const { caption = "" } = Astro.props as {
 const firstFrame = [
   'import { createPool, isMain } from "knitting";',
   "",
-  'export const hello = (name: string) => "hello " + name;',
+  'export const countWords = (text: string) => {',
+  '  return text.match(/\\S+/g)?.length ?? 0;',
+  '};',
   "",
   "if (isMain) {",
   "  using pool = createPool({",
   "    threads: 1,",
-  "  })({ hello });",
+  "  })({ countWords });",
   "",
-  '  console.log(await pool.call.hello("world"));',
+  '  const text = "workers keep apps responsive";',
+  '  console.log(await pool.call.countWords(text));',
   "}",
 ].join("\n");
 ---
@@ -36,7 +39,7 @@ const firstFrame = [
         <pre class="pc-code"><code data-code>{firstFrame}</code></pre>
         <div class="pc-out" data-out>
           <div><span class="pc-prompt">❯</span> bun run pool.ts</div>
-          <div class="pc-out-res">hello world</div>
+          <div class="pc-out-res">4</div>
         </div>
       </div>
 
@@ -45,7 +48,7 @@ const firstFrame = [
           <span class="pc-k">host</span>
           <span class="pc-v">bun · main thread</span>
         </div>
-        <div class="pc-call"><code>await <span class="pc-call-fn">pool.call.hello</span><span class="pc-call-punc">(</span>"world"<span class="pc-call-punc">)</span></code></div>
+        <div class="pc-call"><code>await <span class="pc-call-fn">pool.call.countWords</span><span class="pc-call-punc">(</span>text<span class="pc-call-punc">)</span></code></div>
         <div class="pc-link"><span data-bridge-label>shared memory</span></div>
         <div class="pc-workers" data-workers></div>
         <p class="pc-note" data-note>same process, shared memory</p>
@@ -75,15 +78,18 @@ const firstFrame = [
     const BASE_HEAD = [
       'import { createPool, isMain } from "knitting";',
       "",
-      'export const hello = (name: string) => "hello " + name;',
+      'export const countWords = (text: string) => {',
+      '  return text.match(/\\S+/g)?.length ?? 0;',
+      '};',
       "",
       "if (isMain) {",
       "  using pool = createPool({",
     ];
     const BASE_TAIL = [
-      "  })({ hello });",
+      "  })({ countWords });",
       "",
-      '  console.log(await pool.call.hello("world"));',
+      '  const text = "workers keep apps responsive";',
+      '  console.log(await pool.call.countWords(text));',
       "}",
     ];
 
@@ -130,7 +136,7 @@ const firstFrame = [
         runtime: "bun",
         sandbox: false,
         count: 1,
-        note: "own pid, own heap, still zero-copy",
+        note: "own pid and heap; ordinary strings are serialized",
         bridge: "shared memory",
       },
       {
