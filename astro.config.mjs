@@ -89,6 +89,7 @@ export default defineConfig({
   // The browser page used to live at the site root; keep the old URL working.
   redirects: {
     "/browser": "/guides/browser/",
+    "/guides": "/start/quick-start/",
   },
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
@@ -139,7 +140,7 @@ export default defineConfig({
       title: "Knitting",
       description:
         "A zero-dependency concurrency runtime for Node.js, Deno, and Bun. Run typed JavaScript tasks on threads or isolated processes without blocking the main thread.",
-      favicon: "/favicon.ico",
+      favicon: assetPath("brand/knitting-avatar.png"),
       head: [
         {
           tag: "style",
@@ -219,26 +220,17 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "icon",
-            href: assetPath("favicon-32x32.png"),
+            href: assetPath("brand/knitting-avatar.png"),
             type: "image/png",
-            sizes: "32x32",
-          },
-        },
-        {
-          tag: "link",
-          attrs: {
-            rel: "icon",
-            href: assetPath("favicon-16x16.png"),
-            type: "image/png",
-            sizes: "16x16",
+            sizes: "512x512",
           },
         },
         {
           tag: "link",
           attrs: {
             rel: "apple-touch-icon",
-            href: assetPath("apple-touch-icon.png"),
-            sizes: "180x180",
+            href: assetPath("brand/knitting-avatar.png"),
+            sizes: "512x512",
           },
         },
         {
@@ -253,13 +245,6 @@ export default defineConfig({
           attrs: {
             name: "msapplication-TileColor",
             content: "#FF7A1F",
-          },
-        },
-        {
-          tag: "meta",
-          attrs: {
-            name: "msapplication-TileImage",
-            content: assetPath("mstile-150x150.png"),
           },
         },
       ],

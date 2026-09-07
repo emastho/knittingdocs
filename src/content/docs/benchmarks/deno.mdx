@@ -17,16 +17,17 @@ import denoCallGrowth from '../../../assets/results/deno_call-growth-batch.md?ra
 import denoAllTypes from '../../../assets/results/deno_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
-This page summarizes Deno benchmark runs for Knitting on `deno 2.6.6 (aarch64-apple-darwin)`.
+This page summarizes Deno benchmark runs for Knitting `0.1.24` on
+`deno 2.6.6 (aarch64-apple-darwin)`, recorded in March 2026.
 
 ## IPC (Deno)
 This benchmark measures round-trip communication between the main thread and
 workers using different transports.
 Knitting has the lowest overhead in this setup:
 
-- `1` message: Knitting is about `3.5x` faster than worker `postMessage`, `3.6x` faster than WebSocket, and `10x` faster than HTTP.
-- `25` messages: Knitting is about `9.5x` faster than worker `postMessage`.
-- `50` messages: Knitting is about `10.7x` faster than worker `postMessage`.
+- `1` message: Knitting is about `3.7x` faster than worker `postMessage`, `4x` faster than WebSocket, and `10.5x` faster than HTTP.
+- `25` messages: Knitting is about `12.2x` faster than worker `postMessage`.
+- `50` messages: Knitting is about `12.5x` faster than worker `postMessage`.
 
 ### Data
 <Tabs>
