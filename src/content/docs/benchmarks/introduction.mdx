@@ -21,6 +21,9 @@ The tests focus on worker communication, payload sizes, batching, and
 CPU-heavy work. Use them to compare workloads and transport costs. Your application’s
 performance will depend on its own workload and environment.
 
+The Node, Deno, and Bun figures come from Knitting `0.1.24` on an Apple M3 Ultra,
+recorded in March 2026. The Tokio comparison is a separate run on different
+hardware, described on its own page.
 
 ## The short version
 
@@ -41,9 +44,9 @@ This chart compares Knitting with worker `postMessage`, WebSocket, and HTTP.
 
 In these runs, Knitting is roughly:
 
-- `3.5–6×` faster than worker `postMessage`;
-- `3.5–15×` faster than WebSocket;
-- `10–57×` faster than HTTP.
+- `3.3–12.5×` faster than worker `postMessage`;
+- `4–12×` faster than WebSocket;
+- `10.5–62×` faster than HTTP.
 
 <img
   src={ipcCombined.src}
@@ -143,16 +146,20 @@ see the dedicated [Node](/benchmarks/node/), [Deno](/benchmarks/deno/),
 
 ## Run the benchmarks
 
+The harness lives in the runtime repository,
+[`mimiMonads/knitting`](https://github.com/mimiMonads/knitting), under `bench/`.
+Clone it and run the driver from the repository root:
+
 ```bash
 ./run.sh
 ```
 
-Results are written to `results/`.
-
-To write JSON for plotting or other scripts:
+Results are written to `results/`, one Markdown file per benchmark. To emit JSON
+instead, for plotting or for your own scripts:
 
 ```bash
 ./run.sh --json
 ```
 
-JSON output is useful for plotting scripts under `graphs/`.
+The Tokio comparison has its own harness in
+[`mimiMonads/knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench).

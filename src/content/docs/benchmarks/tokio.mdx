@@ -30,7 +30,8 @@ Each test sends a value to a worker, echoes it back, and measures the full batch
 - `Uint8Array` values from `8 B` to `1 MiB`
 - a separate `Arc<Vec<u8>>` sweep for small shared-byte payloads
 
-The results are from one run on Ubuntu 23.10, `x86_64`, with an AMD Ryzen 7 4700U. Every runtime uses the same batch sizes (`1`, `10`, and `100`), warmup, measured iterations, and percentile reporting.
+The results are from one run of Knitting `0.1.36` on Ubuntu 23.10, `x86_64`, with an
+AMD Ryzen 7 4700U, recorded in March 2026. Every runtime uses the same batch sizes (`1`, `10`, and `100`), warmup, measured iterations, and percentile reporting.
 
 These numbers describe this benchmark and this machine, not a universal ranking of runtimes.
 

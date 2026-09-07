@@ -61,13 +61,34 @@ boundary and whether that data is copied.
   ordinary `Uint8Array` and `ArrayBuffer` values use the safe ownership path
   automatically at 256 KiB and above.
 
+:::caution[Send the buffer, not a view over it]
+The zero-copy path recognizes a `SharedArrayBuffer` itself. A typed array or
+`DataView` built on top of one is a different value, and Knitting copies its
+bytes into the call like any other typed array. Nothing warns you about the
+difference: the worker gets a private copy, writes it makes are invisible to
+the host, and a view larger than `payload.maxPayloadBytes` fails outright.
+
+```ts
+const shared = new SharedArrayBuffer(size);
+
+await pool.call.work(shared);                  // shared by reference
+await pool.call.work(new Uint8Array(shared));  // copied
+```
+
+Send the buffer and build the view inside the worker. When the bytes are an
+HTTP body, [`allocOrRefer()`](#large-bodies-with-allocorrefer) picks the wire
+form for you and the worker rebuilds the view on the other side.
+:::
+
 ---
 
 ## Typical cost by value type
 
 These ratings describe one value passed in a single call. They are useful for
 choosing a representation, but measure your real workload before tuning around
-them.
+them. Types that carry a variable amount of data appear at more than one size,
+because their cost follows the bytes they hold instead of settling on a single
+rating.
 
 | Value | Typical cost |
 | --- | --- |
@@ -76,9 +97,12 @@ them.
 | Time/IDs: `Date` | <Badge text="Best" variant="note" /> |
 | Strings: small `string` | <Badge text="Best" variant="note" /> |
 | Symbols: `Symbol.for` | <Badge text="Fast" variant="success" /> |
-| BigInt: small `bigint` | <Badge text="Best" variant="note" /> |
-| BigInt: large `bigint` | <Badge text="Fast" variant="success" /> |
-| Binary: typed arrays | <Badge text="Best" variant="note" /> |
+| BigInt: `bigint` up to 64 bits | <Badge text="Best" variant="note" /> |
+| BigInt: `bigint` of a few hundred bits | <Badge text="Good" variant="tip" /> |
+| BigInt: `bigint` of thousands of bits | <Badge text="Slow" variant="danger" /> |
+| Binary: typed arrays up to ~1 KiB | <Badge text="Best" variant="note" /> |
+| Binary: typed arrays of tens of KiB | <Badge text="Fair" variant="caution" /> |
+| Binary: typed arrays of 1 MiB or more | <Badge text="Slow" variant="danger" /> |
 | Views: `DataView` | <Badge text="Good" variant="tip" /> |
 | Structured: JSON object | <Badge text="Good" variant="tip" /> |
 | Structured: JSON array | <Badge text="Good" variant="tip" /> |
@@ -118,6 +142,40 @@ private-lane baseline, or tune `host.stealRegionLanes` for the workload:
 - Narrower regions expose more independent work for expensive or uneven calls.
   `1` is a useful starting point when one task can take much longer than another.
 
+#### Why the default can look slower
+
+A benchmark that calls one function with one cost, over and over, is the worst
+case for stealing. Every call takes the same time, so private lanes can hand
+work out in strict rotation and never guess wrong, while the shared region pays
+for arbitration it gains nothing from. On that shape of workload we have
+measured a noticeably worse p99 with stealing on. If your workload really is
+that shape, numerical kernels and other evenly divided parallel math, turning
+stealing off is a fair thing to try.
+
+Most services are not that shape. As soon as calls differ in cost, whether it is
+one function with an uneven input or two functions with very different prices,
+private lanes start binding a cheap call to a worker that is midway through an
+expensive one. The cheap call waits for work it has nothing to do with. Stealing
+has no such thing as the wrong worker: whichever one frees up first takes the
+next call. In a mix of a quarter-millisecond function and a twenty-millisecond
+function, we have seen the median call settle several times faster with stealing
+on, and the gap widens as load rises.
+
+Two things follow from that, and both matter more than any single percentile:
+
+- **It holds up under load.** The advantage is small when workers are mostly
+  idle, since there is little queued work to move around. It grows as the pool
+  fills, and near saturation private lanes are the first to build a backlog they
+  cannot clear.
+- **It usually costs less CPU.** A worker with nothing to claim parks instead of
+  spinning, so the same work tends to finish for less total CPU time. The saving
+  is largest when the pool is only partly busy, which is where most services sit.
+
+The honest summary is that stealing trades a little uniform-workload speed for
+predictability everywhere else. Since the pools that benefit are the common ones,
+it is on by default, and a workload uniform enough to prefer private lanes is
+usually obvious from the code.
+
 The host `doorbell` is a separate completion optimization. Node.js and Bun
 thread pools use `Atomics.waitAsync`; Deno can use a thread-safe FFI callback,
 and process workers use a process-local completion transport. Denied or
@@ -146,9 +204,14 @@ to individual calls once the workers are running.
 `payload.payloadInitialBytes`, `payload.payloadMaxByteLength`, and
 `payload.maxPayloadBytes` control the transport buffer used by each worker.
 Increasing the initial size avoids growth later, but uses more memory up front.
-For consistently small payloads such as primitives and short strings, the
-defaults—`4 MiB` initially, `64 MiB` maximum length, and an `8 MiB` dynamic
-payload cap—are usually enough.
+The defaults are `4 MiB` initially, `64 MiB` of maximum length, and an `8 MiB`
+cap on any single dynamic payload. For consistently small payloads such as
+primitives and short strings, that is usually enough.
+
+`maxPayloadBytes` is a limit rather than a slow path. A value that encodes
+larger than the cap throws instead of growing the buffer, so a route that
+occasionally receives a large body needs either a higher cap or a
+representation that travels by reference.
 
 ---
 
@@ -257,6 +320,51 @@ This works best when the route is mainly forwarding data and the worker does
 the parsing, such as SSR or JWT issuance. If the main thread needs to inspect
 or validate the body first, await it there instead.
 
+### Large bodies with `allocOrRefer()`
+
+Choosing between an `ArrayBuffer` and a `BufferReference` by hand means picking
+a size threshold and keeping it honest as the workload shifts. `allocOrRefer()`
+from `knitting/shared-memory` makes that call for each body instead. Small
+bodies are written into the allocator's arena, larger ones are moved into a
+`BufferReference`, and either way the task receives one `body.wire` value:
+
+```ts
+import { createKnittingAllocator } from "knitting/shared-memory";
+
+const allocator = createKnittingAllocator({ arenaByteLength: 8 * 1024 * 1024 });
+
+app.post("/upload", async (c) => {
+  using body = await allocator.allocOrRefer(c.req.raw, {
+    maxByteLength: 8 * 1024 * 1024,
+    referenceAboveBytes: 2 * 1024 * 1024,
+  });
+
+  return c.json(await handlers.call.storeUpload(body.wire));
+});
+```
+
+The worker attaches to the arena once through `worker.bootstrap` and then reads
+every body the same way, whichever transport it arrived on. See [HTTP body
+helpers](/guides/shared-memory/#http-body-helpers) for the bootstrap module and
+the ownership rules that come with the handle.
+
+What this buys is a send cost that stops following the body size. A plain typed
+array is encoded into the call, so a 1 MiB body is far more expensive to send
+than a 1 KiB one. `body.wire` points at bytes both sides can already reach, so
+it sends in roughly the same time at any size. The arena has bookkeeping of its
+own, so for bodies of about a kilobyte a plain `ArrayBuffer` is still the
+cheaper choice.
+
+The crossover sizes are exported, so a handler can reference them instead of
+repeating the numbers:
+
+```ts
+import {
+  HTTP_BODY_REFERENCE_THRESHOLD_BYTES, // 2 MiB: move into a BufferReference
+  HTTP_BODY_STREAM_THRESHOLD_BYTES,    // 192 KiB: stream straight into the arena
+} from "knitting/shared-memory";
+```
+
 ### Choosing how to return data
 
 Returning data has the same costs as sending it, just in the other direction.
@@ -273,7 +381,10 @@ already represented:
   `ArrayBuffer`; at 256 KiB and above the thread worker uses the safe ownership
   path automatically. Node with the native addon can adopt the backing store,
   while Deno, Bun, and older Node backends make one private copy. The result
-  remains valid after later calls and pool shutdown.
+  remains valid after later calls and pool shutdown. The switch is worth knowing
+  about when a result lands near it: a return just under 256 KiB is encoded into
+  the call, while one at or above it takes the ownership path and can arrive
+  faster than the smaller result did.
 - **`BufferReference`** — use it mainly for large inputs that are already in an
   owned `ArrayBuffer` or typed-array view and need to move into a thread worker.
   For an intentionally short-lived borrowed return, use `sharedBytes()` with

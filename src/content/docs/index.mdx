@@ -60,7 +60,6 @@ bun add hono @hono/node-server knitting`;
   <div class="kh-hero-grid">
     <div class="kh-hero-copy" data-reveal>
       <h1 id="kh-hero-title">Move JavaScript<br /> <span>off the main thread.</span></h1>
-      <p class="kh-hero-lede">Knitting runs your functions in workers and returns a typed promise. Keep CPU-heavy work from holding up the rest of your application, in Node.js, Deno, or Bun.</p>
     </div>
 
     <div class="kh-hero-bottom" data-reveal>
@@ -341,7 +340,6 @@ html:has([data-knit-home-marker]) {
   --kh-code-ink: var(--kh-paper);
   --kh-code-muted: var(--kh-muted);
   --kh-button-ink: var(--kh-night);
-  --kh-cloud-ink: var(--kh-night);
   --kh-line: color-mix(in srgb, var(--kh-muted) 24%, transparent);
   --kh-night-line: var(--kh-line);
   background: var(--kh-night);
@@ -359,7 +357,6 @@ html[data-theme="light"]:has([data-knit-home-marker]) {
   --kh-code-ink: var(--kh-paper);
   --kh-code-muted: #8a6852;
   --kh-button-ink: #fff1d6;
-  --kh-cloud-ink: var(--kh-paper);
   --kh-line: color-mix(in srgb, var(--kh-ink) 18%, transparent);
   --kh-night-line: var(--kh-line);
 }
@@ -547,6 +544,7 @@ html:has([data-knit-home-marker]) .kh-hero-lede {
 html:has([data-knit-home-marker]) .kh-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
 }
 
@@ -560,17 +558,19 @@ html:has([data-knit-home-marker]) .kh-hero-bottom {
 
 html:has([data-knit-home-marker]) .kh-button {
   min-height: 3rem;
+  margin: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.7rem;
-  padding: 0.72rem 1.2rem;
+  padding: 0.85rem 1.35rem;
   border: 1px solid var(--kh-line);
   border-radius: 999px;
   color: var(--kh-paper);
   font-size: 0.92rem;
   font-weight: 720;
-  line-height: 1;
+  line-height: 1.25;
+  text-align: center;
   text-decoration: none;
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
@@ -584,61 +584,54 @@ html:has([data-knit-home-marker]) .kh-button--primary {
   border-color: var(--kh-accent);
   background: var(--kh-accent);
   color: var(--kh-button-ink);
-  box-shadow: 0 0 2.5rem color-mix(in srgb, var(--kh-accent) 13%, transparent);
 }
 
 html:has([data-knit-home-marker]) .kh-button--primary:hover {
   background: color-mix(in srgb, var(--kh-accent) 82%, var(--kh-paper));
 }
 
+/* Keep the wool artwork proportional and its label level. Centering the
+   action row lets the softer silhouette sit beside a compact outline button. */
 html:has([data-knit-home-marker]) .kh-hero .kh-button--cloud {
   position: relative;
   isolation: isolate;
-  width: 13.75rem;
-  min-height: 5.25rem;
-  padding: 0.9rem 2rem 0.72rem;
+  flex-shrink: 0;
+  width: 11rem;
+  max-width: 100%;
+  min-height: 0;
+  aspect-ratio: 1200 / 457;
+  padding: 1rem 1.4rem;
   border: 0;
-  border-radius: 0;
-  overflow: visible;
-  background: none;
-  box-shadow: none;
-  color: var(--kh-cloud-ink);
+  background: transparent;
+  color: #2b1d14;
 }
 
-html:has([data-knit-home-marker]) .kh-button--cloud .kh-cloud {
+html:has([data-knit-home-marker]) .kh-cloud {
   position: absolute;
   z-index: -1;
   inset: 0;
   width: 100%;
   height: 100%;
   margin: 0;
-  object-fit: fill;
-  overflow: visible;
-  filter: drop-shadow(0 0.45rem 0.8rem color-mix(in srgb, var(--kh-night) 34%, transparent));
-  transition: transform 180ms ease, filter 180ms ease;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgb(22 12 8 / 12%));
 }
 
 html:has([data-knit-home-marker]) .kh-cloud-label {
-  position: relative;
-  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  transform: rotate(-1deg);
-}
-
-html:has([data-knit-home-marker]) .kh-hero .kh-button--cloud:hover {
-  border-color: transparent;
-  background: none;
-}
-
-html:has([data-knit-home-marker]) .kh-button--cloud:hover .kh-cloud {
-  transform: translateY(-0.12rem) rotate(-1deg) scale(1.02);
-  filter: drop-shadow(0 0.65rem 1rem color-mix(in srgb, var(--kh-night) 42%, transparent));
 }
 
 html:has([data-knit-home-marker]) .kh-button--secondary {
-  background: color-mix(in srgb, var(--kh-surface) 64%, transparent);
+  border-color: color-mix(in srgb, var(--kh-paper) 32%, var(--kh-night));
+  background: transparent;
+}
+
+html:has([data-knit-home-marker]) .kh-button--secondary:hover {
+  border-color: var(--kh-accent);
+  background: var(--kh-surface);
 }
 
 html:has([data-knit-home-marker]) .kh-install-line {
@@ -1793,9 +1786,13 @@ html:has([data-knit-home-marker]) button:focus-visible {
     width: 100%;
   }
 
-  html:has([data-knit-home-marker]) .kh-hero .kh-button--cloud {
-    width: 13.75rem;
-    margin-inline: auto;
+  html:has([data-knit-home-marker]) .kh-hero .kh-actions {
+    flex-direction: column;
+  }
+
+  html:has([data-knit-home-marker]) .kh-hero .kh-button {
+    width: 11rem;
+    max-width: 100%;
   }
 
   html:has([data-knit-home-marker]) .kh-install-line {

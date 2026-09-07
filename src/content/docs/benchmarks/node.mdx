@@ -17,16 +17,17 @@ import nodeCallGrowth from '../../../assets/results/node_call-growth-batch.md?ra
 import nodeAllTypes from '../../../assets/results/node_types_knitting.md?raw';
 import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
 
-This page summarizes Node.js benchmark runs for Knitting on `node 24.12.0 (arm64-darwin)`.
+This page summarizes Node.js benchmark runs for Knitting `0.1.24` on
+`node 24.12.0 (arm64-darwin)`, recorded in March 2026.
 
 ## IPC (Node)
 This benchmark measures round-trip communication between the main thread and
 workers using different transports.
 Knitting has the lowest overhead in this setup:
 
-- `1` message: Knitting is about `6x` faster than worker `postMessage`, `15x` faster than WebSocket, and `57x` faster than HTTP.
-- `25` messages: Knitting is about `4x` faster than worker `postMessage`.
-- `50` messages: Knitting is about `3.5x` faster than worker `postMessage`.
+- `1` message: Knitting is about `5.2x` faster than worker `postMessage`, `12x` faster than WebSocket, and `29x` faster than HTTP.
+- `25` messages: Knitting is about `3.5x` faster than worker `postMessage`.
+- `50` messages: Knitting is about `3.3x` faster than worker `postMessage`.
 
 ### Data
 <Tabs>
