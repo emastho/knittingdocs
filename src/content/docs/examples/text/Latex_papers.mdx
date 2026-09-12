@@ -4,19 +4,19 @@ description: Turn real arXiv LaTeX sources into indexable prose on workers.
 hero:
   title: 'arXiv corpus'
 sidebar:
-  order: 5
+  order: 31
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const scan = getCode("data_transforms/latex_papers/tex_scan.ts");
-export const parse = getCode("data_transforms/latex_papers/tex_parse.ts");
-export const corpus = getCode("data_transforms/latex_papers/arxiv_corpus.ts");
-export const run = getCode("data_transforms/latex_papers/run_latex_papers.ts");
-export const bench = getCode("data_transforms/latex_papers/bench_latex_papers.ts");
+export const scan = getCode("text/latex_papers/tex_scan.ts");
+export const parse = getCode("text/latex_papers/tex_parse.ts");
+export const corpus = getCode("text/latex_papers/arxiv_corpus.ts");
+export const run = getCode("text/latex_papers/run_latex_papers.ts");
+export const bench = getCode("text/latex_papers/bench_latex_papers.ts");
 
 This example downloads the LaTeX source of sixteen well-known arXiv papers and turns each one into
 a record ready for indexing or embedding: the prose with markup removed, plus the section tree,

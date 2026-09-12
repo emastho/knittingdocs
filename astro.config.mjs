@@ -90,6 +90,29 @@ export default defineConfig({
   redirects: {
     "/browser": "/guides/browser/",
     "/guides": "/start/quick-start/",
+    // The examples used to be nested under /examples/data_transforms/.
+    "/examples/data_transforms": "/examples/intro_examples/",
+    "/examples/data_transforms/intro_data_transforms": "/examples/intro_examples/",
+    "/examples/data_transforms/validation/schema_validate":
+      "/examples/validation/schema_validate/",
+    "/examples/data_transforms/validation/jwt_revalidation":
+      "/examples/validation/jwt_revalidation/",
+    "/examples/data_transforms/validation/salt_hashing":
+      "/examples/validation/salt_hashing/",
+    "/examples/data_transforms/validation/prompt_token_budgeting":
+      "/examples/text/prompt_token_budgeting/",
+    "/examples/data_transforms/validation/latex_papers":
+      "/examples/text/latex_papers/",
+    "/examples/data_transforms/rendering_output/react_ssr":
+      "/examples/rendering/react_ssr/",
+    "/examples/data_transforms/rendering_output/react_ssr_compress":
+      "/examples/rendering/react_ssr_compress/",
+    "/examples/data_transforms/rendering_output/markdown_to_html":
+      "/examples/rendering/markdown_to_html/",
+    "/examples/data_transforms/rendering_output/pdf_invoices":
+      "/examples/rendering/pdf_invoices/",
+    "/examples/data_transforms/rendering_output/hono_server":
+      "/examples/servers/hono_server/",
   },
   ...(site ? { site } : {}),
   ...(base ? { base } : {}),
@@ -277,7 +300,34 @@ export default defineConfig({
         {
           label: "Examples",
           collapsed: true,
-          autogenerate: { directory: "examples" },
+          items: [
+            { slug: "examples/intro_examples" },
+            {
+              label: "Math and simulation",
+              collapsed: true,
+              autogenerate: { directory: "examples/maths" },
+            },
+            {
+              label: "Validation",
+              collapsed: true,
+              autogenerate: { directory: "examples/validation" },
+            },
+            {
+              label: "Rendering",
+              collapsed: true,
+              autogenerate: { directory: "examples/rendering" },
+            },
+            {
+              label: "Text",
+              collapsed: true,
+              autogenerate: { directory: "examples/text" },
+            },
+            {
+              label: "Servers",
+              collapsed: true,
+              autogenerate: { directory: "examples/servers" },
+            },
+          ],
         },
         {
           label: "Benchmarks",

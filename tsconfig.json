@@ -3,7 +3,7 @@
   "include": [
     ".astro/types.d.ts",
     "**/*",
-    "src/assets/code/data_transforms/hono_server/.ts"
+    "src/assets/code/servers/hono_server/.ts"
   ],
   "exclude": ["dist"]
 }
