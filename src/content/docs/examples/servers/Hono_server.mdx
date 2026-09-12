@@ -4,17 +4,17 @@ description: Build a Hono server with ping, SSR, and JWT routes in Knitting or h
 hero:
   title: 'Hono + SSR + JWT'
 sidebar:
-  order: 5
+  order: 40
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const server = getCode("data_transforms/hono_server/hono_knitting.ts");
-export const renderSsrPage = getCode("data_transforms/hono_server/hono_componets_ssr.tsx");
-export const issueJwt = getCode("data_transforms/hono_server/hono_components_jwt.ts");
+export const server = getCode("servers/hono_server/hono_knitting.ts");
+export const renderSsrPage = getCode("servers/hono_server/hono_componets_ssr.tsx");
+export const issueJwt = getCode("servers/hono_server/hono_components_jwt.ts");
 
 ## What is this about?
 

@@ -4,17 +4,17 @@ description: Verify JWTs and reissue them with Web Crypto, without an external J
 hero:
   title: 'JWT validation + renewal'
 sidebar:
-  order: 2
+  order: 11
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/jwt_revalidation/jwt_knitting.ts");
-export const bench = getCode("data_transforms/jwt_revalidation/bench_jwt_revalidation.ts");
-export const utils = getCode("data_transforms/jwt_revalidation/utils.ts");
+export const run = getCode("validation/jwt_revalidation/jwt_knitting.ts");
+export const bench = getCode("validation/jwt_revalidation/bench_jwt_revalidation.ts");
+export const utils = getCode("validation/jwt_revalidation/utils.ts");
 
 This example verifies JWT signatures with HMAC SHA-256, checks expiry, and
 optionally reissues tokens in a worker pool. It uses built-in Web Crypto APIs

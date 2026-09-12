@@ -44,7 +44,7 @@ const handlers = createPool({
 The Hono example is built this way: SSR and JWT run in the worker, `/ping`
 stays on the request thread. Under a saturating mixed load, `/ping` served 201%
 more requests than the single-threaded version, because it was no longer stuck
-behind a render. See the [Hono server example](/examples/data_transforms/rendering_output/hono_server/)
+behind a render. See the [Hono server example](/examples/servers/hono_server/)
 and its [16-core measurements](/documents/hono-16core-benchmark.md).
 
 ## When a second worker helps

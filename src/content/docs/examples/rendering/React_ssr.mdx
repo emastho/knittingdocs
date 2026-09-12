@@ -4,19 +4,19 @@ description: Render React components to HTML strings on workers, away from the r
 hero:
   title: 'React SSR'
 sidebar:
-  order: 1
+  order: 20
 
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const bench = getCode("data_transforms/react_ssr/bench_react_ssr.ts");
-export const component = getCode("data_transforms/react_ssr/render_user_card.tsx");
-export const utils = getCode("data_transforms/react_ssr/utils.ts");
+export const bench = getCode("rendering/react_ssr/bench_react_ssr.ts");
+export const component = getCode("rendering/react_ssr/render_user_card.tsx");
+export const utils = getCode("rendering/react_ssr/utils.ts");
 
 This example renders React components to HTML strings on workers using `renderToString`. If your server does SSR, this is probably the example closest to your real workload -- parse JSON input, normalize data, render a component, return HTML.
 

@@ -1,6 +1,6 @@
 # Isolating expensive routes: Hono + Knitting on 16 real cores
 
-Reproduction of the [hono_server example](https://knittingdocs.netlify.app/examples/data_transforms/rendering_output/hono_server/)
+Reproduction of the [hono_server example](https://knittingdocs.netlify.app/examples/servers/hono_server/)
 benchmark on dedicated cloud hardware, with the load generator on a separate machine.
 
 Measured 2026-08-24 and re-measured 2026-08-25 after the worker timer policy

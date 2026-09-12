@@ -4,17 +4,17 @@ description: Convert Markdown to HTML and Brotli-compress it in the same worker 
 hero:
   title: 'Markdown rendering'
 sidebar:
-  order: 4
+  order: 22
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/markdown_to_html/run_markdown_to_html.ts");
-export const bench = getCode("data_transforms/markdown_to_html/bench_markdown_to_html.ts");
-export const utils = getCode("data_transforms/markdown_to_html/utils.ts");
+export const run = getCode("rendering/markdown_to_html/run_markdown_to_html.ts");
+export const bench = getCode("rendering/markdown_to_html/bench_markdown_to_html.ts");
+export const utils = getCode("rendering/markdown_to_html/utils.ts");
 
 This example converts Markdown to HTML with `marked`, then compresses the
 output with Brotli. It keeps parsing, rendering, and compression in one worker

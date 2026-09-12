@@ -4,18 +4,18 @@ description: Render React on a worker and Brotli-compress the HTML, measuring wh
 hero:
   title: 'SSR + compression'
 sidebar:
-  order: 2
+  order: 21
 
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import DontDoubleParseTip from '../../../../../components/tips/DontDoubleParseTip.astro';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import DontDoubleParseTip from '../../../../components/tips/DontDoubleParseTip.astro';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const bench = getCode("data_transforms/react_ssr_compress/bench_react_ssr_compress.ts");
-export const component = getCode("data_transforms/react_ssr_compress/render_user_card_compressed.tsx");
+export const bench = getCode("rendering/react_ssr_compress/bench_react_ssr_compress.ts");
+export const component = getCode("rendering/react_ssr_compress/render_user_card_compressed.tsx");
 
 This example adds Brotli compression to the React SSR example. It compares
 rendering and compression on the worker with rendering on the worker and
@@ -35,7 +35,7 @@ All three must produce identical compressed byte totals; the benchmark checks th
 - `bench_react_ssr_compress.ts` -- the benchmark
 - `render_user_card_compressed.tsx` -- the SSR + compression task
 
-Payloads and the card component come from the [React SSR](/examples/data_transforms/rendering_output/react_ssr)
+Payloads and the card component come from the [React SSR](/examples/rendering/react_ssr)
 example, so the only new code here is the compression step.
 
 ## Example input and output

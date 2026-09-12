@@ -12,28 +12,28 @@ performance, start with the Hono server example.
 ## Pick the right example for your use case
 
 **"I have a web server and want to keep it responsive under load"**
-Start with [Hono server routes](/examples/data_transforms/rendering_output/hono_server). It combines SSR, JWT, and health check routes in one HTTP server.
+Start with [Hono server routes](/examples/servers/hono_server). It combines SSR, JWT, and health check routes in one HTTP server.
 
 **"I do SSR and want to offload rendering"**
-[React SSR](/examples/data_transforms/rendering_output/react_ssr) shows the basic pattern. [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
+[React SSR](/examples/rendering/react_ssr) shows the basic pattern. [React SSR compression](/examples/rendering/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
 
 **"I need to validate or parse lots of data"**
-[Schema validation](/examples/data_transforms/validation/schema_validate) (Zod), [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) (Web Crypto), or [Salt hashing](/examples/data_transforms/validation/salt_hashing) (PBKDF2) -- pick whichever is closest to your workload.
+[Schema validation](/examples/validation/schema_validate) (Zod), [JWT revalidation](/examples/validation/jwt_revalidation) (Web Crypto), or [Salt hashing](/examples/validation/salt_hashing) (PBKDF2) -- pick whichever is closest to your workload.
 
 **"I'm building an LLM-powered app"**
-[Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) trims prompts to fit a token budget before they hit the API.
+[Prompt token budgeting](/examples/text/prompt_token_budgeting) trims prompts to fit a token budget before they hit the API.
 
 **"I have a CPU-heavy computation I want to parallelize"**
 The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi) (embarrassingly parallel), [Physics loop](/examples/maths/physics_loop) (variable-work simulation), [Big prime](/examples/maths/big_prime) (long-running search), [Proof of work](/examples/maths/proof_of_work) (signal-cancelled hash search), and [TSP](/examples/maths/tsp_gsa) (NP-hard optimization with parallel restarts).
 
 **"I need to index or ingest a pile of files"**
-[LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) parses real arXiv LaTeX sources on workers, and measures where a decompress-then-parse job should be split.
+[LaTeX paper indexing](/examples/text/latex_papers) parses real arXiv LaTeX sources on workers, and measures where a decompress-then-parse job should be split.
 
 **"I need to generate documents"**
-[PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) renders PDFs on workers, and shows how to preserve the binary type when returning data from a task.
+[PDF invoices](/examples/rendering/pdf_invoices) renders PDFs on workers, and shows how to preserve the binary type when returning data from a task.
 
 **"I just want to convert some text"**
-[Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) is the simplest rendering example -- Markdown in, compressed bytes out.
+[Markdown to HTML](/examples/rendering/markdown_to_html) is the simplest rendering example -- Markdown in, compressed bytes out.
 
 ## All examples
 
@@ -45,25 +45,33 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 - [Physics loop](/examples/maths/physics_loop) -- branch-heavy simulation with variable work per trial
 - [TSP (GSA)](/examples/maths/tsp_gsa) -- parallel heuristic restarts for NP-hard optimization
 
-### Data transforms
+### Validation
 
-- [Data transforms overview](/examples/data_transforms/intro_data_transforms) -- grouped by validation and rendering
-- [Schema validation](/examples/data_transforms/validation/schema_validate) -- Zod validation on workers
-- [JWT revalidation](/examples/data_transforms/validation/jwt_revalidation) -- HMAC verify + renewal with Web Crypto
-- [Salt hashing](/examples/data_transforms/validation/salt_hashing) -- PBKDF2 password hashing (heaviest per-call workload)
-- [Prompt token budgeting](/examples/data_transforms/validation/prompt_token_budgeting) -- trim LLM prompts to a token budget
-- [LaTeX paper indexing](/examples/data_transforms/validation/latex_papers) -- parse real arXiv sources into indexable prose
-- [React SSR](/examples/data_transforms/rendering_output/react_ssr) -- render React components on workers
-- [React SSR compression](/examples/data_transforms/rendering_output/react_ssr_compress) -- SSR + Brotli, worker vs host comparison
-- [PDF invoices](/examples/data_transforms/rendering_output/pdf_invoices) -- generate PDF documents and return the bytes
-- [Hono server routes](/examples/data_transforms/rendering_output/hono_server) -- real HTTP server with offloaded routes
-- [Markdown to HTML](/examples/data_transforms/rendering_output/markdown_to_html) -- simple markdown transform pipeline
+- [Schema validation](/examples/validation/schema_validate) -- Zod validation on workers
+- [JWT revalidation](/examples/validation/jwt_revalidation) -- HMAC verify + renewal with Web Crypto
+- [Salt hashing](/examples/validation/salt_hashing) -- PBKDF2 password hashing (heaviest per-call workload)
+
+### Rendering
+
+- [React SSR](/examples/rendering/react_ssr) -- render React components on workers
+- [React SSR compression](/examples/rendering/react_ssr_compress) -- SSR + Brotli, worker vs host comparison
+- [Markdown to HTML](/examples/rendering/markdown_to_html) -- simple markdown transform pipeline
+- [PDF invoices](/examples/rendering/pdf_invoices) -- generate PDF documents and return the bytes
+
+### Text
+
+- [Prompt token budgeting](/examples/text/prompt_token_budgeting) -- trim LLM prompts to a token budget
+- [LaTeX paper indexing](/examples/text/latex_papers) -- parse real arXiv sources into indexable prose
+
+### Servers
+
+- [Hono server routes](/examples/servers/hono_server) -- real HTTP server with offloaded routes
 
 ## Patterns worth copying
 
 1. **Keep worker tasks focused and deterministic.** One task, one job, predictable output.
 2. **Batch calls and await them together** (`Promise.all`) to reduce scheduling overhead.
-3. **Return compact summaries from workers** instead of large raw outputs.
+3. **Return compact summaries from workers** instead of large raw outputs. The exception is work that dwarfs the transfer: [LaTeX paper indexing](/examples/text/latex_papers) returns 626 KB of text per call with no measurable cost, because parsing each paper takes far longer than moving the result.
 4. **Validate on the host.** Recompute critical metrics when needed -- don't trust worker output blindly.
 5. **Compare against a host-only baseline** before claiming speedups.
 6. **Tune chunk sizes** based on throughput -- there's always a sweet spot between dispatch overhead and load balance.

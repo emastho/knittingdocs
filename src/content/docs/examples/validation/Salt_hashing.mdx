@@ -4,17 +4,17 @@ description: PBKDF2 password hashing with constant-time verification, kept off t
 hero:
   title: 'Salting + hashing'
 sidebar:
-  order: 3
+  order: 12
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/salt_hashing/salt_knitting.ts");
-export const bench = getCode("data_transforms/salt_hashing/bench_salt_hashing.ts");
-export const utils = getCode("data_transforms/salt_hashing/utils.ts");
+export const run = getCode("validation/salt_hashing/salt_knitting.ts");
+export const bench = getCode("validation/salt_hashing/bench_salt_hashing.ts");
+export const utils = getCode("validation/salt_hashing/utils.ts");
 
 This example derives password hashes with PBKDF2-SHA256 and verifies them using
 constant-time comparison. It is the most expensive per-call workload in the

@@ -1,0 +1,105 @@
+<figure class="queue-impact">
+  <div class="queue-layout" role="img" aria-label="Before: ping, rendering, and signing share the main thread. After: ping stays on the main thread; rendering and signing run in one worker. Schematic, not a timeline.">
+    <div class="queue-case">
+      <p class="queue-label">Before</p>
+      <div class="queue-lane">
+        <span>Main thread</span>
+        <div class="queue-tasks"><span>Render</span><span>Sign</span><code>/ping</code></div>
+      </div>
+    </div>
+    <div class="queue-case">
+      <p class="queue-label">With one worker</p>
+      <div class="queue-lane">
+        <span>Main thread</span>
+        <div class="queue-tasks"><code>/ping</code></div>
+      </div>
+      <div class="queue-lane">
+        <span>Worker</span>
+        <div class="queue-tasks"><span>Render</span><span>Sign</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="queue-result">
+    <p><code>/ping</code> response time <span>p99 · lower is better</span></p>
+    <div class="queue-numbers">
+      <div><strong>16.93 <small>ms</small></strong><span>Before</span></div>
+      <span class="queue-arrow" aria-hidden="true">→</span>
+      <div><strong class="queue-after">2.31 <small>ms</small></strong><span>With one worker</span></div>
+    </div>
+  </div>
+
+  <figcaption>
+    6,000 requests/sec in both runs.<br />
+    CPU per request: 180 µs before · 183 µs with one worker.
+  </figcaption>
+</figure>
+
+<style>
+  .queue-impact {
+    min-width: 0;
+    margin: 0;
+    padding: clamp(1rem, 3vw, 2rem);
+    border: 1px solid var(--kh-line);
+    border-radius: 0.75rem;
+    color: var(--kh-paper);
+    background: var(--kh-card);
+  }
+
+  .queue-impact p { margin: 0; }
+
+  .queue-layout, .queue-case { display: grid; gap: 0.75rem; }
+  .queue-layout { gap: 1.5rem; }
+
+  .queue-label { font-size: 0.88rem; font-weight: 650; }
+
+  .queue-lane {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+  }
+
+  .queue-lane > span { color: var(--kh-muted); }
+
+  .queue-tasks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    min-height: 2rem;
+    border-bottom: 1px solid var(--kh-line);
+    padding-bottom: 0.4rem;
+  }
+
+  .queue-tasks > * {
+    margin: 0;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--kh-line);
+    border-radius: 0.2rem;
+    font-size: inherit;
+    line-height: 1.5;
+  }
+
+  .queue-tasks > code {
+    color: var(--kh-accent);
+    border-color: var(--kh-accent);
+    background: transparent;
+  }
+
+  .queue-result { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--kh-line); }
+  .queue-result > p { font-size: 0.85rem; }
+  .queue-result > p > span { display: block; color: var(--kh-muted); font-size: 0.75rem; }
+  .queue-numbers { display: flex; align-items: center; gap: clamp(0.7rem, 2vw, 1.5rem); margin-top: 1rem; }
+  .queue-numbers > div { display: grid; gap: 0.25rem; }
+  .queue-numbers strong { font-size: clamp(1.65rem, 3vw, 2.5rem); line-height: 1.2; font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+  .queue-numbers small { font-size: 0.85rem; font-weight: 400; }
+  .queue-numbers div > span { color: var(--kh-muted); font-size: 0.75rem; }
+  .queue-after { color: var(--kh-accent); }
+  .queue-arrow { color: var(--kh-muted); font-size: 1.4rem; }
+  figcaption { margin-top: 1.25rem; color: var(--kh-muted); font-size: 0.75rem; line-height: 1.7; }
+
+  @media (max-width: 25rem) {
+    .queue-lane { grid-template-columns: 1fr; gap: 0.25rem; }
+  }
+</style>

@@ -4,18 +4,18 @@ description: Trim LLM prompts to fit a token budget before sending them to any m
 hero:
   title: 'LLM input shaping'
 sidebar:
-  order: 4
+  order: 30
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import { Code } from '@astrojs/starlight/components';
-import { getCode } from '../../../../../lib/code-snippets';
-import RuntimeRunTabs from '../../../../../components/RuntimeRunTabs.astro';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
 
-export const run = getCode("data_transforms/prompt_token_budgeting/run_prompt_token_budget.ts");
-export const bench = getCode("data_transforms/prompt_token_budgeting/bench_prompt_token_budget.ts");
-export const budget = getCode("data_transforms/prompt_token_budgeting/token_budget.ts");
-export const fixtures = getCode("data_transforms/prompt_token_budgeting/prompt_fixtures.ts");
+export const run = getCode("text/prompt_token_budgeting/run_prompt_token_budget.ts");
+export const bench = getCode("text/prompt_token_budgeting/bench_prompt_token_budget.ts");
+export const budget = getCode("text/prompt_token_budgeting/token_budget.ts");
+export const fixtures = getCode("text/prompt_token_budgeting/prompt_fixtures.ts");
 
 This example trims LLM prompts to fit a token budget before an API call. It
 counts tokens with `tiktoken`, drops the oldest conversation turns first, and
