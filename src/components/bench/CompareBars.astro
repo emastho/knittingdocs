@@ -1,0 +1,169 @@
+---
+// Horizontal bars comparing Knitting with a baseline. Knitting's bars take the
+// theme accent and the baseline's take a neutral gray, so the colours mean the
+// same thing on every chart. Each bar is named and carries its value as text,
+// so nothing is read from colour alone. Every chart on a page should measure
+// time, where a shorter bar is better.
+
+interface Bar {
+  label: string;
+  value: number;
+  /** Text shown after the bar. Defaults to the value followed by the unit. */
+  text?: string;
+  knitting?: boolean;
+}
+
+interface Group {
+  label?: string;
+  bars: Bar[];
+}
+
+interface Props {
+  groups: Group[];
+  unit: string;
+  legend: { knitting: string; baseline: string };
+  caption: string;
+  /** Scale every group to its own longest bar instead of the chart's. */
+  scalePerGroup?: boolean;
+}
+
+const { groups, unit, legend, caption, scalePerGroup = false } = Astro.props;
+
+const chartMax = Math.max(...groups.flatMap((group) => group.bars.map((bar) => bar.value)));
+const width = (group: Group, value: number) => {
+  const max = scalePerGroup ? Math.max(...group.bars.map((bar) => bar.value)) : chartMax;
+  return `${((value / max) * 100).toFixed(2)}%`;
+};
+const text = (bar: Bar) => bar.text ?? `${bar.value} ${unit}`;
+---
+
+<figure class="compare-bars not-content">
+  <ul class="legend">
+    <li><span class="swatch is-baseline" aria-hidden="true"></span>{legend.baseline}</li>
+    <li><span class="swatch is-knitting" aria-hidden="true"></span>{legend.knitting}</li>
+  </ul>
+
+  {
+    groups.map((group) => (
+      <div class="group">
+        {group.label && <p class="group-label" set:html={group.label} />}
+        <ul class="rows">
+          {group.bars.map((bar) => (
+            <li class="row">
+              <span class="label">{bar.label}</span>
+              <span class="track">
+                <span
+                  class:list={["bar", bar.knitting ? "is-knitting" : "is-baseline"]}
+                  style={`width:${width(group, bar.value)}`}
+                />
+              </span>
+              <span class="value">{text(bar)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+
+  <figcaption>{caption}</figcaption>
+</figure>
+
+<style>
+  .compare-bars {
+    margin-block: 1.5rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  .is-knitting {
+    background: var(--sl-color-accent);
+  }
+  .is-baseline {
+    background: var(--sl-color-gray-4);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+    color: var(--sl-color-gray-2);
+  }
+
+  .legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+  }
+
+  .group + .group {
+    margin-top: 1rem;
+  }
+
+  .group-label {
+    margin: 0 0 0.25rem;
+    color: var(--sl-color-white);
+    font-weight: 600;
+  }
+
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr) 7.5rem;
+    align-items: center;
+    column-gap: 0.75rem;
+  }
+
+  .label {
+    color: var(--sl-color-gray-2);
+  }
+
+  /* The track's left edge is the zero line every bar grows from. */
+  .track {
+    padding-block: 0.3rem;
+    border-inline-start: 1px solid var(--sl-color-hairline);
+  }
+
+  .bar {
+    display: block;
+    height: 0.75rem;
+    min-width: 2px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .value {
+    color: var(--sl-color-white);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  figcaption {
+    margin-top: 0.75rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+  }
+
+  @media (max-width: 30rem) {
+    .row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      row-gap: 0.125rem;
+    }
+    .track {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+  }
+</style>

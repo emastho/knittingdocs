@@ -1,0 +1,5 @@
+elapsed_seconds=9.98
+cpu_percent=194%
+max_rss_kb=239036
+voluntary_context_switches=57280
+involuntary_context_switches=135

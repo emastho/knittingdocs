@@ -1,0 +1,912 @@
+{
+  "schema": 1,
+  "runId": "1789246042357",
+  "suite": "types",
+  "env": {
+    "schema": 1,
+    "capturedAtUnixMs": 1789246053371,
+    "machine": "Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz (8t)",
+    "os": {
+      "platform": "linux",
+      "release": "6.8.0-124-generic",
+      "arch": "x64"
+    },
+    "cpu": {
+      "model": "Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz",
+      "logicalCores": 8
+    },
+    "memoryBytes": 16768638976,
+    "runtime": {
+      "id": "deno",
+      "version": "2.7.4",
+      "engine": "V8 14.6.202.6-rusty"
+    },
+    "knittingVersion": "0.1.70",
+    "benchCommit": "bcd182e",
+    "benchDirty": true,
+    "notes": []
+  },
+  "notes": [],
+  "samples": [
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "number",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 8555.33,
+        "minNs": 2531,
+        "p50Ns": 4579,
+        "p75Ns": 4963,
+        "p99Ns": 40769,
+        "maxNs": 57527
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "boolean",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 34125.37333333334,
+        "minNs": 22681,
+        "p50Ns": 33340,
+        "p75Ns": 34059,
+        "p99Ns": 48432,
+        "maxNs": 59314
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "null",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 34782.93666666667,
+        "minNs": 24180,
+        "p50Ns": 33082,
+        "p75Ns": 34429,
+        "p99Ns": 58585,
+        "maxNs": 246358
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "undefined",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 32697.68,
+        "minNs": 22315,
+        "p50Ns": 31807,
+        "p75Ns": 33461,
+        "p99Ns": 64160,
+        "maxNs": 65310
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "bigint (small)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 21251.906666666666,
+        "minNs": 3223,
+        "p50Ns": 28629,
+        "p75Ns": 32966,
+        "p99Ns": 50190,
+        "maxNs": 56437
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "bigint (2^70)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 41043.78333333333,
+        "minNs": 32636,
+        "p50Ns": 39567,
+        "p75Ns": 41112,
+        "p99Ns": 85919,
+        "maxNs": 171791
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "string (10 B)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 24671.31,
+        "minNs": 5321,
+        "p50Ns": 32311,
+        "p75Ns": 35263,
+        "p99Ns": 50000,
+        "maxNs": 58333
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Date",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 37213.76,
+        "minNs": 29745,
+        "p50Ns": 35436,
+        "p75Ns": 36746,
+        "p99Ns": 56423,
+        "maxNs": 180897
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Symbol.for",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 34188.9,
+        "minNs": 25129,
+        "p50Ns": 32880,
+        "p75Ns": 34687,
+        "p99Ns": 50991,
+        "maxNs": 216318
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Error",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 99912.52,
+        "minNs": 71796,
+        "p50Ns": 100292,
+        "p75Ns": 107178,
+        "p99Ns": 150133,
+        "maxNs": 189913
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "json object",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 43583.62333333334,
+        "minNs": 37407,
+        "p50Ns": 43148,
+        "p75Ns": 45972,
+        "p99Ns": 65732,
+        "maxNs": 91280
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "json array (11)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 49318.66333333333,
+        "minNs": 38018,
+        "p50Ns": 49516,
+        "p75Ns": 51006,
+        "p99Ns": 66449,
+        "maxNs": 219144
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Uint8Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 36558.53666666667,
+        "minNs": 10087,
+        "p50Ns": 35075,
+        "p75Ns": 37553,
+        "p99Ns": 71896,
+        "maxNs": 227559
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "ArrayBuffer (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 43060.14,
+        "minNs": 11741,
+        "p50Ns": 40659,
+        "p75Ns": 43775,
+        "p99Ns": 125708,
+        "maxNs": 375392
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Buffer (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 36247.92,
+        "minNs": 30749,
+        "p50Ns": 36020,
+        "p75Ns": 37816,
+        "p99Ns": 53578,
+        "maxNs": 59885
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Int32Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 37994.013333333336,
+        "minNs": 31084,
+        "p50Ns": 37057,
+        "p75Ns": 38535,
+        "p99Ns": 68518,
+        "maxNs": 138024
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Float64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 36236.926666666666,
+        "minNs": 10367,
+        "p50Ns": 35406,
+        "p75Ns": 38142,
+        "p99Ns": 51585,
+        "maxNs": 64976
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "BigInt64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 36227.12666666666,
+        "minNs": 29946,
+        "p50Ns": 35496,
+        "p75Ns": 37835,
+        "p99Ns": 59492,
+        "maxNs": 62731
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "BigUint64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 38561.903333333335,
+        "minNs": 22360,
+        "p50Ns": 37355,
+        "p75Ns": 40115,
+        "p99Ns": 59421,
+        "maxNs": 114873
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "DataView (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 40457.3,
+        "minNs": 33150,
+        "p50Ns": 39242,
+        "p75Ns": 43075,
+        "p99Ns": 60663,
+        "maxNs": 65905
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "string (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 36851.986666666664,
+        "minNs": 30842,
+        "p50Ns": 34611,
+        "p75Ns": 37621,
+        "p99Ns": 62474,
+        "maxNs": 259227
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Promise<number>",
+      "axisKind": "batch",
+      "axisValue": 1,
+      "axisLabel": "n=1",
+      "iterations": 300,
+      "warmup": 20000,
+      "opsPerIteration": 1,
+      "stats": {
+        "avgNs": 32294.943333333333,
+        "minNs": 28203,
+        "p50Ns": 30689,
+        "p75Ns": 33561,
+        "p99Ns": 53345,
+        "maxNs": 155543
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "number",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 217611.93666666668,
+        "minNs": 36081,
+        "p50Ns": 61837,
+        "p75Ns": 80615,
+        "p99Ns": 2949654,
+        "maxNs": 3039220
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "boolean",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 120514.15333333334,
+        "minNs": 58337,
+        "p50Ns": 60433,
+        "p75Ns": 63596,
+        "p99Ns": 3795110,
+        "maxNs": 3959991
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "null",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 76333.84,
+        "minNs": 58123,
+        "p50Ns": 61721,
+        "p75Ns": 64141,
+        "p99Ns": 593535,
+        "maxNs": 1001451
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "undefined",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 83466.25333333333,
+        "minNs": 57575,
+        "p50Ns": 60811,
+        "p75Ns": 65713,
+        "p99Ns": 673724,
+        "maxNs": 2188623
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "bigint (small)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 75731.54333333333,
+        "minNs": 37510,
+        "p50Ns": 56126,
+        "p75Ns": 58800,
+        "p99Ns": 338670,
+        "maxNs": 2890964
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "bigint (2^70)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 910212.6333333333,
+        "minNs": 153200,
+        "p50Ns": 308191,
+        "p75Ns": 1534364,
+        "p99Ns": 3383838,
+        "maxNs": 3541621
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "string (10 B)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 230020.56666666668,
+        "minNs": 54283,
+        "p50Ns": 87237,
+        "p75Ns": 95257,
+        "p99Ns": 2679593,
+        "maxNs": 2810222
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Date",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 222019.09333333332,
+        "minNs": 63009,
+        "p50Ns": 92741,
+        "p75Ns": 99884,
+        "p99Ns": 2678479,
+        "maxNs": 2774389
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Symbol.for",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 192322.86,
+        "minNs": 65266,
+        "p50Ns": 108960,
+        "p75Ns": 119975,
+        "p99Ns": 2503658,
+        "maxNs": 2691468
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Error",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 8015646.503333333,
+        "minNs": 3117738,
+        "p50Ns": 8259310,
+        "p75Ns": 8970413,
+        "p99Ns": 11077371,
+        "maxNs": 11618858
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "json object",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 1125721.5066666666,
+        "minNs": 261685,
+        "p50Ns": 467033,
+        "p75Ns": 1243302,
+        "p99Ns": 3926870,
+        "maxNs": 4117289
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "json array (11)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 3011333.053333333,
+        "minNs": 348932,
+        "p50Ns": 3278344,
+        "p75Ns": 3811018,
+        "p99Ns": 4376171,
+        "maxNs": 4482509
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Uint8Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 675991.9333333333,
+        "minNs": 151502,
+        "p50Ns": 226655,
+        "p75Ns": 305840,
+        "p99Ns": 3280423,
+        "maxNs": 7685300
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "ArrayBuffer (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 945780.2266666667,
+        "minNs": 191360,
+        "p50Ns": 296179,
+        "p75Ns": 1749523,
+        "p99Ns": 4367165,
+        "maxNs": 5314344
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Buffer (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 570733.8533333334,
+        "minNs": 152702,
+        "p50Ns": 229784,
+        "p75Ns": 252391,
+        "p99Ns": 3646263,
+        "maxNs": 5087786
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Int32Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 772797.3333333334,
+        "minNs": 161426,
+        "p50Ns": 236713,
+        "p75Ns": 1182877,
+        "p99Ns": 3048424,
+        "maxNs": 3193967
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Float64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 1123387.4966666666,
+        "minNs": 158451,
+        "p50Ns": 260322,
+        "p75Ns": 2186576,
+        "p99Ns": 4516670,
+        "maxNs": 13905174
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "BigInt64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 683573.65,
+        "minNs": 163044,
+        "p50Ns": 237210,
+        "p75Ns": 276400,
+        "p99Ns": 3102392,
+        "maxNs": 3311125
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "BigUint64Array (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 370261.1066666667,
+        "minNs": 160330,
+        "p50Ns": 228713,
+        "p75Ns": 246812,
+        "p99Ns": 2446504,
+        "maxNs": 2811352
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "DataView (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 384089.49333333335,
+        "minNs": 167641,
+        "p50Ns": 244502,
+        "p75Ns": 260230,
+        "p99Ns": 2634103,
+        "maxNs": 2893629
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "string (1 KiB)",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 313256.62666666665,
+        "minNs": 144265,
+        "p50Ns": 203654,
+        "p75Ns": 218292,
+        "p99Ns": 2077917,
+        "maxNs": 2230977
+      }
+    },
+    {
+      "suite": "types",
+      "implementation": "knitting",
+      "benchmark": "payload type cost",
+      "arm": "Promise<number>",
+      "axisKind": "batch",
+      "axisValue": 100,
+      "axisLabel": "n=100",
+      "iterations": 300,
+      "warmup": 200,
+      "opsPerIteration": 100,
+      "stats": {
+        "avgNs": 140279.70666666667,
+        "minNs": 61367,
+        "p50Ns": 107149,
+        "p75Ns": 112912,
+        "p99Ns": 1477459,
+        "maxNs": 2525741
+      }
+    }
+  ]
+}

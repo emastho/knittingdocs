@@ -3,7 +3,7 @@
 This repository contains the Knitting documentation site. Knitting is a
 shared-memory worker runtime for Node.js, Deno, Bun, and browser workers.
 
-The guides describe the `0.1.70` public API, including pooled shared-memory
+The guides describe the `0.1.73` public API, including pooled shared-memory
 regions, safe large-binary ownership moves, work-stealing claim disciplines,
 and runtime-specific completion doorbells.
 
@@ -26,7 +26,7 @@ npm run preview
 Install the runtime package in an application with:
 
 ```bash
-npm install knitting@0.1.70
+npm install knitting@0.1.73
 ```
 
 The normal task API is unchanged:

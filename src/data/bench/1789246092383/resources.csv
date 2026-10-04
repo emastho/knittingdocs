@@ -1,0 +1,4 @@
+run_id,suite,implementation,runtime,workers,elapsed_seconds,cpu_percent,max_rss_kb,voluntary_context_switches,involuntary_context_switches
+1789246092383,types,knitting,node,,9.53,194,244936,59511,49
+1789246092383,types,knitting,deno,,30.71,123,170424,1203805,494
+1789246092383,types,knitting,bun,,8.95,222,232292,178566,47785

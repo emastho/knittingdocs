@@ -1,165 +1,181 @@
 ---
-title: Benchmarks
-description: Knitting benchmark results across Node.js, Deno, and Bun, with the hardware and methodology behind them.
+title: Performance
+description: Four performance reasons to use Knitting, each with a chart and the numbers behind it.
 sidebar:
   order: 1
 ---
 
-import ipcCombined from "../../../assets/charts/ipc_combined.png";
-import latencyLine from "../../../assets/charts/latency_line.png";
-import typesCombinedCount1 from "../../../assets/charts/types_combined_count1.png";
-import typesCombinedCount100 from "../../../assets/charts/types_combined_count100.png";
-import withloadSpeedup from "../../../assets/charts/withload_speedup.png";
-import withloadEfficiency from "../../../assets/charts/withload_efficiency.png";
-import HeavyTaskPrimeTransferCaution from '../../../components/tips/HeavyTaskPrimeTransferCaution.astro';
-import TokioCloseUp from '../../../components/TokioCloseUp.astro';
+import CompareBars from '../../../components/bench/CompareBars.astro';
+import { hono, latencyGroups, latencyRatios, primeGroups, primeSpeedups, copyGroups, copyRange, smallCopyLead, largeCopyLead, payloadComparison, payloadNarrowest, repeatCores } from '../../../lib/bench-history';
 
-This page gives you the short version of Knitting's benchmark results across
-Node, Deno, Bun, and Tokio.
+There are four performance reasons to use Knitting:
 
-The tests focus on worker communication, payload sizes, batching, and
-CPU-heavy work. Use them to compare workloads and transport costs. Your application’s
-performance will depend on its own workload and environment.
+1. [It puts a second core to work](#put-a-second-core-to-work): `/ping` p99
+   fell by {hono.reductions[0]}% at similar CPU usage in the Hono test.
+2. [A call costs a fraction of `postMessage`](#a-call-costs-a-fraction-of-postmessage),
+   with lower round-trip overhead on all three runtimes tested.
+3. [CPU-heavy work spreads across threads](#cpu-heavy-work-spreads-across-threads),
+   {primeSpeedups.node}× faster with four extra threads on Node.js.
+4. [Binary round trips are comparable to Tokio](#binary-round-trips-are-comparable-to-tokio)
+   in the 32–512 KiB range tested.
 
-The Node, Deno, and Bun figures come from Knitting `0.1.24` on an Apple M3 Ultra,
-recorded in March 2026. The Tokio comparison is a separate run on different
-hardware, described on its own page.
+Each reason below has a chart and the numbers behind it. Shorter bars are
+better: the charts show elapsed time or CPU usage. These are separate runs,
+with their own hardware and Knitting versions.
 
-## The short version
+## Put a second core to work
 
-- Small calls have low overhead.
-- Batching improves throughput, especially as the number of calls grows.
-- Large binary payloads are mainly limited by copying and memory bandwidth.
-- CPU-heavy work scales across workers, but the result depends on the runtime
-  and the number of threads.
+Measured on 24–25 August 2026 with Bun 1.4.0 and Knitting commit `6c0e56d`,
+on an Intel Xeon Platinum 8168 server with 16 dedicated cores, running Ubuntu
+24.04. A separate machine generated the load. The [report](/documents/hono-16core-benchmark.md)
+has the setup and individual runs.
 
-When the charts say one option is “faster,” that only applies to the test shown:
-the payload, batching, runtime, and amount of work all matter.
+CPU-heavy JavaScript on one event loop runs on one thread. Moving those routes
+into a Knitting worker lets another core take part while the main thread keeps
+serving requests.
 
-<TokioCloseUp />
+The test is a Hono server with three routes. `/ssr` renders React, `/jwt` signs
+a token, and `/ping` returns a small JSON object. With Knitting, `/ssr` and
+`/jwt` run in one worker and `/ping` stays on the main thread. Both servers
+received 2,000 requests per second on each route.
 
-## Message overhead
-
-This chart compares Knitting with worker `postMessage`, WebSocket, and HTTP.
-
-In these runs, Knitting is roughly:
-
-- `3.3–12.5×` faster than worker `postMessage`;
-- `4–12×` faster than WebSocket;
-- `10.5–62×` faster than HTTP.
-
-<img
-  src={ipcCombined.src}
-  width={ipcCombined.width}
-  height={ipcCombined.height}
-  alt="Combined IPC benchmark chart across runtimes"
-  loading="lazy"
+<CompareBars
+  unit="ms"
+  legend={{ baseline: 'Hono only', knitting: 'Hono with one Knitting worker' }}
+  caption="p99 response time at 6,000 requests per second in total."
+  groups={hono.latencyGroups}
 />
 
-## Latency as calls grow
+`/ping` p99 fell by {hono.reductions[0]}%, and `/ping` never enters the pool. Its requests had
+been waiting behind renders and signatures on the same thread. `/ssr` p99 fell
+by {hono.reductions[1]}% and `/jwt` by {hono.reductions[2]}%.
 
-This chart shows what happens as each test sends more messages at a time.
+Both servers met the offered request rate with 100% success, at approximately
+the same measured CPU usage:
 
-Knitting is generally around `3–45×` faster than the worker baselines in these
-runs. The advantage is clearest in small and medium batches, where communication
-overhead makes up more of the total time.
-
-<img
-  src={latencyLine.src}
-  width={latencyLine.width}
-  height={latencyLine.height}
-  alt="Latency line chart across runtimes"
-  loading="lazy"
+<CompareBars
+  unit="cores"
+  legend={{ baseline: 'Hono only', knitting: 'Hono with one Knitting worker' }}
+  caption="CPU used by the server process during the same runs."
+  groups={hono.cpuGroups}
 />
 
-## Different payload types
+A repeat of the one-worker run recorded {repeatCores} cores, also close to
+the baseline.
 
-These charts compare one value at a time with batches of `100` values.
+Under saturating load, the same change raised total throughput from {hono.saturation[0].rps.toLocaleString("en-US")} to
+{hono.saturation[1].rps.toLocaleString("en-US")} requests per second, and CPU use
+from {hono.saturation[0].cores} to {hono.saturation[1].cores} cores.
 
-Structured and binary values cost more than primitives, and large objects and
-errors cost more again. Batching improves throughput while keeping Knitting's
-relative advantage in these tests.
+<span id="message-overhead"></span>
 
-<img
-  src={typesCombinedCount1.src}
-  width={typesCombinedCount1.width}
-  height={typesCombinedCount1.height}
-  alt="Combined types benchmark chart for count 1"
-  loading="lazy"
+## A call costs a fraction of `postMessage`
+
+Measured in March 2026 with Knitting `0.1.24` on an Apple M3 Ultra:
+Node.js 24.12.0, Deno 2.6.6 and Bun 1.3.6, on macOS arm64. Bars show
+average elapsed time from the saved reports.
+
+The task is empty, so the time is what it costs to send a call to a worker and
+get the reply. Both sides use one worker.
+
+<CompareBars
+  unit="µs"
+  legend={{ baseline: 'postMessage', knitting: 'Knitting' }}
+  caption="Time for one call and its reply, one call at a time."
+  groups={latencyGroups}
 />
 
-<img
-  src={typesCombinedCount100.src}
-  width={typesCombinedCount100.width}
-  height={typesCombinedCount100.height}
-  alt="Combined types benchmark chart for count 100"
-  loading="lazy"
+<span id="latency-as-calls-grow"></span>
+
+One call at a time, Knitting was {latencyRatios(1)} in these runs.
+With 100 calls in flight, it was {latencyRatios(100)}. The latter measures
+batch throughput; dividing batch time by 100 does not give the latency of an
+individual call.
+
+<span id="different-payload-types"></span>
+
+A payload changes the gap, because both sides then spend time encoding it.
+{payloadComparison.allAhead
+  ? `Knitting was ahead on all ${payloadComparison.count} payload types compared, on every runtime, at both batch sizes.`
+  : 'The payload reports show where the advantage holds and where it changes.'}
+The smallest advantage was {payloadNarrowest} for
+{payloadComparison.narrowest.label === 'string huge' ? 'a large string' : <code>{payloadComparison.narrowest.label}</code>}
+on {payloadComparison.narrowest.runtime === 'node' ? 'Node.js' : payloadComparison.narrowest.runtime === 'deno' ? 'Deno' : 'Bun'},
+with {payloadComparison.narrowest.count} calls in flight.
+
+The [saved reports](/benchmarks/results/#runtime-reports) include both the empty-call
+and payload comparisons for each runtime.
+
+<span id="cpu-heavy-work"></span>
+
+## CPU-heavy work spreads across threads
+
+Measured in March 2026 with Knitting `0.1.24` on an Apple M3 Ultra:
+Node.js 24.12.0, Deno 2.6.6 and Bun 1.3.6, on macOS arm64. Bars show
+average elapsed time from the saved reports.
+
+The task finds the primes up to 10,000,000 in chunks of 250,000 and returns
+each chunk's primes to the main thread. The main thread takes chunks too, so
+four extra threads means five threads working.
+
+<CompareBars
+  unit="ms"
+  legend={{ baseline: 'Main thread only', knitting: 'Main thread plus Knitting workers' }}
+  caption="Time to finish the whole range on Node.js."
+  groups={primeGroups}
 />
 
-## Moving a 1 MiB payload
+With four extra threads the run finished {primeSpeedups.node}× faster on Node.js,
+{primeSpeedups.deno}× on Deno and {primeSpeedups.bun}× on Bun. Five threads would
+ideally finish in one fifth of the time. Returning every chunk's primes to the
+main thread adds work, so this test measures computation and transport together.
+The [reports](/benchmarks/results/#runtime-reports) include the other worker counts.
 
-These are one-way transfer results for a `1 MiB` payload with a batch size of
-`64`:
+## Binary round trips are comparable to Tokio
 
-| Runtime | String (GB/s) | Uint8Array (GB/s) |
-| --- | ---: | ---: |
-| Node | `1.44` | `7.50` |
-| Deno | `3.37` | `5.78` |
-| Bun | `11.86` | `16.21` |
+Measured in March 2026 with Knitting `0.1.36` on an AMD Ryzen 7 4700U,
+running Ubuntu 23.10 x86_64. This is a separate run from the M3 Ultra tests
+above. The [Tokio report](/benchmarks/tokio/#full-raw-report) records the sources
+and methodology; runtime versions were not recorded in that report.
 
-Bun is fastest in this particular 1 MiB test for both strings and binary data.
-At this size, memory bandwidth and runtime details matter as much as the worker
-coordination itself.
+The Rust program clones a `Vec<u8>`, sends it to a Tokio task
+over a channel, and gets a second clone back, with one worker thread. Knitting
+does the same round trip with a `Uint8Array`, using preallocated shared memory.
+This compares the two copying paths, including allocation and worker coordination;
+it does not measure the speed of copying bytes alone.
 
-## CPU-heavy work
-
-<HeavyTaskPrimeTransferCaution />
-
-This test distributes a CPU-intensive prime-number workload across extra
-threads. In these runs, speedup reaches roughly `3.5–3.8×` with four extra
-threads, while efficiency stays around `70–77%`.
-
-That does not mean every application will scale the same way. I/O-heavy work
-usually behaves very differently.
-
-<img
-  src={withloadSpeedup.src}
-  width={withloadSpeedup.width}
-  height={withloadSpeedup.height}
-  alt="Heavy-load speedup chart across runtimes"
-  loading="lazy"
+<CompareBars
+  unit="ms"
+  legend={{ baseline: 'Tokio (Rust)', knitting: 'Knitting' }}
+  caption="Time for 100 round trips of a 256 KiB payload."
+  groups={copyGroups}
 />
 
-<img
-  src={withloadEfficiency.src}
-  width={withloadEfficiency.width}
-  height={withloadEfficiency.height}
-  alt="Heavy-load efficiency chart across runtimes"
-  loading="lazy"
-/>
+From 32 KiB to 512 KiB, Knitting on Bun and Node.js took {copyRange.fastest}% to
+{copyRange.slowest}% less time than Tokio. On Deno it ranged from
+{copyRange.denoLess}% less to {copyRange.denoMore}% more.
 
-## Explore the details
+From 1 KiB to 16 KiB, Tokio was up to {smallCopyLead}× faster. At 1 MiB it was
+{largeCopyLead} faster. The [Tokio page](/benchmarks/tokio/#how-the-payload-size-changes-things)
+has every size and explains how copying differs from its separate shared-ownership test.
 
-This page is for the broad trends. For raw tables and runtime-specific notes,
-see the dedicated [Node](/benchmarks/node/), [Deno](/benchmarks/deno/),
-[Bun](/benchmarks/bun/), and [Tokio](/benchmarks/tokio/) pages.
+<span id="run-the-benchmarks"></span>
 
-## Run the benchmarks
+## Reproduce
 
-The harness lives in the runtime repository,
-[`mimiMonads/knitting`](https://github.com/mimiMonads/knitting), under `bench/`.
-Clone it and run the driver from the repository root:
+| Reason | Where the harness is |
+| --- | --- |
+| A second core | The [Hono benchmark report](/documents/hono-16core-benchmark.md) carries the server code in Appendix B and the harness in Appendix C. The server is the [Hono example](/examples/servers/hono_server/). |
+| Call cost against `postMessage` | `bench/latency.ts` in [`mimiMonads/knitting`](https://github.com/mimiMonads/knitting), run with `./run.sh` from the repository root. |
+| CPU-heavy work across threads | `bench/withload.ts` in the same repository, run the same way. |
+| Copy speed against Tokio | The `latency` suite in [`mimiMonads/knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench): `node scripts/bench.mjs latency`. |
 
-```bash
-./run.sh
-```
+These results describe the tested configurations. Measure your workload on your
+target hardware; payload size, runtime and worker count can change the result.
 
-Results are written to `results/`, one Markdown file per benchmark. To emit JSON
-instead, for plotting or for your own scripts:
+<span id="moving-a-1-mib-payload"></span>
+<span id="explore-the-details"></span>
 
-```bash
-./run.sh --json
-```
-
-The Tokio comparison has its own harness in
-[`mimiMonads/knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench).
+For the full tables and additional measurements, see
+[Benchmark results and methodology](/benchmarks/results/). For choosing buffers
+and worker counts, see [Performance tuning](/guides/performance/).

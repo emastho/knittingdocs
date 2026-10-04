@@ -16,7 +16,9 @@ import uint8ArrayArcCompareSizeSweep from '../../../assets/tokio/uint8array_arc_
 
 This page compares Tokio and Knitting on Bun, Node.js, and Deno using the same batch-oriented echo benchmark.
 
-JavaScript runtimes are quicker for some tiny values, while Tokio becomes much more competitive as the payload gets larger. The charts below show where that change happens.
+The result changes with payload size: Tokio leads for 1–16 KiB and 1 MiB
+binary payloads, while Knitting on Bun and Node.js is slightly ahead at
+32–512 KiB. The charts below show the full range.
 
 Benchmark source: [`mimiMonads/knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench).
 
@@ -33,7 +35,13 @@ Each test sends a value to a worker, echoes it back, and measures the full batch
 The results are from one run of Knitting `0.1.36` on Ubuntu 23.10, `x86_64`, with an
 AMD Ryzen 7 4700U, recorded in March 2026. Every runtime uses the same batch sizes (`1`, `10`, and `100`), warmup, measured iterations, and percentile reporting.
 
-These numbers describe this benchmark and this machine, not a universal ranking of runtimes.
+The saved report names the source files but does not record the Rust, Tokio
+or JavaScript runtime versions. These historical results have not been repeated
+on the current Knitting release.
+
+The [Performance page](/benchmarks/introduction/#binary-round-trips-are-comparable-to-tokio)
+uses the size-sweep averages from this report. The M3 Ultra worker tests on
+[Results and methodology](/benchmarks/results/) were recorded on different hardware.
 
 ## Small payloads: `f64`
 

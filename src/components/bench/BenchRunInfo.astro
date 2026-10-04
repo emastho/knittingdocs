@@ -1,0 +1,110 @@
+---
+// What a benchmark page's numbers were measured on, read from the committed
+// runs in src/data/bench/. Warns when the runs predate the Knitting release
+// these docs describe, so a page cannot quietly go stale.
+import { Aside } from "@astrojs/starlight/components";
+import {
+  docsKnittingVersion,
+  machineName,
+  RUNTIME_NAMES,
+  RUNTIMES,
+  runUrl,
+  suiteSummary,
+} from "../../lib/bench";
+
+interface Props {
+  suite: string;
+}
+
+const { suite } = Astro.props;
+const summary = suiteSummary(suite);
+
+const day = (date: Date) =>
+  date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const first = day(summary.firstCapturedAt);
+const last = day(summary.lastCapturedAt);
+const measured = first === last ? first : `${first} to ${last}`;
+const runCount = summary.runIds.length;
+const versions = summary.knittingVersions.join(", ");
+const stale = summary.knittingVersions.some((version) => version !== docsKnittingVersion);
+const runtimes = RUNTIMES.filter((runtime) => summary.runtimes[runtime])
+  .map((runtime) => `${RUNTIME_NAMES[runtime]} ${summary.runtimes[runtime]}`)
+  .join(", ");
+---
+
+<dl class="bench-run not-content">
+  <div>
+    <dt>Knitting</dt>
+    <dd><code>{versions}</code></dd>
+  </div>
+  <div>
+    <dt>Machine</dt>
+    <dd>{summary.machines.map(machineName).join("; ")}</dd>
+  </div>
+  <div>
+    <dt>Runtimes</dt>
+    <dd>{runtimes}</dd>
+  </div>
+  <div>
+    <dt>Measured</dt>
+    <dd>{measured}, {runCount === 1 ? "one run" : `${runCount} runs`}</dd>
+  </div>
+  <div>
+    <dt>Source</dt>
+    <dd>
+      {summary.runIds.map((runId, index) => (
+        <>{index > 0 && ", "}<a href={runUrl(runId)}><code>{runId}</code></a></>
+      ))}
+      {" "}at bench commit <code>{summary.benchCommits.join(", ")}</code>
+      {summary.dirty && " with uncommitted changes"}
+    </dd>
+  </div>
+</dl>
+
+{
+  stale && (
+    <Aside type="caution" title="Measured on an older release">
+      These numbers come from Knitting <code>{versions}</code>, and these docs describe{" "}
+      <code>{docsKnittingVersion}</code>. They will be replaced when the suite is re-run on the
+      current release.
+    </Aside>
+  )
+}
+
+<style>
+  .bench-run {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    gap: 0.5rem 1.5rem;
+    margin-block: 1.25rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.5rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  .bench-run div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  dt {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    margin: 0.125rem 0 0;
+    color: var(--sl-color-white);
+    overflow-wrap: anywhere;
+  }
+
+  code {
+    font-size: 0.9em;
+  }
+
+  a {
+    color: var(--sl-color-text-accent);
+  }
+</style>

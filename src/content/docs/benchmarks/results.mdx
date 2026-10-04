@@ -1,0 +1,127 @@
+---
+title: Results and methodology
+description: Saved benchmark reports, measurement context, and additional results behind the performance page.
+sidebar:
+  order: 2
+---
+
+import RuntimeReports from '../../../components/bench/RuntimeReports.astro';
+import { idleCores, ipcRatioRange, payloadGrowth } from '../../../lib/bench-history';
+import BenchRunInfo from '../../../components/bench/BenchRunInfo.astro';
+import { formatNs, perCallNs, RUNTIMES, RUNTIME_NAMES } from '../../../lib/bench';
+
+export const batchedNumber = perCallNs('types', 'payload type cost', 100).find((row) => row.arm === 'number');
+
+The [Performance page](/benchmarks/introduction/) explains the main results.
+This page keeps the reports behind those claims, plus measurements that cover
+other workloads.
+
+## How to read the reports
+
+The M3 Ultra tests were recorded in March 2026 with Knitting `0.1.24`, on
+macOS arm64. Each report names its runtime and gives average, minimum, p75,
+p99 and maximum elapsed time. The performance charts use the averages.
+
+A count of `100` means 100 calls in flight, and the reported time is for the
+whole batch. Dividing by 100 gives amortized time per call, useful for comparing
+throughput. It does not tell you how long an individual call waits.
+
+The empty-call test measures a call and its reply with one worker. The payload
+comparison repeats that trip with different values. The CPU-heavy test searches
+for primes up to 10,000,000 in chunks of 250,000, with the main thread taking
+chunks too. Returning the primes adds serialization and parsing work to the
+computation.
+
+The Markdown reports below are the sources for these charts. The separately
+saved JSON exports contain different measurements and are not substituted for
+them. These historical runs have not been repeated on the current release.
+
+## Runtime reports
+
+### Node.js
+
+Node.js 24.12.0 (`arm64-darwin`).
+
+<RuntimeReports runtime="node" />
+
+### Deno
+
+Deno 2.6.6 (`aarch64-apple-darwin`).
+
+<RuntimeReports runtime="deno" />
+
+### Bun
+
+Bun 1.3.6 (`arm64-darwin`).
+
+<RuntimeReports runtime="bun" />
+
+## Other measurements
+
+### Calls through one worker
+
+These are newer measurements than the M3 Ultra reports above. With 100 `number`
+calls in flight, amortized time per call is
+{RUNTIMES.map((runtime) => `${formatNs(batchedNumber.byRuntime[runtime].median)} on ${RUNTIME_NAMES[runtime]}`).join(', ')}.
+Each figure is the median across runs of the average batch time divided by 100.
+
+<BenchRunInfo suite="types" />
+
+The [Payload types page](/benchmarks/payload-types/) has the full chart and table.
+
+### Idle pool
+
+In the [Hono report](/documents/hono-16core-benchmark.md), fifteen idle workers
+used {idleCores.after} cores. The earlier spin policy used {idleCores.before}. Those figures compare two
+timer policies on the report's hardware; they are not a general idle-CPU budget.
+
+### Loopback WebSocket and HTTP
+
+The IPC reports above compare Knitting with worker messaging, loopback
+WebSocket and HTTP round trips. Across those runs, Knitting was {ipcRatioRange("websocket")}
+faster than WebSocket and {ipcRatioRange("http")} faster than HTTP. These transports serve
+different purposes: a worker call does not replace a network connection.
+
+### Moving a 1 MiB payload
+
+The M3 Ultra payload-growth reports use batches of 64. Taking one payload's
+bytes per call and dividing by average batch time gives:
+
+<table>
+  <thead><tr><th>Runtime</th><th>String (GB/s)</th><th>Uint8Array (GB/s)</th></tr></thead>
+  <tbody>
+    {payloadGrowth.map((row) => <tr><td>{row.runtime}</td><td>{row.string}</td><td>{row.binary}</td></tr>)}
+  </tbody>
+</table>
+
+This is a one-direction byte accounting convention, not a standalone memory-copy
+measurement. The saved reports give the batch times used in the calculation.
+
+### Tokio
+
+The [Tokio comparison](/benchmarks/tokio/) was recorded separately in March
+2026 with Knitting `0.1.36` on an AMD Ryzen 7 4700U running Ubuntu 23.10 x86_64.
+It includes every binary payload size, the scalar tests and a separate
+shared-ownership reference. Its raw report records source filenames and
+methodology, but omits runtime versions.
+
+## Run the benchmarks
+
+The M3 Ultra harness lives under `bench/` in
+[`mimiMonads/knitting`](https://github.com/mimiMonads/knitting). The historical
+runs used `bench/latency.ts` for empty calls and `bench/withload.ts` for primes.
+Run the driver from the repository root:
+
+```bash
+./run.sh
+```
+
+Results are written to `results/`. Use `./run.sh --json` to emit JSON. To
+reproduce historical results, use the measured release and its harness; running
+the current checkout measures the current implementation.
+
+The [Hono report](/documents/hono-16core-benchmark.md) includes the server in
+Appendix B and harness in Appendix C. The Tokio comparison and newer payload
+suite live in [`knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench).
+See [Payload types](/benchmarks/payload-types/#run-it-yourself) for copying
+committed runs into the docs.

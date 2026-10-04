@@ -1,15 +1,39 @@
 ---
 title: Permissions
-description: Control what worker tasks can read, write, import, and run.
+description: Set a worker permission policy and understand what each runtime can enforce.
 sidebar:
   order: 5
 ---
 
-Workers run your task code, and the `permission` option controls what that code
-can access at runtime. You can restrict file access, network connections,
-environment variables, imports, and subprocesses.
+The `permission` option sets the access policy for your workers. You can ask
+for filesystem, network, environment, import and subprocess restrictions, but
+what gets enforced depends on the runtime and whether you use threads or
+processes.
 
-Set the policy when you create the pool:
+## Check the runtime first
+
+This is the behavior in Knitting `0.1.73`, the release these docs describe.
+
+| Worker | What the policy can enforce |
+| --- | --- |
+| Node.js threads | Knitting passes Node's permission flags. Filesystem allow-lists and broad capability switches are supported where Node accepts the flags. If required permission flags are rejected, worker startup fails. |
+| Node.js processes | Filesystem allow-lists and broad capability switches. Node 22/24 have no network permission control; Node 25+ can deny network access or allow it all, but cannot restrict it to named hosts. Environment, import-host and filesystem deny-lists are not enforced by these flags. |
+| Deno threads | Knitting does not pass a separate `Worker.deno.permissions` policy in this release. The host's Deno permissions still apply, but `permission` does not narrow them for the worker. |
+| Deno processes | Scoped runtime flags for filesystem, network, environment, import hosts and subprocesses. The shared-memory transport requires FFI access. Knitting does not configure a worker-spawn restriction. |
+| Bun threads and processes | No matching runtime permission controls. The policy cannot restrict task access through runtime flags. |
+
+For Node threads, the same limits on host lists, environment access and
+deny-lists apply as for Node processes. These differences matter when a task
+must only contact one host or run one executable.
+
+Permissions help limit trusted task code. For code you do not trust, use
+[process workers with an OS sandbox](/guides/process-workers/#processcommandprefix).
+A separate process gives you a memory boundary; the sandbox supplies access
+controls that the runtime cannot enforce.
+
+## Set the policy
+
+Set permissions when you create the pool:
 
 ```ts
 import { createPool, isMain, task } from "knitting";
@@ -28,21 +52,22 @@ if (isMain) {
 }
 ```
 
-## Choose a mode
+There are three common ways to configure permissions:
 
-There are three ways to configure permissions:
-
-- **Leave `permission` out.** Knitting uses the strict defaults and allows
-  imports, including web imports.
+- **Leave `permission` out.** Knitting uses strict defaults with
+  `allowImport: true`, allowing all import hosts where that control is supported.
 - **Use `permission: {}` or `permission: { mode: "strict" }`.** Knitting uses
-  the conservative strict defaults and lets you add only the access your tasks
-  need.
-- **Use `permission: "unsafe"`.** Knitting disables runtime permission flags
-  and removes inherited Node permission flags from the worker.
+  strict defaults, including the default import hosts `deno.land`, `esm.sh`
+  and `jsr.io`.
+- **Use `permission: "unsafe"`.** Knitting turns off its runtime permission
+  flags and removes inherited Node permission flags from the worker's
+  `execArgv`. An external sandbox or the host's Deno permissions may still
+  restrict access.
 
-For most applications, keep strict mode and add a small allow-list. Use
-`"unsafe"` only when a dependency needs access that the runtime cannot express
-with the strict policy.
+Strict mode is a useful starting point for your own tasks. Add the access they
+need, then check that the chosen runtime can enforce it. `"unsafe"` is also
+useful when an external sandbox supplies the policy, as in the
+[container example](/guides/process-workers/).
 
 The `console` option controls whether worker `console.*` calls are forwarded to
 the host. It defaults to `false` in strict mode and `true` in unsafe mode.
@@ -52,100 +77,110 @@ createPool({ permission: { mode: "strict", console: true } })({ work });
 createPool({ permission: "unsafe" })({ work });
 ```
 
-## Grant only what the task needs
+## What strict mode starts with
 
-Object mode lets you grant access one capability at a time. Anything you do not
-list stays denied:
+Omitted fields inherit defaults. They are not all denied:
+
+- reads include `cwd`, task-module paths and resolved support files;
+- writes are allowed under `cwd`;
+- the policy denies writes to `node_modules`;
+- sensitive paths are on the deny-lists, including `.env`, `.git`, `.npmrc`,
+  `.docker`, `.secrets`, `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`,
+  `~/.config/gcloud` and `~/.kube`;
+- sensitive POSIX read paths include `/proc`, `/sys`, `/dev` and `/etc`;
+- network access, environment access, subprocesses, worker creation, FFI and
+  WASI start without grants;
+- object mode allows the three import hosts listed above. Omitting
+  `permission` allows all import hosts instead.
+
+Those are the requested defaults. A Node filesystem allow-list does not enforce
+an exception for `.env` inside an allowed directory, and Bun cannot enforce the
+filesystem policy at all. Use the runtime table above when deciding what a task
+can actually access.
+
+## Grant what the task needs
+
+Explicit `read` and `write` lists replace their defaults. An empty list requests
+no access for that field. Relative paths resolve against `permission.cwd`, or
+the shell's current working directory when `cwd` is omitted.
+
+For example, a Deno process worker can request access to one API and one
+environment variable:
 
 ```ts
 createPool({
+  worker: { runtime: "process", processRuntime: "deno" },
   permission: {
     mode: "strict",
-    allowImport: true,          // allow task-module imports
-    read: ["./data"],           // path allow-list (or `true` for all)
-    write: ["./out"],
-    net: ["api.example.com"],   // host allow-list (or `true` for all)
-    env: { allow: ["NODE_ENV"] },
-    run: ["git"],               // subprocess allow-list
+    net: ["api.example.com"],
+    env: { allow: ["API_TOKEN"] },
     console: true,
   },
 })({ work });
 ```
 
-| Field | Controls |
+Filesystem access still uses the strict defaults in this example. If you supply
+`read` yourself, include the task modules and any files needed to load them,
+as well as the data files your task reads.
+
+| Field | Requested access |
 | --- | --- |
-| `read` / `write` | Filesystem allow-lists. `true` means unrestricted access. |
-| `denyRead` / `denyWrite` | Explicit denials applied after the allow-list. |
-| `net` / `denyNet` | Network host allow- and deny-lists. |
-| `allowImport` | Modules the worker may import. `true` allows all imports. |
-| `env` | Environment access through `{ allow, deny, files }`. |
-| `run` / `denyRun` | Subprocess execution allow- and deny-lists. |
+| `cwd` | Base directory for relative permission paths. |
+| `read` / `write` | Filesystem allow-lists. `true` requests unrestricted access. |
+| `denyRead` / `denyWrite` | Filesystem exceptions, where the runtime supports deny-lists. |
+| `net` / `denyNet` | Network host allow- and deny-lists. `net: true` requests all hosts. |
+| `allowImport` | Allowed import hostnames. `true` allows all import hosts; it is not a list of module names. |
+| `env` | Environment settings through `{ allow, deny, files }`. `files` identifies environment files to load. |
+| `run` / `denyRun` | Executable allow- and deny-lists, where supported. `run: true` requests all subprocesses. |
+| `workers` | Whether task code may create more workers. |
+| `ffi` / `denyFfi` | Native-library access. The process transport itself needs native-code access. |
+| `sys` / `denySys` | Deno system-information APIs such as `hostname` and `systemMemoryInfo`. |
+| `wasi` | Whether WASI is allowed. |
 | `console` | Whether worker `console.*` output reaches the host. |
 
-Knitting uses each runtime's own permission mechanism, so the exact coverage
-varies by runtime (see [how each runtime enforces it](#how-the-runtimes-enforce-it)).
-Permissions are a guardrail, not a complete boundary for untrusted code. For
-stronger isolation, combine them with [process workers](/guides/process-workers/).
+Object mode also accepts `mode: "custom"`. It starts from the strict baseline,
+but explicit `denyRead` and `denyWrite` lists replace the corresponding default
+denials. In strict mode, those lists add to the defaults.
 
-## What strict mode allows
+## When a process cannot enforce the policy
 
-Strict mode starts with a conservative policy:
+Process workers check the requested restrictions before starting. An explicit
+restriction that the runtime cannot enforce causes pool creation to throw.
+Unsupported implicit strict defaults produce a warning instead.
 
-- reads and writes are limited to the current working directory (`cwd`);
-- writes to `node_modules` are denied;
-- sensitive files and directories are denied, including `.env`, `.git`,
-  `.npmrc`, `.docker`, `.secrets`, `~/.ssh`, `~/.gnupg`, `~/.aws`,
-  `~/.azure`, `~/.config/gcloud`, and `~/.kube`;
-- sensitive POSIX paths are denied, including `/proc`, `/sys`, `/dev`, and
-  `/etc`;
-- `deno.lock` and `bun.lock*` can still be read.
+For example, `run: ["git"]` requests permission to run Git alone. Deno process
+workers can express that list. Node's `--allow-child-process` grants all
+subprocess execution, so a Node process pool rejects the scoped request. On
+Node threads, a nonempty `run` list enables that broad flag; it does not enforce
+an executable list.
 
-`permission: "unsafe"` turns off runtime permission flags and removes inherited
-Node permission flags from the worker's `execArgv`.
+The same distinction applies to `net: ["api.example.com"]`: Node process
+workers reject the host list, even on a Node version with network permission
+support. Choosing a runtime with scoped permissions or using an OS sandbox
+lets you keep the intended restriction.
 
-## How the runtimes enforce it
+Node process workers need native-code access for the shared-memory transport.
+Deno process workers need `--allow-ffi`. A policy that explicitly forbids the
+transport's required native access cannot be enforced and is rejected.
 
-Knitting translates the same policy into each runtime's native permission
-system. The result is slightly different on Node.js, Deno, and Bun.
+## Keep task code inside the worker
 
-### Node.js workers
+Worker permissions do not apply to modules imported by the host. A module can
+run code as soon as it is imported, before you make a pool call. Calls handled
+by the [inliner](/guides/inliner/) also run on the host, under its permissions.
 
-Node workers receive `--permission` or `--experimental-permission`, along with
-the relevant allow flags:
+Use [`importTask`](/guides/defining-tasks/#importing-worker-side-code-with-importtask)
+when a module must load only inside the worker. The host keeps a typed wrapper
+without importing or evaluating the task module, and imported tasks stay on
+worker lanes even when the pool has an inliner.
 
-- `--allow-fs-read`
-- `--allow-fs-write`
-- `--allow-worker`
-- `--allow-child-process`
-- `--allow-addons`
-- `--allow-wasi`
+## Runtime-specific options
 
-Node's worker flags are allow-list based. That means Knitting cannot represent
-every protocol-level deny-list rule as a native Node flag.
+The `node` object accepts `allowChildProcess`, `allowWorker`, `allowAddons`,
+`allowFfi` and `allowWasi`. These are broad switches, not scoped allow-lists.
+The legacy `deno.allowRun` option also grants subprocess access; prefer the
+scoped top-level `run` list for Deno processes.
 
-### Deno workers
-
-When enabled, Deno workers receive a `Worker.deno.permissions` policy.
-
-Knitting applies it only when one of these is true:
-
-- it detects `--unstable-worker-options` (using a Linux `/proc` check); or
-- `KNITTING_DENO_WORKER_PERMISSIONS=1` is set.
-
-### Bun workers
-
-Bun does not currently provide worker permission flags. Knitting accepts the
-permission values for API compatibility, but Bun cannot enforce them through
-runtime flags yet.
-
-## Controlling subprocesses
-
-If a task needs to start another process, object mode also supports
-runtime-specific overrides:
-
-- `node.allowChildProcess?: boolean`
-- `deno.allowRun?: boolean` — a legacy option, superseded by the top-level
-  `run` allow-list.
-
-Both default to `false` in strict mode. Prefer the top-level `run` allow-list
-when you need to permit specific commands.
+For the native controls behind these settings, see
+[Node's permission model](https://nodejs.org/api/permissions.html) and
+[Deno's permissions](https://docs.deno.com/runtime/fundamentals/security/).

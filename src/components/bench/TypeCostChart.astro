@@ -1,0 +1,436 @@
+---
+// Time per call for each payload type in the `types` suite, one row per type
+// and one mark per runtime. The mark is the median across the committed runs
+// and the line through it spans the fastest and slowest run. The axis is
+// logarithmic because the cheapest and most expensive types sit two orders of
+// magnitude apart, and dots are used instead of bars because a bar's length
+// means nothing on a log scale.
+import {
+  formatNs,
+  perCallNs,
+  RUNTIME_NAMES,
+  RUNTIMES,
+  suiteSummary,
+  type ArmResult,
+} from "../../lib/bench";
+
+interface Props {
+  batch: 1 | 100;
+}
+
+const { batch } = Astro.props;
+const summary = suiteSummary("types");
+
+const middle = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+const rows = perCallNs("types", "payload type cost", batch)
+  .map((row) => ({
+    ...row,
+    rank: middle(Object.values(row.byRuntime).map((spread) => spread.median)),
+  }))
+  .sort((a, b) => a.rank - b.rank);
+
+// Axis in microseconds, snapped outward to the 1-2-5 sequence.
+const extremes = rows.flatMap((row) =>
+  Object.values(row.byRuntime).flatMap((spread) => [spread.min / 1e3, spread.max / 1e3]),
+);
+const low = Math.min(...extremes);
+const high = Math.max(...extremes);
+const candidates: number[] = [];
+for (let exponent = Math.floor(Math.log10(low)) - 1; exponent <= Math.ceil(Math.log10(high)); exponent++) {
+  for (const step of [1, 2, 5]) candidates.push(Number((step * 10 ** exponent).toPrecision(3)));
+}
+const domainMin = Math.max(...candidates.filter((tick) => tick <= low));
+const domainMax = Math.min(...candidates.filter((tick) => tick >= high));
+const ticks = candidates.filter((tick) => tick >= domainMin && tick <= domainMax);
+const span = Math.log10(domainMax) - Math.log10(domainMin);
+const x = (ns: number) => ((Math.log10(ns / 1e3) - Math.log10(domainMin)) / span) * 100;
+const tickX = (micros: number) => x(micros * 1e3);
+
+const describe = (row: ArmResult) =>
+  `${row.arm}: ` +
+  RUNTIMES.filter((runtime) => row.byRuntime[runtime])
+    .map((runtime) => `${RUNTIME_NAMES[runtime]} ${formatNs(row.byRuntime[runtime]!.median)}`)
+    .join(", ") +
+  " per call";
+
+const runCount = summary.runIds.length;
+const batchText = batch === 1 ? "one call at a time" : `${batch} calls in flight`;
+---
+
+<figure class="type-cost not-content">
+  <ul class="legend">
+    {
+      RUNTIMES.filter((runtime) => summary.runtimes[runtime]).map((runtime) => (
+        <li>
+          <span class:list={["mark", `is-${runtime}`]} aria-hidden="true" />
+          {RUNTIME_NAMES[runtime]} {summary.runtimes[runtime]}
+        </li>
+      ))
+    }
+  </ul>
+
+  <div class="axis" aria-hidden="true">
+    <span />
+    <span class="axis-track">
+      {
+        ticks.map((tick, index) => (
+          <span
+            class:list={["tick", { first: index === 0, last: index === ticks.length - 1 }]}
+            style={`left:${tickX(tick)}%`}
+          >
+            {tick}
+          </span>
+        ))
+      }
+    </span>
+  </div>
+
+  <ol class="rows">
+    {
+      rows.map((row) => (
+        <li class="row" tabindex="0" aria-label={describe(row)}>
+          <span class="label">{row.arm}</span>
+          <span class="track">
+            {ticks.map((tick) => (
+              <span class="grid" style={`left:${tickX(tick)}%`} />
+            ))}
+            {RUNTIMES.map((runtime, lane) => {
+              const spread = row.byRuntime[runtime];
+              return (
+                spread && (
+                  <span class:list={["lane", `is-${runtime}`]} style={`--lane:${lane}`}>
+                    <span
+                      class="range"
+                      style={`left:${x(spread.min)}%;width:${x(spread.max) - x(spread.min)}%`}
+                    />
+                    <span class:list={["mark", `is-${runtime}`]} style={`left:${x(spread.median)}%`} />
+                  </span>
+                )
+              );
+            })}
+          </span>
+          <span class="tip" aria-hidden="true">
+            <strong>{row.arm}</strong>
+            {RUNTIMES.map((runtime) => {
+              const spread = row.byRuntime[runtime];
+              return (
+                spread && (
+                  <span class="tip-line">
+                    <span class:list={["mark", `is-${runtime}`]} />
+                    <span>{RUNTIME_NAMES[runtime]}</span>
+                    <b>{formatNs(spread.median)}</b>
+                    <span class="tip-range">
+                      {formatNs(spread.min)} to {formatNs(spread.max)}
+                    </span>
+                  </span>
+                )
+              );
+            })}
+          </span>
+        </li>
+      ))
+    }
+  </ol>
+
+  <div class="axis" aria-hidden="true">
+    <span />
+    <span class="axis-track">
+      {
+        ticks.map((tick, index) => (
+          <span
+            class:list={["tick", { first: index === 0, last: index === ticks.length - 1 }]}
+            style={`left:${tickX(tick)}%`}
+          >
+            {tick}
+          </span>
+        ))
+      }
+    </span>
+  </div>
+
+  <figcaption>
+    Microseconds per call, {batchText}, on a log scale. Each mark is the median of {runCount} runs,
+    and the line through it spans the fastest and slowest run. Rows are sorted by cost.
+  </figcaption>
+</figure>
+
+<details class="type-cost-numbers">
+  <summary>Show the numbers</summary>
+  <table>
+    <thead>
+      <tr>
+        <th>Payload</th>
+        {
+          RUNTIMES.filter((runtime) => summary.runtimes[runtime]).map((runtime) => (
+            <th>{RUNTIME_NAMES[runtime]}</th>
+          ))
+        }
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr>
+            <td>{row.arm}</td>
+            {RUNTIMES.filter((runtime) => summary.runtimes[runtime]).map((runtime) => {
+              const spread = row.byRuntime[runtime];
+              return spread ? (
+                <td>
+                  {formatNs(spread.median)}
+                  <span class="cell-range">
+                    {formatNs(spread.min)} to {formatNs(spread.max)}
+                  </span>
+                </td>
+              ) : (
+                <td>—</td>
+              );
+            })}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</details>
+
+<style>
+  /* Runtime colours, checked for contrast and colour-blind separation against
+     the site's own surfaces (#160c08 dark, #fff1d6 light). Each runtime also
+     has its own marker shape, so colour is never the only cue. */
+  .type-cost {
+    --c-node: #447010;
+    --c-deno: #3b82f6;
+    --c-bun: #d47906;
+    --label-w: 11.5rem;
+    --lane-gap: 0.5rem;
+    margin-block: 1.5rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  :global(:root[data-theme="light"]) .type-cost {
+    --c-node: #3f6212;
+    --c-deno: #2563eb;
+    --c-bun: #c96f06;
+  }
+
+  .is-node {
+    --c: var(--c-node);
+  }
+  .is-deno {
+    --c: var(--c-deno);
+  }
+  .is-bun {
+    --c: var(--c-bun);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+    color: var(--sl-color-white);
+  }
+
+  .legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .mark {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    background: var(--c);
+    box-shadow: 0 0 0 2px var(--sl-color-bg);
+  }
+  .mark.is-node {
+    border-radius: 50%;
+  }
+  .mark.is-deno {
+    border-radius: 1px;
+  }
+  .mark.is-bun {
+    width: 8px;
+    height: 8px;
+    transform: rotate(45deg);
+  }
+
+  .axis,
+  .row {
+    display: grid;
+    grid-template-columns: var(--label-w) 1fr;
+    column-gap: 0.75rem;
+  }
+
+  .axis {
+    height: 1.25rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .axis-track {
+    position: relative;
+  }
+
+  .tick {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+  .tick.first {
+    transform: none;
+  }
+  .tick.last {
+    transform: translateX(-100%);
+  }
+
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    position: relative;
+    align-items: center;
+    border-radius: 0.25rem;
+    outline-offset: 2px;
+  }
+
+  .row:hover,
+  .row:focus-visible {
+    background: color-mix(in srgb, var(--sl-color-white) 7%, transparent);
+  }
+
+  .label {
+    padding-inline-start: 0.25rem;
+    color: var(--sl-color-gray-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track {
+    position: relative;
+    height: calc(4 * var(--lane-gap) + 0.25rem);
+  }
+
+  .grid {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--sl-color-hairline-light);
+  }
+
+  .lane {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(var(--lane-gap) + var(--lane) * var(--lane-gap) + 0.125rem);
+    height: 0;
+  }
+
+  .range {
+    position: absolute;
+    top: 0;
+    height: 2px;
+    min-width: 1px;
+    border-radius: 1px;
+    background: var(--c);
+    transform: translateY(-50%);
+  }
+
+  .lane .mark {
+    position: absolute;
+    top: 0;
+    transform: translate(-50%, -50%);
+  }
+  .lane .mark.is-bun {
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  .tip {
+    display: none;
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 0.25rem);
+    left: calc(var(--label-w) + 0.75rem);
+    min-width: 15rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.375rem;
+    background: var(--sl-color-bg-nav);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--sl-color-black) 35%, transparent);
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-xs);
+    pointer-events: none;
+  }
+
+  .row:hover .tip,
+  .row:focus-visible .tip {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .tip-line {
+    display: grid;
+    grid-template-columns: 0.75rem 3.5rem 4rem 1fr;
+    align-items: center;
+    gap: 0.375rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tip-line b {
+    text-align: end;
+  }
+
+  .tip-range {
+    color: var(--sl-color-gray-3);
+  }
+
+  figcaption {
+    margin-top: 0.75rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+  }
+
+  .type-cost-numbers td {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .cell-range {
+    display: block;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+  }
+
+  @media (max-width: 40rem) {
+    .type-cost {
+      --label-w: 0px;
+    }
+    .axis,
+    .row {
+      grid-template-columns: 1fr;
+    }
+    .axis > span:first-child {
+      display: none;
+    }
+    .row {
+      padding-top: 0.25rem;
+    }
+    .label {
+      font-size: var(--sl-text-xs);
+    }
+    .tip {
+      left: 0;
+    }
+  }
+</style>

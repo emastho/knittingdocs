@@ -1,0 +1,69 @@
+---
+title: Payload types
+description: What each kind of value costs on a Knitting round trip, on Node.js, Deno and Bun, built from committed benchmark runs.
+sidebar:
+  order: 6
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import BenchRunInfo from '../../../components/bench/BenchRunInfo.astro';
+import TypeCostChart from '../../../components/bench/TypeCostChart.astro';
+
+Each call sends one value to a worker whose task is `(v) => v`, then waits for
+the value to come back. The worker does no work, so the time is what Knitting
+spends moving that value in both directions. Every binary type carries the same
+1 KiB, so those rows compare directly.
+
+<BenchRunInfo suite="types" />
+
+The chart and table on this page are generated from those runs when the site is
+built. With 100 calls in flight, a row shows the time for the whole batch
+divided by 100.
+
+<Tabs>
+  <TabItem label="One call at a time">
+    <TypeCostChart batch={1} />
+  </TabItem>
+  <TabItem label="100 calls in flight">
+    <TypeCostChart batch={100} />
+  </TabItem>
+</Tabs>
+
+## What the runs show
+
+Each point compares medians, and each difference is larger than the spread
+between runs. Smaller differences did not repeat, so they are left out.
+
+- **Batching matters more than the type.** On Node.js and Bun, sending a
+  `number`, `boolean`, `null`, `undefined` or small `bigint` costs two to six
+  times less per call with 100 calls in flight than one call at a time.
+- **On Deno, a single call is expensive whatever it carries.** One call at a
+  time, Deno's primitives cost almost as much as its 1 KiB binary types, and
+  roughly ten times what Node.js and Bun take for the same values. Most of that
+  cost is per call rather than per byte: with 100 calls in flight, Deno's
+  primitives cost about the same as Node's.
+- **`Error` is the most expensive type everywhere.** It is the slowest row on
+  every runtime at both batch sizes, well clear of the next one.
+- **The cheapest 1 KiB view depends on the runtime.** With 100 calls in flight,
+  `Uint8Array` costs about half as much as `Float64Array` on Node.js, and on Bun
+  it is the other way round.
+
+## Run it yourself
+
+The suite lives in
+[`knitting-vs-tokio-bench`](https://github.com/mimiMonads/knitting-vs-tokio-bench):
+
+```bash
+git clone https://github.com/mimiMonads/knitting-vs-tokio-bench
+cd knitting-vs-tokio-bench
+npm install
+node scripts/bench.mjs types
+node scripts/tables.mjs
+```
+
+Each run writes a directory under `results/`. To update this page, commit the
+new runs in the bench repo, then copy them into the docs:
+
+```bash
+npm run bench:sync -- ../knitting-vs-tokio-bench <runId...>
+```
