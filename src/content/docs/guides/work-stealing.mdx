@@ -58,7 +58,7 @@ different worker is idle.
 With native stealing, the pool uses a shared-submit/private-return layout:
 
 1. The host publishes a request to one shared submit region.
-2. A worker claims a region when it can make progress on the work there.
+2. A worker claims waiting tasks when it can make progress on them.
 3. Each worker keeps a private return region for its responses.
 4. The worker that claims a task owns its response; the host's pending registry
    settles the corresponding promise.
@@ -77,6 +77,12 @@ nothing to steal from. Compiled workers, inliners, explicitly private
 dispatcher/balancer configurations, and pools above the 31-claimant protocol
 limit keep their fallback topology.
 
+[Andromeda thread pools](/guides/andromeda/) give each worker its own request
+lane by default. You can set `host.steal: true` to experiment with stealing,
+but on Andromeda 0.1.14 the host may only collect results when a one-second
+fallback timer fires. `KNITTING_STEAL` has no effect there because the runtime
+has no `process.env`.
+
 An explicit balancer, private-lane dispatcher, inliner, compiled worker, or an
 unsupported worker count can change that compatibility decision. Use
 `host.steal: false` to force private request lanes. Use `host.steal: true` only
@@ -84,9 +90,10 @@ when the resulting topology is supported and is what you intend to measure.
 
 ### `stealRegionLanes`
 
-The submit region has 32 slots. Stealing divides those slots into regions, and
-one claiming handshake takes one whole region. `stealRegionLanes` is the region
-width:
+The submit region has 32 slots. `stealRegionLanes` controls how many slots a
+worker can take in one claim. With ticket, it's the maximum batch size. With
+Dekker, the slots are divided into fixed regions, and a worker takes a whole
+region at once:
 
 ```text
 number of regions = 32 / stealRegionLanes
@@ -100,29 +107,79 @@ setting affects throughput and load balancing, but not correctness.
 
 ### `stealClaim`
 
-`host.stealClaim` chooses how workers claim a region:
+`host.stealClaim` chooses how workers take waiting tasks:
 
-| Value | Claim discipline |
+| Value | How workers claim tasks |
 | --- | --- |
-| `"dekker"` | The default. Each consumer has an intent slot and claims with a per-consumer handshake. |
-| `"cas-mask"` | One shared compare-and-swap mask coordinates region claims. |
+| `"ticket"` | The default. A counter assigns work in the order the host publishes it. |
+| `"dekker"` | Each worker signals its intent through its own slot before claiming a region. |
 
 ```ts
 using pool = createPool({
   threads: 4,
   host: {
     steal: true,
-    stealClaim: "cas-mask",
+    stealClaim: "ticket",
     stealRegionLanes: 1,
   },
 })({ transform });
 ```
 
 The environment variable `KNITTING_STEAL_CLAIM` accepts the same two values.
-An explicit `host.stealClaim` takes precedence over the environment variable. The discipline also
-sets the maximum useful `stealRegionLanes`: Dekker needs at least one spare
-region per live consumer, so it can constrain an explicit region width more
-tightly than `"cas-mask"`.
+Setting `host.stealClaim` overrides the environment variable. Unknown values,
+including the old `"cas-mask"` option, cause pool creation to throw. Dekker
+needs a spare region alongside the workers, so it can limit the region width
+more than ticket does.
+
+Ticket assigns work in order, but workers can still decode or finish later
+claims first. Each claim gets a 64-bit ticket number that only increases. If
+the counter runs out, the queue closes rather than reusing a ticket number.
+
+They also handle fatal failures differently. Dekker releases the region so
+another worker can finish the remaining work. With ticket, a fatal decoder or
+worker failure closes the shared queue. Calls still waiting for results and
+any new calls then reject, so shut down and replace the pool. Knitting doesn't
+retry claimed work because the decoder may already have consumed some of its
+payload. Under either option, a task that throws or returns a rejected promise
+only rejects that call.
+
+### `stealSingleClaimMicroseconds`
+
+In `0.1.74`, workers can adjust their ticket batch size as they run tasks.
+A worker normally finishes the batch it claimed, so a fast task can get stuck
+behind a slow one even while another worker is idle. Set this option to let
+workers take one task at a time when their recent tasks have been expensive:
+
+```ts
+using pool = createPool({
+  threads: 4,
+  host: {
+    stealClaim: "ticket",
+    stealSingleClaimMicroseconds: 20,
+  },
+})({ transform });
+```
+
+Each worker reads the clock twice per batch to measure the average task cost.
+It remembers the highest recent average and lets that estimate fall gradually
+as more batches run. While the estimate meets or exceeds your threshold, the
+worker takes one ticket at a time. Below it, the worker takes up to
+`stealRegionLanes`, sharing the cost of claiming work across several cheap
+tasks. Set the threshold in microseconds; the default, `0`, turns adaptation
+off.
+
+This only applies to ticket pools with more than one worker. Dekker doesn't
+adjust its batches. If the ticket batch width is already `1`, the worker skips
+timing because it can't take a smaller batch. A negative, `NaN`, or infinite
+threshold causes pool creation to throw when stealing is enabled.
+
+If your workload mixes slow and fast tasks, try `20` µs and measure the result.
+The
+[0.1.74 README](https://github.com/mimiMonads/knitting/blob/9030a91f0e161b6900fdae4ec67a6ecf765fcd7c/README.md#dispatcher-and-work-stealing)
+reports better p99 latency for mixed workloads in local tests. With seven
+workers running similar short tasks near the threshold, throughput fell by
+about 4–7%. That's why this is off by default: whether it helps depends on
+the work you're running.
 
 ## The host doorbell
 
@@ -150,6 +207,7 @@ back to polling.
 | --- | --- |
 | Node.js or Bun thread workers | `Atomics.waitAsync`; Node can optionally use native `uv_async_t` |
 | Deno thread workers | Thread-safe FFI callback when FFI permission is available; otherwise polling |
+| Andromeda thread workers (experimental) | `Atomics.waitAsync` when workers have their own request lanes; with stealing, results can wait for the one-second fallback timer |
 | Process workers | Process-local completion transport; otherwise polling |
 | Compiled workers | Host options are unsupported by the compiled-worker path |
 | Browser web workers | Polling; the browser doorbell is intentionally disabled |
@@ -163,9 +221,10 @@ back when the prebuild or permission is unavailable.
 
 ## Tuning and benchmarking
 
-Start with the defaults. Tune `stealRegionLanes` when task durations are highly
-uneven, and compare `host.doorbell: false` with the supported default when host
-CPU or completion latency matters.
+Start with the defaults. Tune `stealRegionLanes` or opt into
+`stealSingleClaimMicroseconds` when task durations are highly uneven. Compare
+`host.doorbell: false` with the supported default when host CPU or completion
+latency matters.
 
 Keep the topology constant while benchmarking. Do not compare a polling
 private-lane pool with a doorbell stealing pool and attribute the entire

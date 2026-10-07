@@ -91,7 +91,8 @@ createPool({
     stealRegionLanes?: number,
     doorbell?: boolean,
     nativeDoorbell?: boolean,
-    stealClaim?: "dekker" | "cas-mask",
+    stealClaim?: "ticket" | "dekker",
+    stealSingleClaimMicroseconds?: number,
     stallFreeLoops?: number,
     maxBackoffMs?: number,
     dispatcher?: "per-thread" | "serial-channel",
@@ -279,6 +280,10 @@ sandbox and container configuration, including the stdin / fd-0 handshake.
 runs that as a child process. It is experimental, and supports a smaller feature
 set than the other two — see [Compiled workers](/guides/compiled-workers/).
 
+You can also run thread pools on [Andromeda](/guides/andromeda/), where support
+is experimental. Bundle Knitting first, tell it where your task modules live,
+and leave the worker mode at its default, `"thread"`.
+
 ### bootstrap
 
 A privileged module — `{ href, name?, data? }` — that every worker imports and
@@ -382,7 +387,9 @@ registry still resolves the correct promise.
 For compatible pools with more than one worker, native work stealing is selected
 automatically. A one-worker pool has nothing to steal from. An explicit
 `balancer`, private-lane dispatcher, inliner, compiled worker, or an unsupported
-worker count can change that compatibility decision.
+worker count can change that compatibility decision. On Andromeda, workers
+keep their own request lanes by default because results from a stealing pool
+don't reliably wake the host. See [Andromeda scheduling](/guides/andromeda/#scheduling-and-limits).
 
 Set `host.steal: false` to measure or use private request lanes. The task API,
 payload types, and completion semantics stay the same in either topology.
@@ -398,12 +405,41 @@ benchmark the real workload.
 
 ### stealClaim
 
-Selects the region-claim discipline for work stealing. The default is
-`"dekker"`; `"cas-mask"` uses a shared compare-and-swap mask. The same choice
-can be set with `KNITTING_STEAL_CLAIM`, but the explicit host option wins.
-Dekker requires at least one spare region per live consumer, so it can impose a
-lower ceiling on an explicit `stealRegionLanes` than `"cas-mask"`. See
-[Work stealing](/guides/work-stealing/) for the topology and limits.
+Chooses how workers take waiting tasks. The default, `"ticket"`, assigns work
+in the order the host publishes it, using a counter that only increases.
+With `"dekker"`, workers each have a slot where they signal their intent to
+claim a region. You can also choose either through `KNITTING_STEAL_CLAIM`;
+setting `host.stealClaim` overrides the environment variable. Unknown values,
+including the old `"cas-mask"` option, cause pool creation to throw.
+
+Dekker needs a spare region alongside the workers, which can limit how wide
+you can set `stealRegionLanes`. With ticket, a fatal decoder or worker failure
+closes the shared queue. Calls still waiting for results and any new calls
+then reject, so you'll need to shut down and replace the pool. A task that
+throws or returns a rejected promise only rejects that call. See
+[Work stealing](/guides/work-stealing/#stealclaim).
+
+### stealSingleClaimMicroseconds
+
+Added in `0.1.74`, this lets workers adjust how many tasks they claim at once
+in a ticket stealing pool. It defaults to `0`, which turns adaptation off.
+Try `20` µs if your workload mixes slow and fast tasks and you want to reduce
+how long the slowest calls take.
+
+Each worker measures the average task cost in its batches. It remembers the
+highest recent average and lets that estimate fall gradually as more batches
+run. While the estimate meets or exceeds your threshold, it claims one ticket
+at a time. Below the threshold, it claims up to `stealRegionLanes`.
+
+This only applies to ticket pools with more than one worker. Dekker doesn't
+adjust its batches. If the ticket batch width is already `1`, the worker skips
+timing because it can't take a smaller batch. A negative, `NaN`, or infinite
+threshold causes pool creation to throw when stealing is enabled.
+
+If all your tasks are short and take about the same time, this can reduce
+throughput as you add workers. Check both p99 latency and throughput to see
+whether it helps your workload. See
+[adaptive ticket claims](/guides/work-stealing/#stealsingleclaimmicroseconds).
 
 ### doorbell
 

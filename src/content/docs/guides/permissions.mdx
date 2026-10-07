@@ -12,7 +12,7 @@ processes.
 
 ## Check the runtime first
 
-This is the behavior in Knitting `0.1.73`, the release these docs describe.
+This is the behavior in Knitting `0.1.74`, the release these docs describe.
 
 | Worker | What the policy can enforce |
 | --- | --- |
@@ -21,6 +21,7 @@ This is the behavior in Knitting `0.1.73`, the release these docs describe.
 | Deno threads | Knitting does not pass a separate `Worker.deno.permissions` policy in this release. The host's Deno permissions still apply, but `permission` does not narrow them for the worker. |
 | Deno processes | Scoped runtime flags for filesystem, network, environment, import hosts and subprocesses. The shared-memory transport requires FFI access. Knitting does not configure a worker-spawn restriction. |
 | Bun threads and processes | No matching runtime permission controls. The policy cannot restrict task access through runtime flags. |
+| Andromeda threads (experimental) | Andromeda decides what workers can access. Leave `permission` out; setting it causes pool creation to throw. See the [Andromeda guide](/guides/andromeda/). |
 
 For Node threads, the same limits on host lists, environment access and
 deny-lists apply as for Node processes. These differences matter when a task

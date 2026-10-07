@@ -14,7 +14,7 @@ export const GITHUB = {
 } as const;
 
 export const TAGLINE =
-  "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function.";
+  "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function. You can also try experimental thread pools on Andromeda 0.1.14.";
 
 export const POSITIONING = [
   "Use Knitting when CPU-heavy, bursty, or isolation-sensitive work should leave the main thread without becoming a separate service. Its compact API combines typed calls with shared-memory IPC, work stealing, timeouts, cancellation, worker permissions, and zero-copy paths for large binary payloads. Knitting treats CPU spent waiting, polling, copying, and coordinating as overhead to minimize: idle workers park instead of spinning, and on supported runtimes the host waits on a doorbell instead of polling. The goal is performance isolation without spending the capacity that isolation is meant to recover.",
@@ -32,7 +32,7 @@ export const ESSENTIALS = [
   "",
   "### Install and task contract",
   "",
-  "- Install: `npm install knitting` (the npm package is `knitting`; it is also on JSR as `@vixeny/knitting`). Requires Node 22+, Deno 2+, or Bun 1+.",
+  "- Install: `npm install knitting` (the npm package is `knitting`; it is also on JSR as `@vixeny/knitting`). These docs cover 0.1.74. Use Node 22+, Deno 2+, or Bun 1+. For Andromeda, follow the experimental setup below.",
   "- A task is an exported function at module scope. Wrap it with `task({ f })` only when you want options like a timeout or an abort signal.",
   "- Tasks take ONE argument. Use a tuple or object for multiple values: `([a, b]) => a + b`.",
   "- Guard host-only code with `isMain` — workers re-import the module.",
@@ -40,7 +40,9 @@ export const ESSENTIALS = [
   "- Create a pool with `createPool(options)({ taskA, taskB })`, then call `await pool.call.taskA(args)`.",
   "",
   "### Scheduling and lifetime",
-  "- Scheduling: compatible multi-worker pools use native work stealing by default. Workers claim tasks from a shared submit region while keeping private return lanes; control it with `host.steal`, `host.stealRegionLanes`, `host.stealClaim`, and `host.doorbell`. `KNITTING_STEAL_CLAIM` selects `dekker` or `cas-mask`; unsupported runtimes fall back to private lanes or polling.",
+  "- Scheduling: compatible pools with more than one worker use work stealing by default, except on Andromeda. Workers take waiting tasks from a shared submit region and return results through their own lanes. The options are `host.steal`, `host.stealRegionLanes`, `host.stealClaim`, and `host.doorbell`. `stealClaim` defaults to `ticket`; you can also choose `dekker`. `KNITTING_STEAL_CLAIM` accepts the same values, but setting the host option overrides it. Unknown values, including the old `cas-mask` option, cause pool creation to throw.",
+  "- Ticket queue failures: a fatal decoder or worker failure closes the shared queue. Calls still waiting for results and any new calls then reject, so shut down and replace the pool. A task that throws or returns a rejected promise only rejects that call.",
+  "- Adaptive claims (0.1.74): `host.stealSingleClaimMicroseconds` defaults to 0, which turns adaptation off. Each worker measures average task cost per batch and remembers the highest recent average, letting that estimate fall gradually as more batches run. When it meets or exceeds your threshold, the worker takes one ticket at a time; below it, the worker takes up to `stealRegionLanes`. Try 20 microseconds when you have slow and fast tasks, then check p99 latency and throughput. This only applies to ticket pools with more than one worker. A ticket batch width of 1 skips timing. Negative, NaN, or infinite thresholds cause pool creation to throw when stealing is enabled.",
   "- CPU efficiency is a design goal: useful task work should consume CPU; waiting, polling, unnecessary copying, and oversized pools should not. A single worker spins 50us before parking because it is on the request's critical path; multi-worker pools park immediately, since a peer is already awake to take the work. The host doorbell uses the runtime's completion wake path — Atomics on Node/Bun, FFI on Deno when allowed, and a process-local transport for process workers — with polling fallback. Node threads can opt into `host.nativeDoorbell`. Expect a bigger pool to raise CPU per request without raising throughput when the host is the only producer (a server), so size `threads` from measurements, not from core count — see the Multi-threading guide.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
   "- Keep a server pool alive across requests; do not create and dispose workers on every request. Await outstanding calls before leaving a `using` scope. If your runtime or build pipeline does not support `using`, use `try/finally` with `await pool.shutdown()`.",
@@ -63,6 +65,13 @@ export const ESSENTIALS = [
   "### Browser requirements",
   "",
   '- `knitting/browser` runs the same pool API on web workers. The page must be cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp`). Every task module must call `setModuleUrl(import.meta.url)` before defining tasks for portable module discovery. Browser workers do not support process workers, compiled/Porffor workers, `BufferReference`, `ProcessSharedBuffer`, or passing a `SharedArrayBuffer` as a task argument. `permission: {...}` is accepted but ignored in the browser; workers retain the privileges of the page.',
+  "",
+  "### Experimental Andromeda runtime",
+  "",
+  "- To run Knitting 0.1.74 thread pools on Andromeda 0.1.14, bundle Knitting into one ESM file first. Andromeda can't load npm packages directly, and loading the source files fails with an assertion in Nova's module loader. From the Knitting source checkout, run `bun build knitting.ts --target=browser --outfile=knitting.andromeda.js`, then import the local bundle. Run your app with `andromeda run main.ts`. The [Andromeda guide](/guides/andromeda/) gives the source revision and complete commands.",
+  "- Tell Knitting which file you're in by calling `setModuleUrl(import.meta.url)` before `task()` or `importTask()`. Do this in the app entry too, before `createPool()`. Your app, tasks, and helpers can stay in separate files. Task modules, imported task targets, and bootstrap modules can use relative helper imports. If you bundle the whole app, re-export imported pool tasks from the entry so workers can find them among the bundle's exports. Keep host code inside `if (isMain)` and use `try/finally` with `await pool.shutdown()`.",
+  "- Andromeda gives each worker its own request lane by default. You can set `host: { steal: true }` to experiment with stealing, but on 0.1.14 the host may only collect results when a one-second fallback timer fires. `KNITTING_STEAL` has no effect because there is no `process.env`.",
+  "- Andromeda doesn't support process workers or `ProcessSharedBuffer`. Leave `permission` out when creating the pool: setting it causes pool creation to throw. Andromeda decides what workers can access.",
   "",
   "### Minimal server-runtime example",
   "",

@@ -94,6 +94,7 @@ enabled by default when the runtime can wake the host without polling:
 | --- | --- |
 | Node and Bun thread workers | `Atomics.waitAsync` |
 | Deno thread workers | A thread-safe FFI callback when FFI permission is available |
+| Andromeda thread workers (experimental) | `Atomics.waitAsync` when workers have their own request lanes, as they do by default. See [Andromeda scheduling](/guides/andromeda/#scheduling-and-limits) before turning on stealing. |
 | Process workers | A process-local completion transport |
 | Compiled workers and browsers | Polling/fallback; host options are unsupported for compiled workers |
 

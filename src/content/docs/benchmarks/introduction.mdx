@@ -1,6 +1,6 @@
 ---
 title: Performance
-description: Four performance reasons to use Knitting, each with a chart and the numbers behind it.
+description: Performance results for Knitting, with the setup and numbers behind each claim.
 sidebar:
   order: 1
 ---
@@ -8,7 +8,7 @@ sidebar:
 import CompareBars from '../../../components/bench/CompareBars.astro';
 import { hono, latencyGroups, latencyRatios, primeGroups, primeSpeedups, copyGroups, copyRange, smallCopyLead, largeCopyLead, payloadComparison, payloadNarrowest, repeatCores } from '../../../lib/bench-history';
 
-There are four performance reasons to use Knitting:
+Here are five measured performance results:
 
 1. [It puts a second core to work](#put-a-second-core-to-work): `/ping` p99
    fell by {hono.reductions[0]}% at similar CPU usage in the Hono test.
@@ -18,10 +18,12 @@ There are four performance reasons to use Knitting:
    {primeSpeedups.node}× faster with four extra threads on Node.js.
 4. [Binary round trips are comparable to Tokio](#binary-round-trips-are-comparable-to-tokio)
    in the 32–512 KiB range tested.
+5. [A typesetting workload scales across cores](#typesetting-a-long-document):
+   warm full-document runs were 1.86× faster on Node and 1.77× on Bun with four workers.
 
-Each reason below has a chart and the numbers behind it. Shorter bars are
-better: the charts show elapsed time or CPU usage. These are separate runs,
-with their own hardware and Knitting versions.
+The charted comparisons below show elapsed time or CPU usage; each result also
+links to the numbers behind it. These are separate runs, with their own
+hardware and Knitting versions.
 
 ## Put a second core to work
 
@@ -130,6 +132,33 @@ With four extra threads the run finished {primeSpeedups.node}× faster on Node.j
 ideally finish in one fifth of the time. Returning every chunk's primes to the
 main thread adds work, so this test measures computation and transport together.
 The [reports](/benchmarks/results/#runtime-reports) include the other worker counts.
+
+<span id="typesetting-a-long-document"></span>
+
+## A typesetting workload scales across cores
+
+The open-source [knit-tex](https://github.com/mimiMonads/knit-tex) project
+typesets a 216-page copy of *Pride and Prejudice* to PDF. On an Intel Core
+i5-1135G7 with four physical cores, knitting x4 reduced the median of five warm
+runs from 427 ms to 229 ms on Node 24.19.0 (1.86×), and from 449 ms to 254 ms
+on Bun 1.4.0 (1.77×). In both runtimes, pool output hashes matched that
+runtime's main-thread output.
+
+The faster runs used more CPU time: 871 ms versus 509 ms on Node, and 1,266 ms
+versus 607 ms on Bun. The cold full-document run and fresh-process CLI runs
+were slower with four workers than on the main thread. Pool startup and worker
+warm-up can outweigh parallel work when the executor is used only once.
+
+The project also tested work stealing with a mixed batch of 2,115 paragraph
+tasks. At four workers, Node finished 9.7–23.3% sooner across three seeds;
+Bun's results ranged from 5.5% slower to 17.5% faster. These runs support a
+workload-specific benefit, not a general speedup guarantee. The timer-gap
+measurements in the reports are responsiveness proxies, not request latency.
+The [knit-tex README](https://github.com/mimiMonads/knit-tex#benchmarks)
+explains the method and limits; the [Node full-document report](https://github.com/mimiMonads/knit-tex/blob/main/output/bench/node-24.19.md),
+[Bun full-document report](https://github.com/mimiMonads/knit-tex/blob/main/output/bench/bun-1.4.0.md),
+and [mixed-batch reports](https://github.com/mimiMonads/knit-tex/tree/main/output/bench)
+contain the measurements.
 
 ## Binary round trips are comparable to Tokio
 

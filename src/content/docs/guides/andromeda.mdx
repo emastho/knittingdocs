@@ -1,0 +1,157 @@
+---
+title: Andromeda (experimental)
+description: Build a Knitting bundle, run your first Andromeda thread pool, and learn which features are supported.
+sidebar:
+  order: 16
+---
+
+You can run Knitting `0.1.74` thread pools on **Andromeda 0.1.14**, though
+support is still experimental. You define and call tasks the usual way. To
+get started, bundle Knitting into one ESM file and tell it where your task
+modules live. You'll use Bun to build the bundle and Andromeda to run your app.
+
+This setup follows the
+[README shipped with 0.1.74](https://github.com/mimiMonads/knitting/blob/9030a91f0e161b6900fdae4ec67a6ecf765fcd7c/README.md#experimental-andromeda-support).
+
+## Bundle Knitting
+
+Andromeda can't load npm packages directly. Loading Knitting's source files
+also currently fails with an assertion in Nova's module loader. Bundling
+Knitting first avoids that problem.
+
+From your app directory, get the source used for the `0.1.74` release and build
+it with Bun:
+
+```bash
+git clone https://github.com/mimiMonads/knitting.git knitting-runtime
+cd knitting-runtime
+git checkout 9030a91f0e161b6900fdae4ec67a6ecf765fcd7c
+bun build knitting.ts --target=browser --outfile=../knitting.andromeda.js
+cd ..
+```
+
+Use `--target=browser` for this build. The command bundles `knitting.ts` and
+puts `knitting.andromeda.js` in your app directory, ready to import.
+
+## Run a thread pool
+
+Save this beside the bundle as `main.ts`:
+
+```ts
+import { createPool, isMain, setModuleUrl, task } from "./knitting.andromeda.js";
+
+setModuleUrl(import.meta.url);
+
+export const add = task<[number, number], number>({
+  f: ([left, right]) => left + right,
+});
+
+if (isMain) {
+  const pool = createPool({ threads: 2 })({ add });
+  try {
+    console.log(await pool.call.add([20, 22])); // 42
+  } finally {
+    await pool.shutdown();
+  }
+}
+```
+
+```bash
+andromeda run main.ts
+```
+
+Andromeda doesn't provide the stack traces Knitting uses to find your task
+module. Calling `setModuleUrl(import.meta.url)` tells Knitting which file it's
+in. Do this before defining tasks or creating the pool. Keep the code that
+creates and calls the pool inside `if (isMain)` so workers don't run it too.
+The `finally` block waits for the workers to shut down when you're done.
+
+## Keep application modules separate
+
+You can keep your app entry, tasks, and helpers in separate files after
+bundling Knitting. Call `setModuleUrl(import.meta.url)` in each file before
+calling `task()` or `importTask()`. The app entry needs its own call before
+`createPool()`, even if all its tasks come from another file.
+
+For example, keep these files beside `knitting.andromeda.js`:
+
+```ts
+// helpers.ts
+export const addBias = (value: number, bias: number) => value + bias;
+```
+
+```ts
+// tasks.ts
+import { setModuleUrl, task } from "./knitting.andromeda.js";
+import { addBias } from "./helpers.ts";
+
+setModuleUrl(import.meta.url);
+
+export const addWithBias = task<[number, number], number>({
+  f: ([value, bias]) => addBias(value, bias),
+});
+```
+
+```ts
+// main.ts
+import { createPool, isMain, setModuleUrl } from "./knitting.andromeda.js";
+import { addWithBias } from "./tasks.ts";
+
+export { addWithBias };
+
+setModuleUrl(import.meta.url);
+
+if (isMain) {
+  const pool = createPool({ threads: 2 })({ addWithBias });
+  try {
+    console.log(await pool.call.addWithBias([20, 22])); // 42
+  } finally {
+    await pool.shutdown();
+  }
+}
+```
+
+Run the entry with `andromeda run main.ts`. Task modules, `importTask()` targets,
+and `worker.bootstrap` modules can use regular relative imports such as
+`./helpers.ts`.
+
+## Bundle the entire application
+
+You can also bundle the entry and its imports into one file:
+
+```bash
+bun build main.ts --target=browser --outfile=app.andromeda.js
+andromeda run app.andromeda.js
+```
+
+Keep the `setModuleUrl(import.meta.url)` calls so workers can find the bundle.
+If your tasks come from separate files, re-export them from the app entry too.
+That's why the example includes `export { addWithBias }`: workers need to find
+each pool task among the bundle's exports. If a task's export is missing, its
+calls can hang.
+
+## Scheduling and limits
+
+When you use more than one worker on Andromeda, Knitting gives each worker
+its own request lane by default. In the README's checks on Andromeda 0.1.14,
+turning on work stealing stopped results from waking the host as they arrived.
+The host only collected them when a one-second fallback timer fired, so two
+workers were slower than one. Keeping the request lanes separate avoids that
+problem.
+
+You can still set `host: { steal: true }` to try work stealing on a newer
+version of Andromeda. `KNITTING_STEAL` has no effect because Andromeda has no
+`process.env`. See [Work stealing](/guides/work-stealing/) for the general
+scheduling options.
+
+| Feature | Andromeda support |
+| --- | --- |
+| Thread workers | Experimental; bundle Knitting and call `setModuleUrl` as shown above |
+| Separate task and helper modules | Supported with regular relative imports |
+| Process workers | Unavailable |
+| `ProcessSharedBuffer` | Unavailable |
+| Per-worker `permission` | Unavailable; setting this option causes pool creation to throw |
+
+Leave `permission` out when creating an Andromeda pool. Andromeda decides what
+workers can access; Knitting can't set a separate policy for them. See
+[Permissions](/guides/permissions/) for the other runtimes.

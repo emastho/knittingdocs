@@ -118,6 +118,7 @@ bun add hono @hono/node-server knitting`;
       <p class="kh-kicker">Quick start</p>
       <h2 id="kh-start-title">Run a function in a worker.</h2>
       <p>This Hono route compresses HTML in a worker and returns the compressed size.</p>
+      <p>You can also try thread pools on <a href={homeUrl("/guides/andromeda/")}>Andromeda</a>, where support is still experimental.</p>
     </div>
 
     <div class="kh-start-grid">
@@ -286,6 +287,12 @@ bun add hono @hono/node-server knitting`;
         <span>Pipelines</span>
         <strong>Markdown + Brotli</strong>
         <p>Convert Markdown to HTML, then compress it.</p>
+        <i aria-hidden="true">→</i>
+      </a>
+      <a href="https://github.com/mimiMonads/knit-tex">
+        <span>Typesetting</span>
+        <strong>TeX to PDF</strong>
+        <p>In one four-core benchmark, warm Pride and Prejudice runs finished 46% faster on Node and 43% faster on Bun with four workers.</p>
         <i aria-hidden="true">→</i>
       </a>
     </div>

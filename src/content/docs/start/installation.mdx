@@ -24,9 +24,13 @@ Check the requirements below, then install Knitting with your runtime’s packag
 - Deno 2+
 - Bun 1.0+
 
+You can also try thread pools on Andromeda 0.1.14. Support is experimental, and
+you'll need to bundle Knitting first. The [Andromeda guide](/guides/andromeda/)
+walks through the setup.
+
 ## Install
 
-Knitting is published on npm as `knitting`. Latest release: `0.1.73`.
+Knitting is published on npm as `knitting`. Latest release: `0.1.74`.
 
 <Tabs>
   <TabItem label="npm"><Code code="npm install knitting" lang="bash" title={"npm.sh"} /></TabItem>
@@ -39,3 +43,20 @@ Knitting is also published on JSR as `@vixeny/knitting` — the same code under 
 scoped name. The npm package is the simplest path on every runtime, so prefer it
 unless you specifically need the JSR entry.
 :::
+
+## What's new in 0.1.74
+
+- **Adaptive ticket batches:** when your workload mixes slow and fast tasks,
+  `host.stealSingleClaimMicroseconds` can help workers avoid holding up a fast
+  task behind a slow one. It's off by default. Try `20` µs, then measure how it
+  affects latency and throughput. See [Work stealing](/guides/work-stealing/#stealsingleclaimmicroseconds).
+- **Experimental Andromeda support:** bundle Knitting once, then keep your
+  tasks and helpers in separate files if you like. Each worker gets its own
+  request lane by default. Andromeda controls what workers can access, so
+  Knitting's `permission` option isn't available there. See
+  [Andromeda](/guides/andromeda/).
+
+This release uses `stealClaim: "ticket"` by default. You can still choose
+`"dekker"`, but the old `"cas-mask"` value and other unknown values cause pool
+creation to throw. If you're upgrading with custom scheduling settings, check
+[the available options](/guides/work-stealing/#stealclaim).
