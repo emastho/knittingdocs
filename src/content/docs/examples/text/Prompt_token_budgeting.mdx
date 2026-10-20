@@ -51,14 +51,20 @@ you want when you are measuring, or when you only need the accounting.
 Minimal usage:
 
 ```ts
-using pool = createPool({ threads: 3 })({ preparePrompt });
-const plan = await pool.call.preparePrompt({
-  model: "gpt-4o-mini",
-  systemPrefix: "You are a docs assistant.",
-  history: ["Need guidance on schema validation.", "Keep the answer short."],
-  query: "Give a migration plan and one code example.",
-  maxInputTokens: 400,
-});
+import { createPool, isMain } from "knitting";
+import { preparePrompt } from "./token_budget.ts";
+
+if (isMain) {
+  using pool = createPool({ threads: 3 })({ preparePrompt });
+  const plan = await pool.call.preparePrompt({
+    model: "gpt-4o-mini",
+    systemPrefix: "You are a docs assistant.",
+    history: ["Need guidance on schema validation.", "Keep the answer short."],
+    query: "Give a migration plan and one code example.",
+    maxInputTokens: 400,
+  });
+  console.log(plan);
+}
 ```
 
 Output shape:
@@ -196,8 +202,7 @@ machine, check both throughput and memory use as you add workers.
 
 ## When this matters
 
-Token budgeting is a preflight step that runs on every LLM request, and it is pure CPU work on
-the thread you most want free. On a busy chat service -- many users, long histories -- it is
-enough to add latency to requests that are otherwise just waiting on the model. Moving it to a
-pool keeps the main thread on routing and I/O, and gives you predictable input sizes, which is
-what makes cost per request predictable too.
+For services that build long prompts, token counting and trimming can take CPU
+time before the API request starts. Move that work to a pool if measurements
+show it delaying other requests. The budget bounds input tokens; total request
+cost also depends on output tokens and the model's pricing.

@@ -17,6 +17,9 @@ Start with [Hono server routes](/examples/servers/hono_server). It combines SSR,
 **"I do SSR and want to offload rendering"**
 [React SSR](/examples/rendering/react_ssr) shows the basic pattern. [React SSR compression](/examples/rendering/react_ssr_compress) adds Brotli and tests where compression should live (worker vs host).
 
+**"I need to transform and minify code"**
+[Bundling and minifying](/examples/build_tools/bundling_and_minifying) shows esbuild followed by Terser on workers, with a cap for async tasks that resume with CPU-heavy work.
+
 **"I need to validate or parse lots of data"**
 [Schema validation](/examples/validation/schema_validate) (Zod), [JWT revalidation](/examples/validation/jwt_revalidation) (Web Crypto), or [Salt hashing](/examples/validation/salt_hashing) (PBKDF2) -- pick whichever is closest to your workload.
 
@@ -58,6 +61,10 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 - [Markdown to HTML](/examples/rendering/markdown_to_html) -- simple markdown transform pipeline
 - [PDF invoices](/examples/rendering/pdf_invoices) -- generate PDF documents and return the bytes
 
+### Build tools
+
+- [Bundling and minifying](/examples/build_tools/bundling_and_minifying) -- transform TypeScript with esbuild, then minify with Terser on workers
+
 ### Text
 
 - [Prompt token budgeting](/examples/text/prompt_token_budgeting) -- trim LLM prompts to a token budget
@@ -69,9 +76,8 @@ The math examples cover the spectrum: [Monte Carlo pi](/examples/maths/monte_pi)
 
 ## Patterns worth copying
 
-1. **Keep worker tasks focused and deterministic.** One task, one job, predictable output.
-2. **Batch calls and await them together** (`Promise.all`) to reduce scheduling overhead.
-3. **Return compact summaries from workers** instead of large raw outputs. The exception is work that dwarfs the transfer: [LaTeX paper indexing](/examples/text/latex_papers) returns 626 KB of text per call with no measurable cost, because parsing each paper takes far longer than moving the result.
-4. **Validate on the host.** Recompute critical metrics when needed -- don't trust worker output blindly.
-5. **Compare against a host-only baseline** before claiming speedups.
-6. **Tune chunk sizes** based on throughput -- there's always a sweet spot between dispatch overhead and load balance.
+1. **Keep task modules separate from server code.** Workers load each task module and its imports.
+2. **Use concurrent calls for independent work.** `Promise.all` waits for those calls together. To reduce dispatch overhead, group several items into one task input, as the PDF example does.
+3. **Return the data your application needs.** A count or summary saves transfer work when the full result is unnecessary. The LaTeX example returns extracted text because indexing needs it; that transfer added no measurable time in its benchmark.
+4. **Check output as well as speed.** Compare content or hashes when correctness requires identical results; matching lengths alone is insufficient.
+5. **Measure against direct execution.** Try different worker counts and chunk sizes with the same input, and compare throughput, latency, and memory use.

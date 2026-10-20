@@ -4,7 +4,9 @@ This repository contains the Knitting documentation site. Knitting is a
 shared-memory worker runtime for Node.js, Deno, Bun, and browser workers.
 You can also try thread pools on Andromeda 0.1.14; support is experimental.
 
-The guides describe the `0.1.74` public API, including adaptive ticket claims,
+The documentation baseline comes from the resolved `@vixeny/knitting` dependency
+at build time; features marked `since` may require a newer release. The guides
+cover adaptive ticket claims,
 pooled shared-memory regions, safe large-binary ownership moves, and
 runtime-specific completion doorbells.
 
@@ -27,7 +29,7 @@ npm run preview
 Install the runtime package in an application with:
 
 ```bash
-npm install knitting@0.1.74
+npm install knitting@0.1.77
 ```
 
 The normal task API is unchanged:
@@ -104,3 +106,24 @@ for ownership details.
 - `src/lib/llms.ts` — generated documentation summaries for `llms.txt`.
 - `public/knitting.js` — browser bundle used by the browser guide and smoke test.
 - `public/_headers` — cross-origin isolation headers for browser examples.
+
+## Agent documentation
+
+`llms.txt` is a compact task router with essential coding rules and a runnable
+example. `llms-full.txt` keeps the detailed implementation reference and all
+maintained pages. Each indexed page is also generated as plain Markdown at
+`/documents/<page-id>.md`, with embedded code and tables expanded. Experimental
+runtime examples state their own tested versions.
+
+After building, check task routes, generated links, the debugging anchor,
+Markdown coverage, and version metadata with:
+
+```bash
+npm run build
+npm run check:llms
+```
+
+These are structural navigation checks, not agent performance evaluations.
+To compare agent usability, run the same implementation tasks against each index
+version and record relevant-page retrieval, runnable code, retrieval/token cost,
+unnecessary options, invented APIs, and first-pass success over repeated runs.

@@ -22,7 +22,10 @@ without an external JWT package.
 
 ## How it works
 
-The host builds a batch containing both valid and expired JWTs. Each job verifies the signature, checks the renewal window (`renewWindowSec`, `renewUntil`), and either returns the validated claims or issues a fresh token. The result comes back as a stringified JSON response -- keeping structured-clone overhead low.
+The host builds a batch containing both valid and expired JWTs. Each job verifies
+the signature, checks the renewal window (`renewWindowSec`, `renewUntil`), and
+either returns the validated claims or issues a fresh token. The task returns a
+JSON string that the host can use as the response body.
 
 Three files:
 

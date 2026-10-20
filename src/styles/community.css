@@ -1,0 +1,63 @@
+.sidebar .discord-invite {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  margin-top: 1.25rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-text-accent) 32%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--sl-color-text-accent) 7%, transparent);
+  color: var(--sl-color-text-accent);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.sidebar .discord-invite::before {
+  content: "";
+  flex: 0 0 1.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  background-color: currentColor;
+  mask: url("../assets/discord.svg") center / contain no-repeat;
+}
+
+.sidebar .discord-invite::after {
+  content: "\2197\FE0E";
+  margin-inline-start: auto;
+  font-size: 1rem;
+}
+
+.sidebar .discord-invite:hover {
+  border-color: var(--sl-color-text-accent);
+  background: color-mix(in srgb, var(--sl-color-text-accent) 14%, transparent);
+  color: var(--sl-color-text-accent);
+}
+
+.social-icons a[rel="me"] {
+  justify-content: center;
+  align-items: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.social-icons a[rel="me"]:hover {
+  border-color: color-mix(in srgb, var(--sl-color-text-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--sl-color-text-accent) 10%, transparent);
+  opacity: 1;
+}
+
+.sidebar .discord-invite:focus-visible,
+.social-icons a[rel="me"]:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar .discord-invite,
+  .social-icons a[rel="me"] {
+    transition: none;
+  }
+}

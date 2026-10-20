@@ -74,12 +74,18 @@ generated documents.
 ## Minimal usage
 
 ```ts
-using pool = createPool({ threads: 4 })({ renderInvoiceBatch });
+import { writeFile } from "node:fs/promises";
+import { createPool, isMain } from "knitting";
+import { renderInvoiceBatch, unpackDocuments } from "./render_invoice.ts";
 
-const packed = await pool.call.renderInvoiceBatch(invoices.slice(0, 12));
-const documents = unpackDocuments(packed);
+if (isMain) {
+  using pool = createPool({ threads: 4 })({ renderInvoiceBatch });
 
-await writeFile("invoice-0.pdf", documents[0]);
+  const packed = await pool.call.renderInvoiceBatch(invoices.slice(0, 12));
+  const documents = unpackDocuments(packed);
+
+  await writeFile("invoice-0.pdf", documents[0]);
+}
 ```
 
 ## Optional benchmark
@@ -110,29 +116,23 @@ summary
    1.61x faster than host (200 invoices)
 ```
 
-Because the documents are deterministic, the parity check compares real bytes: the same
-200 invoices, the same 1,114,063 bytes, whichever side rendered them.
+The check compares document counts and total byte lengths. It does not compare
+PDF contents; use a byte comparison or content hashes when verifying identical output.
 
-## Do not expect this to scale with cores
+## Worker count and scaling
 
-`1.6x` from four workers on four cores is a modest return, and raising `threads` does not
-fix it. Replacing this workload with plain arithmetic in
-the same pool, with the same batching, reached `4.8x` on the same laptop. This
-suggests that PDF generation is limiting scaling here.
-
-Most of the time here goes into many small `drawText` and `drawLine` calls, each allocating
-as it goes; document creation and font embedding are close to free by comparison. Workloads
-built out of a lot of small allocations tend to flatten out well before they run out of
-cores, and the [prompt token budgeting](/examples/text/prompt_token_budgeting)
-example flattens out for a related reason.
+Four workers completed this batch about `1.6x` faster on the measured four-core
+laptop. An arithmetic workload using the same pool and batching reached `4.8x`
+in a separate comparison. That suggests a workload
+limit, but does not identify its cause. Profile layout, serialization, and
+allocation costs before deciding whether more workers will help.
 
 Throughput and request latency tell different parts of the story:
 
 - **Throughput:** the pool completed the batch about `1.6x` faster.
-- **Request latency:** moving layout work off the host frees the request thread. Laying out 200 invoices takes the better part of a
-  second, and on the host that is a second in which nothing else is served. Moving it to a
-  pool takes it off the request thread entirely, and that is true whether the multiplier is
-  `1.6x` or `4x`.
+- **Request latency:** moving layout work to workers can keep other requests
+  responsive. This batch benchmark does not measure HTTP latency; test that
+  separately under your expected traffic.
 
 :::note
 Measured on a 4-core laptop with Bun 1.4. Measure both throughput and

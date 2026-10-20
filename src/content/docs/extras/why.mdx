@@ -151,24 +151,15 @@ ownership, deployment, cross-machine scale, or a separate failure domain. It is
 an expensive answer when one function, owned by the same team in the same repo,
 merely needs another execution lane. A local worker avoids the network and deployment overhead of a service.
 
-Knitting occupies the space between inline execution and a network service: a
-local execution boundary around the work that needs one.
+## Choosing an isolation level
 
-## The boundary can become stronger without changing the call
+Threads suit trusted computation. For tasks that need a separate memory space,
+use [process workers](/guides/process-workers/). Add an OS sandbox or container
+when you also need to restrict access to system resources.
 
-Performance isolation usually starts with a thread. Some tasks also need a
-trust or failure boundary. Knitting keeps the call model the same while each
-pool chooses how strong that boundary should be.
-
-Trusted compute can stay on a cheap thread. A task can instead run in a separate
-process with runtime permissions, a bootstrap hook, `bwrap`, or a container.
-[`importTask`](/guides/defining-tasks/#module-loading) keeps worker-only code off
-the host entirely.
-
-Knitting does not replace distributed systems. If you need cross-machine scale,
-independent release schedules, team ownership, or a separate network failure
-domain, use a service. Knitting is for the point before that: the code still
-belongs in the application, but the work no longer belongs on its event loop.
+[`importTask`](/guides/defining-tasks/#importing-worker-side-code-with-importtask)
+loads task code only inside the worker. The `pool.call.*()` API stays the same
+for threads and processes.
 
 ## What Knitting does not promise
 
@@ -180,9 +171,6 @@ belongs in the application, but the work no longer belongs on its event loop.
   loop may remain the producer, so measure worker counts against the workload.
 - It does not turn one benchmark into a universal cost claim. Runtime,
   hardware, traffic mix, payload size, and latency target all affect the result.
-
-Knitting gives expensive functions their own execution lane while keeping
-communication and coordination overhead low.
 
 ## Read next
 

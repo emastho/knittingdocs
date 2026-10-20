@@ -5,8 +5,7 @@
 // and charts from these files instead of carrying numbers of their own, so a
 // value on the site can always be traced to a committed run.
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+export { docsKnittingVersion } from "./version";
 
 export const BENCH_REPO = "https://github.com/mimiMonads/knitting-vs-tokio-bench";
 
@@ -141,16 +140,6 @@ export function suiteSummary(suite: string): SuiteSummary {
     dirty: envs.some((env) => env.benchDirty),
   };
 }
-
-/**
- * The Knitting release these docs describe: the version the docs' own
- * dependency resolves to. Read at build time, so bumping the dependency is
- * enough to flag every benchmark page measured on an older release.
- */
-export const docsKnittingVersion: string = (() => {
-  const manifest = join(process.cwd(), "node_modules", "@vixeny", "knitting", "package.json");
-  return (JSON.parse(readFileSync(manifest, "utf8")) as { version: string }).version;
-})();
 
 /** "Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz (8t)" -> "Intel Xeon Platinum 8168 @ 2.70GHz, 8 threads" */
 export function machineName(machine: string): string {

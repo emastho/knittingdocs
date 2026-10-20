@@ -134,7 +134,7 @@ not a universal performance guarantee.
 
 - `ping` stays cheap and synchronous.
 - You can benchmark workers vs host-only with the same route behavior.
-- In Knitting mode, the JWT task returns **stringified JSON** to reduce structured-clone overhead.
+- In Knitting mode, the JWT task returns a JSON string for the response body.
 - Heavy route logic stays in one shared file, keeping both server entrypoints small.
 
 ## Code

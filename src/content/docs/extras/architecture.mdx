@@ -348,7 +348,7 @@ defence in depth; no single layer is assumed sufficient on its own.
 
 - **Layer 1 -- in-process guards (always on).** Before any task module loads, the worker neutralizes the most dangerous calls: `process.exit`, `process.kill`, `process.abort`, and `Deno.exit` are redefined to throw, and the raw shared-memory handles are scrubbed from the data object visible to task code. These guards help prevent accidental misuse; they do not contain hostile code running in the same process.
 - **Layer 2 -- bootstrap hook.** `worker.bootstrap` runs a privileged module once per worker, *before* task imports -- use it to remove environment variables, install your own guards, or freeze globals.
-- **Layer 3 -- runtime permissions (strict by default).** The policy is translated into each runtime's native enforcement (Deno's permission flags, Node's permission model, Bun's equivalents), so the boundary is the runtime's, not a library check task code could bypass.
+- **Layer 3 -- runtime permissions.** Knitting requests a strict policy by default. Node workers and Deno process workers enforce the supported restrictions through runtime flags. Deno threads inherit the host's permissions, and Bun has no matching permission controls. Check the [runtime support table](/guides/permissions/#check-the-runtime-first) for what your configuration enforces.
 - **Layer 4 -- process + real sandbox.** The only OS-enforced boundary: `worker.runtime: "process"`, optionally launched through `bwrap`, Docker, or `systemd-run` via `processCommandPrefix`. Pair it with `importTask` so the isolated code never loads in the host at all.
 
 See [Permissions](/guides/permissions/) and [Process workers](/guides/process-workers/) for the full configuration.

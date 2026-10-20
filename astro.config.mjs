@@ -82,6 +82,7 @@ const crossOriginIsolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
+const discordInvite = "https://discord.gg/PbKZdR3wW";
 
 // https://astro.build/config
 export default defineConfig({
@@ -250,12 +251,20 @@ export default defineConfig({
         "./src/styles/headings.css",
         "./src/styles/home-cards.css",
         "./src/styles/brand-art.css",
+        "./src/styles/community.css",
       ],
-      social: [{
-        icon: "github",
-        label: "GitHub",
-        href: "https://github.com/mimiMonads/knitting",
-      }],
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/mimiMonads/knitting",
+        },
+        {
+          icon: "discord",
+          label: "Join the Knitting Discord",
+          href: discordInvite,
+        },
+      ],
       components: {
         SocialIcons: "./src/components/SocialIcons.astro",
       },
@@ -311,6 +320,14 @@ export default defineConfig({
           label: "Extras",
           collapsed: true,
           autogenerate: { directory: "extras" },
+        },
+        {
+          label: "Discord",
+          link: discordInvite,
+          attrs: {
+            class: "discord-invite",
+            "aria-label": "Join the Knitting Discord",
+          },
         },
       ],
     }),

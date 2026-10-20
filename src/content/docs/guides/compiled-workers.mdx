@@ -5,13 +5,14 @@ sidebar:
   order: 11
 ---
 
-If you want to experiment with compiling a task into native code, compiled
-workers let you do that with [Porffor](https://github.com/CanadaHonk/porffor).
-Porffor compiles the task module and Knitting runs the result as a child
-process.
+Compiled workers use [Porffor](https://github.com/CanadaHonk/porffor) to compile
+JavaScript tasks into native executables. Knitting runs them as child processes
+while keeping the same task definitions and `pool.call.*()` API.
 
-Your task code and the `pool.call.*()` API stay the same. The only change is
-the worker configuration:
+This backend suits small, synchronous, self-contained CPU tasks. For tasks that
+need I/O, timers, or Node.js built-ins, use regular
+[thread workers](/guides/creating-pools/) or
+[process workers](/guides/process-workers/).
 
 :::caution
 Porffor is still early-stage, so expect its compiler and artifact format to
@@ -20,14 +21,59 @@ feature to try with code you trust, not a security boundary for untrusted
 tasks.
 :::
 
-## Enable Porffor
+## Startup and worker memory compared with Node.js processes
+
+In a small numeric-task benchmark, Porffor workers used about 93% less resident
+memory (RSS) than Knitting's Node.js process workers. Both sides used Knitting;
+the memory measurements below include only the worker processes, excluding the host.
+
+| Knitting worker backend | Workers | Startup to replies | Combined worker RSS | Combined worker PSS |
+| --- | ---: | ---: | ---: | ---: |
+| Porffor compiled | 1 | 11.50 ms | 4.25 MiB | 2.72 MiB |
+| Node.js process | 1 | 94.33 ms | 62.65 MiB | 38.47 MiB |
+| Porffor compiled | 4 | 17.67 ms | 16.88 MiB | 9.39 MiB |
+| Node.js process | 4 | 106.00 ms | 249.31 MiB | 101.45 MiB |
+
+Startup measures `createPool()` through a successful batch of one call per
+configured worker. It excludes host loading, compilation, and shutdown.
+
+RSS counts each process's resident pages, so summing it can count shared pages
+more than once. PSS divides shared pages among the processes using them and
+better estimates physical RAM attributable to the workers.
+
+These near-idle results use Knitting 0.1.77 and Porffor alpha 18. Larger tasks
+and payloads can use more memory.
+
+<details>
+<summary>Benchmark setup and measurements</summary>
+
+These are medians of 10 measured runs per configuration, after one discarded
+warmup run, on October 20, 2026. Each run started a fresh Node.js host and used
+the built JavaScript entry point, with Knitting 0.1.77, Node.js 24.17.0, and
+Porffor alpha 18 (`deda494`) on Linux x64 with an AMD Ryzen 7 4700U.
+Node.js workers used
+`worker: { runtime: "process", processRuntime: "node" }` and
+`permission: "unsafe"`; compiled workers used a prebuilt artifact with
+`compiled.build: false`. Alpha 18 was selected explicitly; these results do not
+describe Knitting's default pinned compiler.
+
+The task returned its numeric argument plus one. The startup batch does not
+establish that every individual worker handled a call. Memory was sampled from
+Linux `/proc` 300 ms after a successful batch of one call per configured worker,
+with default allocation sizes and no forced garbage collection. These are
+near-idle measurements rather than workload peak memory.
+[Download the measurements and environment details](/benchmarks/compiled-worker-memory-2026-10-20.json).
+
+</details>
+
+## Start a compiled worker
 
 If your task module is `tasks.ts`, Knitting will look beside it for two
 files: the compiled program, `tasks.knt`, and its manifest,
 `tasks.knt.json`.
 
-For the usual setup, use both settings below. They tell Knitting to use Porffor
-and to reuse the compiled file whenever it is still valid:
+Save this example as `tasks.ts`. The worker configuration selects Porffor and
+reuses the compiled file whenever it is still valid:
 
 ```ts
 import { createPool, isMain } from "knitting";
@@ -69,28 +115,16 @@ There are two rules worth knowing:
   does not provide them, and some unsupported imports can hang the compiler
   instead of producing a useful error. Plain local modules are fine.
 
-Compiled workers are a good match for focused, synchronous
-computation. If a task needs I/O, timers, or the wider Node.js runtime, a
-regular thread or process worker will be a better fit.
-
 ## Build artifacts ahead of time
 
-When Knitting needs to build automatically, it looks for Porffor in this order:
-
-1. `worker.compiled.compiler`
-2. `PORFFOR_MAIN` or `PORF`
-3. `porf` on `PATH`
-
-If it cannot find one, Knitting downloads a pinned compiler to
-`$XDG_CACHE_HOME/knitting` or, when that variable is not set,
-`~/.cache/knitting`.
-
-For deployments, you may prefer to build the artifact in CI or during your
-release step. That keeps production from invoking a compiler at startup:
+Build the artifact in CI or during your release step to keep compilation out
+of production startup. From a Knitting checkout, build the `hello` task above:
 
 ```bash
-bun run build:compiled --module tasks.ts --out tasks.knt --tasks addOne
+bun run build:compiled --module tasks.ts --out ./build/tasks-linux-x64.knt --tasks hello
 ```
+
+Configure the host to load that artifact:
 
 ```ts
 const pool = createPool({
@@ -101,8 +135,10 @@ const pool = createPool({
       build: false,
     },
   },
-})({ addOne });
+})({ hello });
 ```
+
+### Rebuilds and compatibility
 
 The `worker.compiled.build` option controls when Knitting is allowed to build:
 
@@ -118,7 +154,21 @@ requested task names.
 If you want to check this yourself, `checkCompiledWorker(task, options)` reports
 the compatibility state without building the artifact or running the task.
 
-## Supported values and limits
+### Compiler selection
+
+When Knitting needs to build automatically, it looks for Porffor in this order:
+
+1. `worker.compiled.compiler`
+2. `PORFFOR_MAIN` or `PORF`
+3. `porf` on `PATH`
+
+If it cannot find one, Knitting downloads a pinned compiler to
+`$XDG_CACHE_HOME/knitting` or, when that variable is not set,
+`~/.cache/knitting`.
+
+## Capabilities and limits
+
+### Supported values
 
 Compiled workers support fewer payload types than regular thread and process
 workers:
@@ -139,7 +189,7 @@ For large binary data, use `ProcessSharedBuffer`. It is the one payload type
 that a compiled worker maps directly instead of copying through the call frame.
 See [Shared memory](/guides/shared-memory/) to get started with it.
 
-## Abort signals
+### Cooperative cancellation
 
 You can also use cooperative cancellation on POSIX systems. Knitting publishes
 the abort state in named shared memory, and the compiled worker reads it
@@ -163,7 +213,7 @@ export const search = task({
 inside the task. Cancellation is cooperative: if the task never checks the
 signal, it continues until it finishes. Windows support is not available yet.
 
-## What is not supported yet
+### Unsupported options
 
 Porffor is intentionally a smaller backend for now. The options below fail
 during pool creation or invocation instead of quietly switching to another
@@ -184,12 +234,3 @@ from outside the compiled worker.
 
 If you need one of these features, use a regular process worker instead. See
 [Process workers](/guides/process-workers/).
-
-## Is this a good fit?
-
-Porffor is worth trying when your task is small, synchronous, self-contained,
-and mostly CPU work. It is less suitable when the task depends on libraries,
-filesystem or network access, timers, rich payloads, or runtime-specific APIs.
-
-If you are unsure, start with a regular thread or process worker first. Once the
-task works there, compiling it with Porffor is a straightforward experiment.

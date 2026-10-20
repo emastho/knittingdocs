@@ -1,4 +1,5 @@
 import { getCollection, type CollectionEntry } from "astro:content";
+import { docsKnittingVersion } from "./version";
 
 type Doc = CollectionEntry<"docs">;
 
@@ -14,7 +15,42 @@ export const GITHUB = {
 } as const;
 
 export const TAGLINE =
-  "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function. You can also try experimental thread pools on Andromeda 0.1.14.";
+  "Knitting is a zero-dependency, shared-memory concurrency runtime for Node.js, Deno, and Bun. Move typed JavaScript work to threads, separate processes, or browser workers and call it like an async function.";
+
+export const COMPATIBILITY = [
+  `Documentation baseline: Knitting ${docsKnittingVersion} (resolved documentation dependency at build time; not a claim about the latest published release). Server runtimes: Node.js 22+, Deno 2+, Bun 1+.`,
+  "Check the application's installed package and runtime versions before generating code. Options marked `since` require at least that release and may be newer than this baseline. Experimental examples state their own tested versions. Repository main may differ from the published package; verify that release's exports and types.",
+].join("\n\n");
+
+export const IMPLEMENTATION_CONTRACT = [
+  "## Before writing code",
+  "",
+  "- Tasks must be exported functions at module scope and accept one user argument; use an object or tuple for multiple values. Use `task({ f })` only when task options are needed.",
+  "- Workers re-import the task-defining module. Keep tasks in a lean module separate from server/framework initialization; guard host-only code with `isMain`. Static imports still run in every worker.",
+  "- If an initial call hangs, check task exports, imports, and worker startup before changing scheduling. Enable `debug: { imports: true, lifecycle: true }` on the pool. `importTask` targets must be plain exported functions, not `task()` wrappers.",
+  "- Reuse pools across requests. Await outstanding calls and close the pool with `await pool.shutdown()` in `finally`, or use `using` with a runtime/toolchain that supports explicit resource management.",
+  "- Arguments and results cross a serialization boundary. Read Payloads before passing closures, framework objects, class instances, or binary ownership wrappers.",
+  "- Start with default scheduling and ordinary payloads. Tune worker count and scheduling only after measuring throughput, CPU use, and tail latency. Verify a successful call, an error path, and clean shutdown on the target runtime.",
+  "",
+  "## Minimal example",
+  "",
+  "Save as `main.ts`; run `bun add knitting` then `bun run main.ts` (prints `64`). Read Quick Start for Node/Deno execution, TypeScript setup, or bundling. This illustrates the task contract, not a speedup.",
+  "",
+  "```ts",
+  'import { createPool, isMain } from "knitting";',
+  "",
+  "export const square = (n: number) => n * n;",
+  "",
+  "if (isMain) {",
+  "  const pool = createPool({ threads: 1 })({ square });",
+  "  try {",
+  "    console.log(await pool.call.square(8));",
+  "  } finally {",
+  "    await pool.shutdown();",
+  "  }",
+  "}",
+  "```",
+].join("\n");
 
 export const POSITIONING = [
   "Use Knitting when CPU-heavy, bursty, or isolation-sensitive work should leave the main thread without becoming a separate service. Its compact API combines typed calls with shared-memory IPC, work stealing, timeouts, cancellation, worker permissions, and zero-copy paths for large binary payloads. Knitting treats CPU spent waiting, polling, copying, and coordinating as overhead to minimize: idle workers park instead of spinning, and on supported runtimes the host waits on a doorbell instead of polling. The goal is performance isolation without spending the capacity that isolation is meant to recover.",
@@ -32,7 +68,7 @@ export const ESSENTIALS = [
   "",
   "### Install and task contract",
   "",
-  "- Install: `npm install knitting` (the npm package is `knitting`; it is also on JSR as `@vixeny/knitting`). These docs cover 0.1.74. Use Node 22+, Deno 2+, or Bun 1+. For Andromeda, follow the experimental setup below.",
+  "- Install: `npm install knitting` (also on JSR as `@vixeny/knitting`). Use Node 22+, Deno 2+, or Bun 1+. Check the compatibility policy above; options marked since a newer release need that release. For Andromeda, follow the experimental setup below.",
   "- A task is an exported function at module scope. Wrap it with `task({ f })` only when you want options like a timeout or an abort signal.",
   "- Tasks take ONE argument. Use a tuple or object for multiple values: `([a, b]) => a + b`.",
   "- Guard host-only code with `isMain` — workers re-import the module.",
@@ -42,7 +78,9 @@ export const ESSENTIALS = [
   "### Scheduling and lifetime",
   "- Scheduling: compatible pools with more than one worker use work stealing by default, except on Andromeda. Workers take waiting tasks from a shared submit region and return results through their own lanes. The options are `host.steal`, `host.stealRegionLanes`, `host.stealClaim`, and `host.doorbell`. `stealClaim` defaults to `ticket`; you can also choose `dekker`. `KNITTING_STEAL_CLAIM` accepts the same values, but setting the host option overrides it. Unknown values, including the old `cas-mask` option, cause pool creation to throw.",
   "- Ticket queue failures: a fatal decoder or worker failure closes the shared queue. Calls still waiting for results and any new calls then reject, so shut down and replace the pool. A task that throws or returns a rejected promise only rejects that call.",
-  "- Adaptive claims (0.1.74): `host.stealSingleClaimMicroseconds` defaults to 0, which turns adaptation off. Each worker measures average task cost per batch and remembers the highest recent average, letting that estimate fall gradually as more batches run. When it meets or exceeds your threshold, the worker takes one ticket at a time; below it, the worker takes up to `stealRegionLanes`. Try 20 microseconds when you have slow and fast tasks, then check p99 latency and throughput. This only applies to ticket pools with more than one worker. A ticket batch width of 1 skips timing. Negative, NaN, or infinite thresholds cause pool creation to throw when stealing is enabled.",
+  "- Adaptive claims (since 0.1.74): `host.stealSingleClaimMicroseconds` defaults to 0, which turns adaptation off. Each worker measures average task cost per batch and remembers the highest recent average, letting that estimate fall gradually as more batches run. When it meets or exceeds your threshold, the worker takes one ticket at a time; below it, the worker takes up to `stealRegionLanes`. Try 20 microseconds when you have slow and fast tasks, then check p99 latency and throughput. This only applies to ticket pools with more than one worker. A ticket batch width of 1 skips timing. Negative, NaN, or infinite thresholds cause pool creation to throw when stealing is enabled.",
+  "- Await-then-compute tasks (since 0.1.76): bundlers, minifiers, and other async tasks that await input before doing CPU-heavy work can bunch their continuations on one stealing worker. Try `worker: { maxAwaitingTasks: 2 }` to leave more queued tasks available for peers; synchronous tasks do not use a slot. See the Work stealing guide.",
+  '- Experimental automatic async cap (0.1.77): `worker: { maxAwaitingTasks: "auto", unravel: { initialTasks: 2, maxTasks: 256 } }` adjusts each worker\'s cap from async population and measured waiting/CPU time. Requires Node or supported Bun thread workers; process workers, compiled workers, Deno, Bun on Windows, and tasks with configured timeouts reject it. Use `debug: { unravel: true }` to inspect cap changes. See Creating pools for the options.',
   "- CPU efficiency is a design goal: useful task work should consume CPU; waiting, polling, unnecessary copying, and oversized pools should not. A single worker spins 50us before parking because it is on the request's critical path; multi-worker pools park immediately, since a peer is already awake to take the work. The host doorbell uses the runtime's completion wake path — Atomics on Node/Bun, FFI on Deno when allowed, and a process-local transport for process workers — with polling fallback. Node threads can opt into `host.nativeDoorbell`. Expect a bigger pool to raise CPU per request without raising throughput when the host is the only producer (a server), so size `threads` from measurements, not from core count — see the Multi-threading guide.",
   "- Cleanup: `using pool = createPool(...)` disposes the pool at scope exit. `await pool.shutdown()` still exists to close it earlier or to await teardown.",
   "- Keep a server pool alive across requests; do not create and dispose workers on every request. Await outstanding calls before leaving a `using` scope. If your runtime or build pipeline does not support `using`, use `try/finally` with `await pool.shutdown()`.",
@@ -50,7 +88,7 @@ export const ESSENTIALS = [
   "### Isolation and data ownership",
   '- Isolation: `importTask({ href, name })` keeps a task\'s code off the host (only the worker imports it). Set `worker.runtime: "process"` to run each worker as a separate process — including inside a bwrap sandbox or a container.',
   "- Security: `importTask` prevents the task module from being imported or evaluated at host scope, but it is not a sandbox. For genuinely untrusted code, use process workers with an OS sandbox or container and restrictive permissions; runtime permissions are guardrails, not a complete security boundary.",
-  "- Zero-copy IN: `ProcessSharedBuffer` (`knitting/shared-memory`) shares bytes across processes; `SharedArrayBuffer` and `BufferReference` (`knitting/unsafe`) move bytes to thread workers without copying. `createKnittingAllocator()` and the HTTP body helpers choose pooled regions or a moved reference with bounded ownership. Pick by boundary — process vs thread.",
+  "- Zero-copy IN: `ProcessSharedBuffer` (`knitting/shared-memory`) shares bytes across processes; `SharedArrayBuffer` shares bytes with thread workers, while `BufferReference` (`knitting/unsafe`) explicitly moves ownership to a thread worker without copying. `createKnittingAllocator()` and the HTTP body helpers choose pooled regions or a moved reference with bounded ownership. Pick by boundary — process vs thread.",
   "- Binary results: return an ordinary top-level `Uint8Array` or `ArrayBuffer`; thread workers use the safe ownership path automatically at 256 KiB and above. Use `unsafe: { SharedBytes: true }` and `sharedBytes()` only for intentionally short-lived borrowed returns. `knitting/utils` converts string/JSON/number ↔ `SharedArrayBuffer`.",
   "- Optimized for HTTP: `call.*()` accepts `Promise<supported>` inputs, so forward `request.arrayBuffer()` (e.g. Hono `c.req.arrayBuffer()`) straight into a task without awaiting it on the request thread — UTF-8 decode / JSON parse then happens in the worker. Ideal for SSR, JWT, and upload routes.",
   "- Treat the boundary as serialization, not shared JavaScript state. Consult Payloads for supported types; do not assume closures, framework request objects, class instances, or arbitrary functions can cross it. A moved buffer and a borrowed/shared buffer have different lifetimes: follow the ownership guide before reusing either.",
@@ -169,6 +207,10 @@ export function groupDocs(docs: Doc[]): Array<{ label: string; docs: Doc[] }> {
 
 export function docUrl(id: string, site?: URL): string {
   return fileUrl(id.toLowerCase() + "/", site);
+}
+
+export function markdownUrl(id: string, site?: URL): string {
+  return fileUrl(`documents/${id.toLowerCase()}.md`, site);
 }
 
 export function fileUrl(name: string, site?: URL): string {

@@ -1,0 +1,81 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const labels = { builtIn: "Built in", partial: "Manual or limited", missing: "Not included" };
+const symbols = { builtIn: "✓", partial: "◐", missing: "×" };
+type Cell = { status: keyof typeof labels; text: string };
+const rows: { feature: string; guide: string; cells: Cell[] }[] = [
+  { feature: "Task API", guide: "/guides/defining-tasks/", cells: [
+    { status: "partial", text: "Messages + handlers" }, { status: "builtIn", text: "run(task)" }, { status: "builtIn", text: "Typed function calls" },
+  ] },
+  { feature: "Worker pools", guide: "/guides/creating-pools/", cells: [
+    { status: "partial", text: "Build your own" }, { status: "builtIn", text: "Managed pool" }, { status: "builtIn", text: "createPool()" },
+  ] },
+  { feature: "Scheduling", guide: "/guides/work-stealing/", cells: [
+    { status: "partial", text: "Your queue" }, { status: "builtIn", text: "Host task queue" }, { status: "builtIn", text: "Native stealing¹" },
+  ] },
+  { feature: "Task cancellation", guide: "/guides/defining-tasks/#abort-signals", cells: [
+    { status: "partial", text: "Custom protocol" }, { status: "builtIn", text: "AbortSignal; ends worker" }, { status: "builtIn", text: "Cooperative shared signal" },
+  ] },
+  { feature: "Soft task timeouts", guide: "/guides/defining-tasks/#timeouts", cells: [
+    { status: "partial", text: "Your timer" }, { status: "partial", text: "Your timer" }, { status: "builtIn", text: "timeout option⁴" },
+  ] },
+  { feature: "Hard wall-clock deadlines", guide: "/guides/creating-pools/#hardtimeoutms", cells: [
+    { status: "partial", text: "Timer + terminate" }, { status: "partial", text: "Timed AbortSignal" }, { status: "builtIn", text: "hardTimeoutMs³" },
+  ] },
+  { feature: "Shared-memory task transport", guide: "/guides/shared-memory/", cells: [
+    { status: "partial", text: "Shared buffers" }, { status: "partial", text: "Atomics + messages" }, { status: "builtIn", text: "Shared mailboxes" },
+  ] },
+  { feature: "Process workers", guide: "/guides/process-workers/", cells: [
+    { status: "missing", text: "Separate API²" }, { status: "missing", text: "Threads only" }, { status: "builtIn", text: "Same pool API" },
+  ] },
+  { feature: "Runtime support", guide: "/start/installation/", cells: [
+    { status: "partial", text: "Node.js" }, { status: "partial", text: "Node.js" }, { status: "builtIn", text: "Node · Bun · Deno" },
+  ] },
+];
+---
+
+<div class="wc not-content">
+  <div class="wc-legend" aria-label="Comparison legend">{Object.entries(labels).map(([status, label]) => <span><i class="wc-status" data-status={status} aria-hidden="true">{symbols[status as keyof typeof symbols]}</i>{label}</span>)}</div>
+  <table>
+    <caption class="wc-sr">Node.js worker threads, Piscina, and Knitting capabilities</caption>
+    <thead><tr><th scope="col">Feature</th><th scope="col"><a href="https://nodejs.org/api/worker_threads.html">Node.js workers</a></th><th scope="col"><a href="https://piscinajs.dev/">Piscina</a></th><th scope="col">Knitting</th></tr></thead>
+    <tbody>{rows.map(row => <tr><th scope="row"><a href={`${base}${row.guide}`}>{row.feature}</a></th>{row.cells.map(cell => <td><span class="wc-cell"><i class="wc-status" data-status={cell.status} title={labels[cell.status]}><span aria-hidden="true">{symbols[cell.status]}</span><span class="wc-sr">{labels[cell.status]}: </span></i><span>{cell.text}</span></span></td>)}</tr>)}</tbody>
+  </table>
+  <div class="wc-footer"><div class="wc-notes"><span>¹ Compatible pools. ² Node.js processes use <a href="https://nodejs.org/api/child_process.html">child_process</a>.</span><span>³ Closes the entire pool; termination support depends on runtime. ⁴ Settles the call; work may continue.</span></div><div><a href={`${base}/guides/buffer-reference/`}>Buffer ownership →</a><a href={`${base}/guides/permissions/`}>Worker permissions →</a><a href={`${base}/guides/creating-pools/#debug`}>Diagnostics →</a><a href={`${base}/extras/architecture/`}>Architecture →</a></div></div>
+</div>
+
+<style>
+  .wc { --wc-green: #6edba0; --wc-yellow: #e8c869; --wc-red: #f28d89; color: var(--kh-paper); }
+  :global(html[data-theme="light"]) .wc { --wc-green: #177044; --wc-yellow: #896007; --wc-red: #b33b36; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.82rem; line-height: 1.65; }
+  th, td { padding: 1rem; border-bottom: 1px solid var(--kh-line); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+  th:first-child { width: 26%; padding-left: 0; }
+  thead th { border-top: 1px solid var(--kh-line); font-size: 0.8rem; font-weight: 600; }
+  thead th:first-child { color: var(--kh-muted); font-weight: 400; }
+  tbody th { font-weight: 500; }
+  td { color: var(--kh-muted); }
+  th:last-child, td:last-child { background: color-mix(in srgb, var(--kh-accent) 6%, transparent); color: var(--kh-paper); }
+  thead th:last-child { color: var(--kh-accent); }
+  .wc-cell { display: flex; align-items: center; gap: 0.6rem; }
+  .wc-status { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 1.3rem; height: 1.3rem; border-radius: 50%; color: var(--wc-status); background: color-mix(in srgb, var(--wc-status) 12%, transparent); font: 600 0.85rem/1 ui-sans-serif, sans-serif; }
+  .wc-status[data-status="builtIn"] { --wc-status: var(--wc-green); }
+  .wc-status[data-status="partial"] { --wc-status: var(--wc-yellow); }
+  .wc-status[data-status="missing"] { --wc-status: var(--wc-red); }
+  .wc-legend { display: flex; flex-wrap: wrap; gap: 0.65rem 1.4rem; margin-bottom: 1rem; color: var(--kh-muted); font-size: 0.72rem; }
+  .wc-legend > span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--kh-accent); text-decoration: underline; text-underline-offset: 0.2em; }
+  a:focus-visible { outline: 2px solid var(--kh-accent); outline-offset: 4px; }
+  .wc-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; color: var(--kh-muted); font-size: 0.7rem; line-height: 1.6; }
+  .wc-footer > div:not(.wc-notes) { display: flex; flex-wrap: wrap; gap: 0.6rem 1.25rem; }
+  .wc-notes { display: grid; gap: 0.25rem; }
+  .wc-footer a { color: var(--kh-accent); }
+  .wc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @media (max-width: 40rem) {
+    table { font-size: 0.68rem; line-height: 1.6; }
+    th, td { padding: 0.8rem 0.45rem; }
+    thead th { font-size: 0.7rem; }
+    .wc-cell { flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+    .wc-legend { font-size: 0.65rem; gap: 0.5rem 0.85rem; }
+  }
+</style>

@@ -1,0 +1,1717 @@
+{
+  "environment": {
+    "date": "2026-10-20",
+    "knittingVersion": "0.1.77",
+    "knittingCommit": "90ca28c7ca164aa65dcb458887113e38f7966b8d",
+    "node": "v24.17.0",
+    "pinnedPorffor": "alpha 1 (ba4813d 2026-07-15), pinned git 747d551844750fc5ed32cf88cdf0b3854aee267e",
+    "latestPorffor": "alpha 18 (deda494 2026-10-19)",
+    "cpu": "AMD Ryzen 7 4700U, 8 logical CPUs",
+    "method": "Fresh Node host per sample; built JavaScript entry point; one discarded warmup and 10 measured runs per configuration, with shuffled case order. Numeric addOne task; batch of one call per configured worker. Calls do not establish that each individual worker executed a task. Memory sampled after 300 ms idle from /proc/PID/status and /proc/PID/smaps_rollup. Default allocation sizes, no forced GC. Compiled workers use explicitly selected Porffor alpha 18 and prebuilt artifacts; Node process workers use unsafe permission. Worker-only summaries exclude the host; raw samples retain host measurements for transparency. RSS sums can double count shared pages; PSS apportions them. Near-idle memory, not workload peak memory.",
+    "startupTiming": "createPool through a successful batch of one call per configured worker; excludes host loading, compilation, and shutdown. Does not establish that every individual worker handled a call."
+  },
+  "workerOnlySummary": [
+    {
+      "backend": "compiled",
+      "workers": 1,
+      "workerRssMiB": 4.25,
+      "workerPssMiB": 2.7197265625,
+      "startupMedianMs": 11.502454999999998
+    },
+    {
+      "backend": "process",
+      "workers": 1,
+      "workerRssMiB": 62.65234375,
+      "workerPssMiB": 38.4716796875,
+      "startupMedianMs": 94.332581
+    },
+    {
+      "backend": "compiled",
+      "workers": 4,
+      "workerRssMiB": 16.875,
+      "workerPssMiB": 9.3857421875,
+      "startupMedianMs": 17.6721625
+    },
+    {
+      "backend": "process",
+      "workers": 4,
+      "workerRssMiB": 249.314453125,
+      "workerPssMiB": 101.4482421875,
+      "startupMedianMs": 105.99540950000001
+    }
+  ],
+  "samples": [
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 121.64487899999999,
+      "baseline": {
+        "pid": 17482,
+        "rssKiB": 63268,
+        "pssKiB": 60013,
+        "peakRssKiB": 63268
+      },
+      "host": {
+        "pid": 17482,
+        "rssKiB": 64932,
+        "pssKiB": 27011,
+        "peakRssKiB": 64932
+      },
+      "workers": [
+        {
+          "pid": 17490,
+          "rssKiB": 64584,
+          "pssKiB": 26843,
+          "peakRssKiB": 64584
+        },
+        {
+          "pid": 17496,
+          "rssKiB": 63404,
+          "pssKiB": 25558,
+          "peakRssKiB": 63404
+        },
+        {
+          "pid": 17499,
+          "rssKiB": 64364,
+          "pssKiB": 26663,
+          "peakRssKiB": 64364
+        },
+        {
+          "pid": 17514,
+          "rssKiB": 64320,
+          "pssKiB": 26540,
+          "peakRssKiB": 64320
+        }
+      ],
+      "totalRssKiB": 321604,
+      "totalPssKiB": 132615,
+      "iteration": 0,
+      "warmup": true
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 88.73285,
+      "baseline": {
+        "pid": 17544,
+        "rssKiB": 63280,
+        "pssKiB": 60236,
+        "peakRssKiB": 63280
+      },
+      "host": {
+        "pid": 17544,
+        "rssKiB": 64688,
+        "pssKiB": 39795,
+        "peakRssKiB": 64688
+      },
+      "workers": [
+        {
+          "pid": 17551,
+          "rssKiB": 64732,
+          "pssKiB": 39699,
+          "peakRssKiB": 64732
+        }
+      ],
+      "totalRssKiB": 129420,
+      "totalPssKiB": 79494,
+      "iteration": 0,
+      "warmup": true
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 12.05207,
+      "baseline": {
+        "pid": 17573,
+        "rssKiB": 63488,
+        "pssKiB": 60415,
+        "peakRssKiB": 63488
+      },
+      "host": {
+        "pid": 17573,
+        "rssKiB": 64384,
+        "pssKiB": 61247,
+        "peakRssKiB": 64384
+      },
+      "workers": [
+        {
+          "pid": 17580,
+          "rssKiB": 4224,
+          "pssKiB": 2709,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 68608,
+      "totalPssKiB": 63956,
+      "iteration": 0,
+      "warmup": true
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.496228000000002,
+      "baseline": {
+        "pid": 17618,
+        "rssKiB": 63612,
+        "pssKiB": 60181,
+        "peakRssKiB": 63612
+      },
+      "host": {
+        "pid": 17618,
+        "rssKiB": 64764,
+        "pssKiB": 61229,
+        "peakRssKiB": 64764
+      },
+      "workers": [
+        {
+          "pid": 17625,
+          "rssKiB": 4352,
+          "pssKiB": 2410,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17626,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17627,
+          "rssKiB": 4352,
+          "pssKiB": 2410,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17628,
+          "rssKiB": 4224,
+          "pssKiB": 2385,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 82044,
+      "totalPssKiB": 70840,
+      "iteration": 0,
+      "warmup": true
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 18.001955999999993,
+      "baseline": {
+        "pid": 17643,
+        "rssKiB": 63532,
+        "pssKiB": 60136,
+        "peakRssKiB": 63532
+      },
+      "host": {
+        "pid": 17643,
+        "rssKiB": 64428,
+        "pssKiB": 61068,
+        "peakRssKiB": 64428
+      },
+      "workers": [
+        {
+          "pid": 17650,
+          "rssKiB": 4352,
+          "pssKiB": 2411,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17651,
+          "rssKiB": 4352,
+          "pssKiB": 2411,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17652,
+          "rssKiB": 4352,
+          "pssKiB": 2387,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17653,
+          "rssKiB": 4352,
+          "pssKiB": 2412,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81836,
+      "totalPssKiB": 70689,
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.203049000000007,
+      "baseline": {
+        "pid": 17705,
+        "rssKiB": 63324,
+        "pssKiB": 60152,
+        "peakRssKiB": 63324
+      },
+      "host": {
+        "pid": 17705,
+        "rssKiB": 64220,
+        "pssKiB": 60984,
+        "peakRssKiB": 64220
+      },
+      "workers": [
+        {
+          "pid": 17712,
+          "rssKiB": 4352,
+          "pssKiB": 2789,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 68572,
+      "totalPssKiB": 63773,
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 99.810389,
+      "baseline": {
+        "pid": 17713,
+        "rssKiB": 62988,
+        "pssKiB": 59752,
+        "peakRssKiB": 62988
+      },
+      "host": {
+        "pid": 17713,
+        "rssKiB": 64780,
+        "pssKiB": 26954,
+        "peakRssKiB": 64780
+      },
+      "workers": [
+        {
+          "pid": 17720,
+          "rssKiB": 63692,
+          "pssKiB": 25513,
+          "peakRssKiB": 63692
+        },
+        {
+          "pid": 17721,
+          "rssKiB": 63848,
+          "pssKiB": 26141,
+          "peakRssKiB": 63848
+        },
+        {
+          "pid": 17722,
+          "rssKiB": 63728,
+          "pssKiB": 25699,
+          "peakRssKiB": 63728
+        },
+        {
+          "pid": 17728,
+          "rssKiB": 63992,
+          "pssKiB": 26207,
+          "peakRssKiB": 63992
+        }
+      ],
+      "totalRssKiB": 320040,
+      "totalPssKiB": 130514,
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 88.666058,
+      "baseline": {
+        "pid": 17748,
+        "rssKiB": 63616,
+        "pssKiB": 60336,
+        "peakRssKiB": 63616
+      },
+      "host": {
+        "pid": 17748,
+        "rssKiB": 65152,
+        "pssKiB": 40200,
+        "peakRssKiB": 65152
+      },
+      "workers": [
+        {
+          "pid": 17755,
+          "rssKiB": 64096,
+          "pssKiB": 39139,
+          "peakRssKiB": 64096
+        }
+      ],
+      "totalRssKiB": 129248,
+      "totalPssKiB": 79339,
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 18.287113000000005,
+      "baseline": {
+        "pid": 17784,
+        "rssKiB": 63608,
+        "pssKiB": 60308,
+        "peakRssKiB": 63608
+      },
+      "host": {
+        "pid": 17784,
+        "rssKiB": 64504,
+        "pssKiB": 61372,
+        "peakRssKiB": 64504
+      },
+      "workers": [
+        {
+          "pid": 17791,
+          "rssKiB": 4352,
+          "pssKiB": 2421,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17792,
+          "rssKiB": 4224,
+          "pssKiB": 2386,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 17793,
+          "rssKiB": 4224,
+          "pssKiB": 2392,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 17794,
+          "rssKiB": 4352,
+          "pssKiB": 2416,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81656,
+      "totalPssKiB": 70987,
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 92.945087,
+      "baseline": {
+        "pid": 17795,
+        "rssKiB": 63656,
+        "pssKiB": 60480,
+        "peakRssKiB": 63656
+      },
+      "host": {
+        "pid": 17795,
+        "rssKiB": 64936,
+        "pssKiB": 40201,
+        "peakRssKiB": 64936
+      },
+      "workers": [
+        {
+          "pid": 17802,
+          "rssKiB": 64084,
+          "pssKiB": 39024,
+          "peakRssKiB": 64328
+        }
+      ],
+      "totalRssKiB": 129020,
+      "totalPssKiB": 79225,
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 101.531074,
+      "baseline": {
+        "pid": 17809,
+        "rssKiB": 63308,
+        "pssKiB": 60172,
+        "peakRssKiB": 63308
+      },
+      "host": {
+        "pid": 17809,
+        "rssKiB": 65228,
+        "pssKiB": 27391,
+        "peakRssKiB": 65228
+      },
+      "workers": [
+        {
+          "pid": 17816,
+          "rssKiB": 63676,
+          "pssKiB": 25913,
+          "peakRssKiB": 63676
+        },
+        {
+          "pid": 17817,
+          "rssKiB": 63720,
+          "pssKiB": 25717,
+          "peakRssKiB": 63720
+        },
+        {
+          "pid": 17818,
+          "rssKiB": 64440,
+          "pssKiB": 26569,
+          "peakRssKiB": 64440
+        },
+        {
+          "pid": 17819,
+          "rssKiB": 63884,
+          "pssKiB": 26178,
+          "peakRssKiB": 63884
+        }
+      ],
+      "totalRssKiB": 320948,
+      "totalPssKiB": 131768,
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.844748999999993,
+      "baseline": {
+        "pid": 17892,
+        "rssKiB": 64000,
+        "pssKiB": 60500,
+        "peakRssKiB": 64000
+      },
+      "host": {
+        "pid": 17892,
+        "rssKiB": 64768,
+        "pssKiB": 61340,
+        "peakRssKiB": 64768
+      },
+      "workers": [
+        {
+          "pid": 17899,
+          "rssKiB": 4352,
+          "pssKiB": 2785,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 69120,
+      "totalPssKiB": 64125,
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.158317999999994,
+      "baseline": {
+        "pid": 17900,
+        "rssKiB": 63452,
+        "pssKiB": 60069,
+        "peakRssKiB": 63452
+      },
+      "host": {
+        "pid": 17900,
+        "rssKiB": 64348,
+        "pssKiB": 61030,
+        "peakRssKiB": 64348
+      },
+      "workers": [
+        {
+          "pid": 17907,
+          "rssKiB": 4224,
+          "pssKiB": 2705,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 68572,
+      "totalPssKiB": 63735,
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.577916000000002,
+      "baseline": {
+        "pid": 17929,
+        "rssKiB": 63600,
+        "pssKiB": 60336,
+        "peakRssKiB": 63600
+      },
+      "host": {
+        "pid": 17929,
+        "rssKiB": 64624,
+        "pssKiB": 61344,
+        "peakRssKiB": 64624
+      },
+      "workers": [
+        {
+          "pid": 17936,
+          "rssKiB": 4224,
+          "pssKiB": 2386,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 17937,
+          "rssKiB": 4352,
+          "pssKiB": 2445,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17938,
+          "rssKiB": 4352,
+          "pssKiB": 2390,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 17939,
+          "rssKiB": 4224,
+          "pssKiB": 2385,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 81776,
+      "totalPssKiB": 70950,
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 111.326326,
+      "baseline": {
+        "pid": 17975,
+        "rssKiB": 63488,
+        "pssKiB": 60252,
+        "peakRssKiB": 63488
+      },
+      "host": {
+        "pid": 17975,
+        "rssKiB": 65280,
+        "pssKiB": 27229,
+        "peakRssKiB": 65280
+      },
+      "workers": [
+        {
+          "pid": 17993,
+          "rssKiB": 63928,
+          "pssKiB": 26056,
+          "peakRssKiB": 63928
+        },
+        {
+          "pid": 17994,
+          "rssKiB": 63944,
+          "pssKiB": 26070,
+          "peakRssKiB": 63944
+        },
+        {
+          "pid": 17995,
+          "rssKiB": 63704,
+          "pssKiB": 25894,
+          "peakRssKiB": 63704
+        },
+        {
+          "pid": 18001,
+          "rssKiB": 63364,
+          "pssKiB": 25885,
+          "peakRssKiB": 63364
+        }
+      ],
+      "totalRssKiB": 320220,
+      "totalPssKiB": 131134,
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 95.72007500000001,
+      "baseline": {
+        "pid": 18021,
+        "rssKiB": 63068,
+        "pssKiB": 60002,
+        "peakRssKiB": 63068
+      },
+      "host": {
+        "pid": 18021,
+        "rssKiB": 64732,
+        "pssKiB": 39810,
+        "peakRssKiB": 64732
+      },
+      "workers": [
+        {
+          "pid": 18028,
+          "rssKiB": 64080,
+          "pssKiB": 39429,
+          "peakRssKiB": 64080
+        }
+      ],
+      "totalRssKiB": 128812,
+      "totalPssKiB": 79239,
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 19.54213200000001,
+      "baseline": {
+        "pid": 18035,
+        "rssKiB": 63488,
+        "pssKiB": 60381,
+        "peakRssKiB": 63488
+      },
+      "host": {
+        "pid": 18035,
+        "rssKiB": 64512,
+        "pssKiB": 61305,
+        "peakRssKiB": 64512
+      },
+      "workers": [
+        {
+          "pid": 18042,
+          "rssKiB": 4224,
+          "pssKiB": 2391,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 18043,
+          "rssKiB": 4224,
+          "pssKiB": 2383,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 18044,
+          "rssKiB": 4352,
+          "pssKiB": 2421,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18045,
+          "rssKiB": 4352,
+          "pssKiB": 2415,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81664,
+      "totalPssKiB": 70915,
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 109.27527900000001,
+      "baseline": {
+        "pid": 18081,
+        "rssKiB": 63440,
+        "pssKiB": 60164,
+        "peakRssKiB": 63440
+      },
+      "host": {
+        "pid": 18081,
+        "rssKiB": 64848,
+        "pssKiB": 27217,
+        "peakRssKiB": 64848
+      },
+      "workers": [
+        {
+          "pid": 18088,
+          "rssKiB": 64064,
+          "pssKiB": 26079,
+          "peakRssKiB": 64064
+        },
+        {
+          "pid": 18089,
+          "rssKiB": 63520,
+          "pssKiB": 25748,
+          "peakRssKiB": 63520
+        },
+        {
+          "pid": 18095,
+          "rssKiB": 63504,
+          "pssKiB": 25711,
+          "peakRssKiB": 63504
+        },
+        {
+          "pid": 18096,
+          "rssKiB": 63896,
+          "pssKiB": 25974,
+          "peakRssKiB": 63896
+        }
+      ],
+      "totalRssKiB": 319832,
+      "totalPssKiB": 130729,
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.590831999999992,
+      "baseline": {
+        "pid": 18128,
+        "rssKiB": 63616,
+        "pssKiB": 60376,
+        "peakRssKiB": 63616
+      },
+      "host": {
+        "pid": 18128,
+        "rssKiB": 64384,
+        "pssKiB": 61204,
+        "peakRssKiB": 64384
+      },
+      "workers": [
+        {
+          "pid": 18135,
+          "rssKiB": 4224,
+          "pssKiB": 2721,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 68608,
+      "totalPssKiB": 63925,
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 100.21483099999999,
+      "baseline": {
+        "pid": 18152,
+        "rssKiB": 63244,
+        "pssKiB": 60096,
+        "peakRssKiB": 63244
+      },
+      "host": {
+        "pid": 18152,
+        "rssKiB": 64780,
+        "pssKiB": 39819,
+        "peakRssKiB": 64780
+      },
+      "workers": [
+        {
+          "pid": 18159,
+          "rssKiB": 64128,
+          "pssKiB": 39395,
+          "peakRssKiB": 64128
+        }
+      ],
+      "totalRssKiB": 128908,
+      "totalPssKiB": 79214,
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 90.12601699999999,
+      "baseline": {
+        "pid": 18168,
+        "rssKiB": 63384,
+        "pssKiB": 60002,
+        "peakRssKiB": 63384
+      },
+      "host": {
+        "pid": 18168,
+        "rssKiB": 64920,
+        "pssKiB": 39786,
+        "peakRssKiB": 64920
+      },
+      "workers": [
+        {
+          "pid": 18175,
+          "rssKiB": 64524,
+          "pssKiB": 39669,
+          "peakRssKiB": 64524
+        }
+      ],
+      "totalRssKiB": 129444,
+      "totalPssKiB": 79455,
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 12.118100000000013,
+      "baseline": {
+        "pid": 18182,
+        "rssKiB": 63196,
+        "pssKiB": 60112,
+        "peakRssKiB": 63196
+      },
+      "host": {
+        "pid": 18182,
+        "rssKiB": 64348,
+        "pssKiB": 61048,
+        "peakRssKiB": 64348
+      },
+      "workers": [
+        {
+          "pid": 18190,
+          "rssKiB": 4352,
+          "pssKiB": 2789,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 68700,
+      "totalPssKiB": 63837,
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.766408999999996,
+      "baseline": {
+        "pid": 18199,
+        "rssKiB": 63188,
+        "pssKiB": 60000,
+        "peakRssKiB": 63188
+      },
+      "host": {
+        "pid": 18199,
+        "rssKiB": 64084,
+        "pssKiB": 60928,
+        "peakRssKiB": 64084
+      },
+      "workers": [
+        {
+          "pid": 18206,
+          "rssKiB": 4352,
+          "pssKiB": 2407,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18207,
+          "rssKiB": 4352,
+          "pssKiB": 2411,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18208,
+          "rssKiB": 4352,
+          "pssKiB": 2387,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18209,
+          "rssKiB": 4352,
+          "pssKiB": 2407,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81492,
+      "totalPssKiB": 70540,
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 107.95766900000001,
+      "baseline": {
+        "pid": 18259,
+        "rssKiB": 63488,
+        "pssKiB": 60360,
+        "peakRssKiB": 63488
+      },
+      "host": {
+        "pid": 18259,
+        "rssKiB": 65024,
+        "pssKiB": 27294,
+        "peakRssKiB": 65024
+      },
+      "workers": [
+        {
+          "pid": 18266,
+          "rssKiB": 63844,
+          "pssKiB": 25664,
+          "peakRssKiB": 63844
+        },
+        {
+          "pid": 18267,
+          "rssKiB": 64144,
+          "pssKiB": 26323,
+          "peakRssKiB": 64144
+        },
+        {
+          "pid": 18268,
+          "rssKiB": 63592,
+          "pssKiB": 25804,
+          "peakRssKiB": 63592
+        },
+        {
+          "pid": 18269,
+          "rssKiB": 63756,
+          "pssKiB": 25797,
+          "peakRssKiB": 63756
+        }
+      ],
+      "totalRssKiB": 320360,
+      "totalPssKiB": 130882,
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 117.55927300000002,
+      "baseline": {
+        "pid": 18353,
+        "rssKiB": 63616,
+        "pssKiB": 60516,
+        "peakRssKiB": 63616
+      },
+      "host": {
+        "pid": 18353,
+        "rssKiB": 65024,
+        "pssKiB": 40352,
+        "peakRssKiB": 65024
+      },
+      "workers": [
+        {
+          "pid": 18360,
+          "rssKiB": 64272,
+          "pssKiB": 39500,
+          "peakRssKiB": 64272
+        }
+      ],
+      "totalRssKiB": 129296,
+      "totalPssKiB": 79852,
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.499589,
+      "baseline": {
+        "pid": 18367,
+        "rssKiB": 63284,
+        "pssKiB": 59976,
+        "peakRssKiB": 63284
+      },
+      "host": {
+        "pid": 18367,
+        "rssKiB": 64180,
+        "pssKiB": 60908,
+        "peakRssKiB": 64180
+      },
+      "workers": [
+        {
+          "pid": 18374,
+          "rssKiB": 4224,
+          "pssKiB": 2386,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 18375,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18376,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18377,
+          "rssKiB": 4352,
+          "pssKiB": 2409,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81460,
+      "totalPssKiB": 70515,
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.389196000000013,
+      "baseline": {
+        "pid": 18379,
+        "rssKiB": 63320,
+        "pssKiB": 60197,
+        "peakRssKiB": 63320
+      },
+      "host": {
+        "pid": 18379,
+        "rssKiB": 64216,
+        "pssKiB": 61022,
+        "peakRssKiB": 64216
+      },
+      "workers": [
+        {
+          "pid": 18386,
+          "rssKiB": 4352,
+          "pssKiB": 2789,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 68568,
+      "totalPssKiB": 63811,
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 104.03315,
+      "baseline": {
+        "pid": 18387,
+        "rssKiB": 63116,
+        "pssKiB": 59876,
+        "peakRssKiB": 63116
+      },
+      "host": {
+        "pid": 18387,
+        "rssKiB": 64908,
+        "pssKiB": 26977,
+        "peakRssKiB": 64908
+      },
+      "workers": [
+        {
+          "pid": 18404,
+          "rssKiB": 63900,
+          "pssKiB": 26113,
+          "peakRssKiB": 63900
+        },
+        {
+          "pid": 18405,
+          "rssKiB": 63908,
+          "pssKiB": 26014,
+          "peakRssKiB": 63908
+        },
+        {
+          "pid": 18406,
+          "rssKiB": 63900,
+          "pssKiB": 26045,
+          "peakRssKiB": 63900
+        },
+        {
+          "pid": 18412,
+          "rssKiB": 64188,
+          "pssKiB": 26165,
+          "peakRssKiB": 64188
+        }
+      ],
+      "totalRssKiB": 320804,
+      "totalPssKiB": 131314,
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 111.296624,
+      "baseline": {
+        "pid": 18432,
+        "rssKiB": 63616,
+        "pssKiB": 60499,
+        "peakRssKiB": 63616
+      },
+      "host": {
+        "pid": 18432,
+        "rssKiB": 65024,
+        "pssKiB": 27240,
+        "peakRssKiB": 65024
+      },
+      "workers": [
+        {
+          "pid": 18439,
+          "rssKiB": 63548,
+          "pssKiB": 25706,
+          "peakRssKiB": 63548
+        },
+        {
+          "pid": 18440,
+          "rssKiB": 63124,
+          "pssKiB": 25482,
+          "peakRssKiB": 63124
+        },
+        {
+          "pid": 18441,
+          "rssKiB": 63620,
+          "pssKiB": 25933,
+          "peakRssKiB": 63620
+        },
+        {
+          "pid": 18447,
+          "rssKiB": 64096,
+          "pssKiB": 26265,
+          "peakRssKiB": 64096
+        }
+      ],
+      "totalRssKiB": 319412,
+      "totalPssKiB": 130626,
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.531111999999993,
+      "baseline": {
+        "pid": 18467,
+        "rssKiB": 62984,
+        "pssKiB": 59788,
+        "peakRssKiB": 62984
+      },
+      "host": {
+        "pid": 18467,
+        "rssKiB": 63880,
+        "pssKiB": 60736,
+        "peakRssKiB": 63880
+      },
+      "workers": [
+        {
+          "pid": 18474,
+          "rssKiB": 4224,
+          "pssKiB": 2705,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 68104,
+      "totalPssKiB": 63441,
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.40265000000001,
+      "baseline": {
+        "pid": 18510,
+        "rssKiB": 63264,
+        "pssKiB": 60132,
+        "peakRssKiB": 63264
+      },
+      "host": {
+        "pid": 18510,
+        "rssKiB": 64288,
+        "pssKiB": 61196,
+        "peakRssKiB": 64288
+      },
+      "workers": [
+        {
+          "pid": 18517,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18518,
+          "rssKiB": 4352,
+          "pssKiB": 2411,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18519,
+          "rssKiB": 4352,
+          "pssKiB": 2410,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18520,
+          "rssKiB": 4224,
+          "pssKiB": 2389,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 81568,
+      "totalPssKiB": 70812,
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 90.42171199999999,
+      "baseline": {
+        "pid": 18535,
+        "rssKiB": 63872,
+        "pssKiB": 60512,
+        "peakRssKiB": 63872
+      },
+      "host": {
+        "pid": 18535,
+        "rssKiB": 65152,
+        "pssKiB": 40044,
+        "peakRssKiB": 65152
+      },
+      "workers": [
+        {
+          "pid": 18542,
+          "rssKiB": 63932,
+          "pssKiB": 38975,
+          "peakRssKiB": 63932
+        }
+      ],
+      "totalRssKiB": 129084,
+      "totalPssKiB": 79019,
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 140.089042,
+      "baseline": {
+        "pid": 18598,
+        "rssKiB": 63332,
+        "pssKiB": 60208,
+        "peakRssKiB": 63332
+      },
+      "host": {
+        "pid": 18598,
+        "rssKiB": 64868,
+        "pssKiB": 27213,
+        "peakRssKiB": 64868
+      },
+      "workers": [
+        {
+          "pid": 18605,
+          "rssKiB": 64472,
+          "pssKiB": 26373,
+          "peakRssKiB": 64472
+        },
+        {
+          "pid": 18606,
+          "rssKiB": 64472,
+          "pssKiB": 26418,
+          "peakRssKiB": 64472
+        },
+        {
+          "pid": 18607,
+          "rssKiB": 64368,
+          "pssKiB": 26578,
+          "peakRssKiB": 64368
+        },
+        {
+          "pid": 18613,
+          "rssKiB": 64024,
+          "pssKiB": 26075,
+          "peakRssKiB": 64024
+        }
+      ],
+      "totalRssKiB": 322204,
+      "totalPssKiB": 132657,
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.357641999999998,
+      "baseline": {
+        "pid": 18633,
+        "rssKiB": 63280,
+        "pssKiB": 60216,
+        "peakRssKiB": 63280
+      },
+      "host": {
+        "pid": 18633,
+        "rssKiB": 64304,
+        "pssKiB": 61208,
+        "peakRssKiB": 64304
+      },
+      "workers": [
+        {
+          "pid": 18651,
+          "rssKiB": 4352,
+          "pssKiB": 2785,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 68656,
+      "totalPssKiB": 63993,
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.943045999999995,
+      "baseline": {
+        "pid": 18653,
+        "rssKiB": 63364,
+        "pssKiB": 60045,
+        "peakRssKiB": 63364
+      },
+      "host": {
+        "pid": 18653,
+        "rssKiB": 64260,
+        "pssKiB": 60977,
+        "peakRssKiB": 64260
+      },
+      "workers": [
+        {
+          "pid": 18660,
+          "rssKiB": 4352,
+          "pssKiB": 2410,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18661,
+          "rssKiB": 4352,
+          "pssKiB": 2408,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18662,
+          "rssKiB": 4352,
+          "pssKiB": 2410,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18663,
+          "rssKiB": 4224,
+          "pssKiB": 2385,
+          "peakRssKiB": 4224
+        }
+      ],
+      "totalRssKiB": 81540,
+      "totalPssKiB": 70590,
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 99.322934,
+      "baseline": {
+        "pid": 18698,
+        "rssKiB": 63448,
+        "pssKiB": 60292,
+        "peakRssKiB": 63448
+      },
+      "host": {
+        "pid": 18698,
+        "rssKiB": 65112,
+        "pssKiB": 40151,
+        "peakRssKiB": 65112
+      },
+      "workers": [
+        {
+          "pid": 18705,
+          "rssKiB": 64200,
+          "pssKiB": 39395,
+          "peakRssKiB": 64200
+        }
+      ],
+      "totalRssKiB": 129312,
+      "totalPssKiB": 79546,
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.473798000000002,
+      "baseline": {
+        "pid": 18747,
+        "rssKiB": 63872,
+        "pssKiB": 60465,
+        "peakRssKiB": 63872
+      },
+      "host": {
+        "pid": 18747,
+        "rssKiB": 64768,
+        "pssKiB": 61294,
+        "peakRssKiB": 64768
+      },
+      "workers": [
+        {
+          "pid": 18766,
+          "rssKiB": 4352,
+          "pssKiB": 2785,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 69120,
+      "totalPssKiB": 64079,
+      "iteration": 9,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 92.32954799999999,
+      "baseline": {
+        "pid": 18768,
+        "rssKiB": 63136,
+        "pssKiB": 60208,
+        "peakRssKiB": 63136
+      },
+      "host": {
+        "pid": 18768,
+        "rssKiB": 64544,
+        "pssKiB": 39925,
+        "peakRssKiB": 64544
+      },
+      "workers": [
+        {
+          "pid": 18775,
+          "rssKiB": 64212,
+          "pssKiB": 39417,
+          "peakRssKiB": 64212
+        }
+      ],
+      "totalRssKiB": 128756,
+      "totalPssKiB": 79342,
+      "iteration": 9,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 98.900815,
+      "baseline": {
+        "pid": 18796,
+        "rssKiB": 63872,
+        "pssKiB": 60451,
+        "peakRssKiB": 63872
+      },
+      "host": {
+        "pid": 18796,
+        "rssKiB": 65280,
+        "pssKiB": 27530,
+        "peakRssKiB": 65280
+      },
+      "workers": [
+        {
+          "pid": 18803,
+          "rssKiB": 63492,
+          "pssKiB": 25839,
+          "peakRssKiB": 63492
+        },
+        {
+          "pid": 18804,
+          "rssKiB": 63500,
+          "pssKiB": 25973,
+          "peakRssKiB": 63500
+        },
+        {
+          "pid": 18805,
+          "rssKiB": 63416,
+          "pssKiB": 26072,
+          "peakRssKiB": 63416
+        },
+        {
+          "pid": 18811,
+          "rssKiB": 63832,
+          "pssKiB": 25977,
+          "peakRssKiB": 63832
+        }
+      ],
+      "totalRssKiB": 319520,
+      "totalPssKiB": 131391,
+      "iteration": 9,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 17.537902000000003,
+      "baseline": {
+        "pid": 18831,
+        "rssKiB": 64000,
+        "pssKiB": 60495,
+        "peakRssKiB": 64000
+      },
+      "host": {
+        "pid": 18831,
+        "rssKiB": 65024,
+        "pssKiB": 61431,
+        "peakRssKiB": 65024
+      },
+      "workers": [
+        {
+          "pid": 18838,
+          "rssKiB": 4352,
+          "pssKiB": 2411,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18839,
+          "rssKiB": 4224,
+          "pssKiB": 2383,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 18840,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18841,
+          "rssKiB": 4352,
+          "pssKiB": 2407,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 82304,
+      "totalPssKiB": 71038,
+      "iteration": 9,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 1,
+      "startupMs": 104.282423,
+      "baseline": {
+        "pid": 18903,
+        "rssKiB": 63744,
+        "pssKiB": 60540,
+        "peakRssKiB": 63744
+      },
+      "host": {
+        "pid": 18903,
+        "rssKiB": 65152,
+        "pssKiB": 40296,
+        "peakRssKiB": 65152
+      },
+      "workers": [
+        {
+          "pid": 18910,
+          "rssKiB": 64184,
+          "pssKiB": 39069,
+          "peakRssKiB": 64184
+        }
+      ],
+      "totalRssKiB": 129336,
+      "totalPssKiB": 79365,
+      "iteration": 10,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 4,
+      "startupMs": 16.766523000000007,
+      "baseline": {
+        "pid": 18917,
+        "rssKiB": 63112,
+        "pssKiB": 60176,
+        "peakRssKiB": 63112
+      },
+      "host": {
+        "pid": 18917,
+        "rssKiB": 64136,
+        "pssKiB": 61100,
+        "peakRssKiB": 64136
+      },
+      "workers": [
+        {
+          "pid": 18924,
+          "rssKiB": 4224,
+          "pssKiB": 2388,
+          "peakRssKiB": 4224
+        },
+        {
+          "pid": 18925,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18926,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        },
+        {
+          "pid": 18927,
+          "rssKiB": 4352,
+          "pssKiB": 2406,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 81416,
+      "totalPssKiB": 70706,
+      "iteration": 10,
+      "warmup": false
+    },
+    {
+      "mode": "compiled",
+      "threads": 1,
+      "startupMs": 11.729647999999997,
+      "baseline": {
+        "pid": 18928,
+        "rssKiB": 63660,
+        "pssKiB": 60264,
+        "peakRssKiB": 63660
+      },
+      "host": {
+        "pid": 18928,
+        "rssKiB": 64684,
+        "pssKiB": 61240,
+        "peakRssKiB": 64684
+      },
+      "workers": [
+        {
+          "pid": 18935,
+          "rssKiB": 4352,
+          "pssKiB": 2789,
+          "peakRssKiB": 4352
+        }
+      ],
+      "totalRssKiB": 69036,
+      "totalPssKiB": 64029,
+      "iteration": 10,
+      "warmup": false
+    },
+    {
+      "mode": "process",
+      "threads": 4,
+      "startupMs": 98.46355300000002,
+      "baseline": {
+        "pid": 18948,
+        "rssKiB": 63744,
+        "pssKiB": 60505,
+        "peakRssKiB": 63744
+      },
+      "host": {
+        "pid": 18948,
+        "rssKiB": 65152,
+        "pssKiB": 27500,
+        "peakRssKiB": 65152
+      },
+      "workers": [
+        {
+          "pid": 18956,
+          "rssKiB": 64004,
+          "pssKiB": 26030,
+          "peakRssKiB": 64004
+        },
+        {
+          "pid": 18957,
+          "rssKiB": 64188,
+          "pssKiB": 26326,
+          "peakRssKiB": 64188
+        },
+        {
+          "pid": 18958,
+          "rssKiB": 63860,
+          "pssKiB": 26092,
+          "peakRssKiB": 63860
+        },
+        {
+          "pid": 18964,
+          "rssKiB": 63960,
+          "pssKiB": 26322,
+          "peakRssKiB": 63960
+        }
+      ],
+      "totalRssKiB": 321164,
+      "totalPssKiB": 132270,
+      "iteration": 10,
+      "warmup": false
+    }
+  ]
+}

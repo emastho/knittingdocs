@@ -43,6 +43,20 @@ console.log(ref.byteLength);             // 5
 That is the trade-off that makes the transfer zero-copy: after the move, there
 is only one owner of the bytes.
 
+The move takes the whole backing `ArrayBuffer`, not just the part you pass. If
+you wrap a view such as `buffer.subarray(start, end)`, the reference covers only
+that range, but the parent buffer is still detached, along with every other view
+over it. To keep using the parent, copy the range and move the copy:
+
+```ts
+const region = buffer.subarray(start, end);
+const ref = new BufferReference(region.slice()); // buffer stays usable
+```
+
+That copy is the cost `BufferReference` exists to avoid, so make it only when
+you still need the parent. Otherwise, pass the view directly and let the parent
+go with it.
+
 ---
 
 ## Send it to a worker

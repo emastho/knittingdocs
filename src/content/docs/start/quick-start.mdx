@@ -188,9 +188,10 @@ metadata to describe them, use `Envelope`. See
 
 ### Start strict, open up later
 
-Worker permissions start restricted. Sensitive paths like `.env`, `.git`,
-`~/.ssh` and `/etc` are blocked, and writes to `node_modules` are denied. Grant
-only the access your tasks need. See [Permissions](/guides/permissions/).
+Knitting requests a strict permission policy by default, but enforcement depends
+on the runtime and worker type. Bun cannot enforce these restrictions, and Deno
+threads inherit the host's permissions. Check the [runtime support table](/guides/permissions/#check-the-runtime-first)
+before relying on a restriction, then grant only the access your tasks need.
 
 ## Footguns
 

@@ -1,0 +1,103 @@
+<quick-start-tour><slot /></quick-start-tour>
+
+<script>
+  class QuickStartTour extends HTMLElement {
+    private cleanup?: () => void;
+
+    connectedCallback() {
+      if (this.cleanup) return;
+      const events = new AbortController();
+      const options = { signal: events.signal };
+      const motion = matchMedia("(prefers-reduced-motion: reduce)");
+      const steps = Array.from(this.querySelectorAll<HTMLButtonElement>("[data-code-step]"));
+      const lines = Array.from(this.querySelectorAll<HTMLElement>(".ec-line"));
+      const toggle = this.querySelector<HTMLButtonElement>("[data-tour-toggle]")!;
+      const matches = [
+        (text: string) => text.startsWith("export const compress") || text.includes("brotliCompressSync(html)"),
+        (text: string) => text.startsWith("const pool ="),
+        (text: string) => text.includes("await pool.call."),
+      ];
+      let active = 0;
+      let paused = motion.matches;
+      let visible = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const render = () => {
+        steps.forEach((step, index) => step.setAttribute("aria-pressed", String(index === active)));
+        lines.forEach(line => line.classList.toggle("is-tour-highlighted", matches[active](line.textContent?.trim() ?? "")));
+        toggle.textContent = paused ? "Play highlights" : "Pause highlights";
+      };
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = undefined;
+        if (!paused && visible && !document.hidden) {
+          timer = setTimeout(() => {
+            active = (active + 1) % steps.length;
+            render();
+            schedule();
+          }, 5000);
+        }
+      };
+      steps.forEach((step, index) => step.addEventListener("click", () => {
+        active = index;
+        render();
+        schedule();
+      }, options));
+      toggle.addEventListener("click", () => {
+        paused = !paused;
+        render();
+        schedule();
+      }, options);
+      document.addEventListener("visibilitychange", schedule, options);
+      motion.addEventListener("change", () => {
+        paused = motion.matches;
+        render();
+        schedule();
+      }, options);
+      const observer = new IntersectionObserver(entries => {
+        visible = entries[0].isIntersecting;
+        schedule();
+      }, { threshold: 0.2 });
+      observer.observe(this);
+      toggle.hidden = false;
+      render();
+      this.cleanup = () => {
+        if (timer) clearTimeout(timer);
+        observer.disconnect();
+        events.abort();
+      };
+    }
+
+    disconnectedCallback() { this.cleanup?.(); this.cleanup = undefined; }
+  }
+  if (!customElements.get("quick-start-tour")) customElements.define("quick-start-tour", QuickStartTour);
+</script>
+
+<style is:global>
+  quick-start-tour { display: block; min-width: 0; }
+  html:has([data-knit-home-marker]) quick-start-tour .kh-highlighted-code .is-tour-highlighted .code {
+    background: color-mix(in srgb, var(--kh-accent) 15%, transparent);
+    box-shadow: inset 3px 0 var(--kh-accent);
+  }
+  html:has([data-knit-home-marker]) quick-start-tour .kh-steps button[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--kh-accent) 10%, var(--kh-card));
+    box-shadow: inset 3px 0 var(--kh-accent);
+  }
+  html:has([data-knit-home-marker]) quick-start-tour .kh-steps button:focus-visible {
+    outline: 2px solid var(--kh-accent);
+    outline-offset: -4px;
+  }
+  html:has([data-knit-home-marker]) quick-start-tour [data-tour-toggle] {
+    margin-left: auto;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--kh-line);
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--kh-muted);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+  quick-start-tour [data-tour-toggle][hidden] { display: none; }
+  quick-start-tour [data-tour-toggle]:focus-visible { outline: 2px solid var(--kh-accent); outline-offset: 3px; }
+</style>

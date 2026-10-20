@@ -1,0 +1,77 @@
+---
+title: Bundling and minifying
+description: Transform TypeScript with esbuild, then minify it with Terser on workers.
+hero:
+  title: 'Bundling + minifying'
+sidebar:
+  order: 10
+---
+
+import { Code, TabItem, Tabs } from '@astrojs/starlight/components';
+import { getCode } from '../../../../lib/code-snippets';
+import RuntimeRunTabs from '../../../../components/RuntimeRunTabs.astro';
+
+export const run = getCode("build_tools/bundling_and_minifying/run_bundling_and_minifying.ts");
+
+This example runs esbuild's TypeScript transform, then Terser's JavaScript
+minifier, inside a Knitting worker. Both tools are async APIs: after the
+esbuild transform resolves, minification does CPU-heavy work on that same
+worker. `maxAwaitingTasks` stops a worker from collecting too many such
+continuations while peers are idle.
+
+## Install
+
+Install Knitting, esbuild, and Terser with your runtime's package manager:
+
+```sh
+npm install knitting esbuild terser
+npm install --save-dev tsx
+```
+
+```sh
+bun add knitting esbuild terser
+```
+
+```sh
+deno add npm:knitting npm:esbuild npm:terser
+```
+
+## Run
+
+:::info
+<RuntimeRunTabs
+  bunCommand="bun src/run_bundling_and_minifying.ts"
+  denoCommand="deno run -A src/run_bundling_and_minifying.ts"
+  nodeCommand="npx tsx src/run_bundling_and_minifying.ts"
+/>
+:::
+
+The program prints four minified snippets. Each input declares a number and
+logs it; the TypeScript annotation is removed, and Terser folds the constant
+into the `console.log` call.
+
+## Why set `maxAwaitingTasks`
+
+With work stealing, an async task that reaches `await` leaves the worker's
+immediate task queue, but its continuation still runs on that worker. Without
+a cap, the worker can claim more tasks while those transforms wait, then run
+all their minification steps one after another. The limit of `2` leaves
+additional calls in the shared queue for other workers to claim.
+
+Start at `2` and measure your workload. Synchronous tasks do not use an
+awaiting slot, and a task holds its slot until its promise settles.
+
+## Node subprocess permission
+
+esbuild starts its platform binary. The Node example grants workers subprocess
+permission with `run: true` in the strict permission policy. This is a broad
+permission; use a narrower policy when the task code does not need subprocesses.
+Bun and Deno use the host runtime's permission settings for thread workers.
+
+## Code
+
+<Tabs>
+  <TabItem label="run_bundling_and_minifying.ts">
+    <Code code={run} lang="ts" title={"run_bundling_and_minifying.ts"} />
+  </TabItem>
+</Tabs>

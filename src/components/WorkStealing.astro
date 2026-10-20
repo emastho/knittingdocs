@@ -1,0 +1,304 @@
+---
+const workers = [1, 2];
+const guide = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/guides/work-stealing/`;
+---
+
+<work-stealing>
+  <figure class="ws not-content" aria-label="Interactive illustration of worker scheduling">
+    <div class="ws-toolbar">
+      <div class="ws-modes" role="group" aria-label="Scheduling mode">
+        <button type="button" data-mode="steal" aria-pressed="true">Stealing on</button>
+        <button type="button" data-mode="private" aria-pressed="false">Stealing off</button>
+      </div>
+      <div class="ws-controls">
+        <button type="button" data-play hidden>Pause</button>
+        <button type="button" data-step hidden>Step</button>
+        <button type="button" data-reset hidden>Restart</button>
+      </div>
+    </div>
+
+    <div class="ws-stage">
+      <div class="ws-source">
+        <span data-waiting>12 waiting</span>
+        <button type="button" data-burst hidden>+ Add tasks</button>
+      </div>
+      <div class="ws-workers">
+        {workers.map((id) => (
+          <div class="ws-worker" data-worker>
+            <div class="ws-worker-head"><strong>Worker {id}</strong><span data-state>Ready</span></div>
+            <div class="ws-local-head"><span>Queue</span><span data-local-count>{id === 1 ? 10 : 2} waiting</span></div>
+            <div class="ws-private" data-private>
+              {(id === 1 ? [1, 3, 5, 6, 7, 8, 9, 10, 11, 12] : [2, 4]).map(task => <span class:list={["ws-task", { "ws-long": task === 1 || task === 9 }]} data-task={task}>#{String(task).padStart(2, "0")}</span>)}
+            </div>
+            <div class="ws-running" data-running><span class="ws-empty">—</span></div>
+            <div class="ws-meter" aria-hidden="true"><span data-progress></span></div>
+            <div class="ws-worker-foot"><span data-count>0 done</span></div>
+          </div>
+        ))}
+      </div>
+      <div class="ws-results"><span><strong data-total>0</strong> completed</span><div data-results aria-label="Recently completed tasks"></div></div>
+    </div>
+
+    <figcaption>
+      <a href={guide}>Scheduling <span aria-hidden="true">→</span></a>
+    </figcaption>
+    <p class="ws-sr" data-announcement role="status" aria-live="polite"></p>
+    <noscript><p>Each worker runs tasks from its internal queue. In this conceptual illustration, an idle worker steals a waiting task from the front of its peer’s queue. Running tasks never move.</p></noscript>
+  </figure>
+</work-stealing>
+
+<script>
+  type Job = { id: number; duration: number; remaining: number };
+  type WorkerLane = { element: HTMLElement; queue: Job[]; job: Job | null; done: number; receivedId: number | null; claimDelay: number };
+
+  class WorkStealing extends HTMLElement {
+    private cleanup?: () => void;
+
+    connectedCallback() {
+      if (this.cleanup) return;
+      const motion = matchMedia("(prefers-reduced-motion: reduce)");
+      const events = new AbortController();
+      const options = { signal: events.signal };
+      const find = <T extends HTMLElement = HTMLElement>(selector: string) => this.querySelector<T>(selector)!;
+      const play = find<HTMLButtonElement>("[data-play]");
+      const results = find("[data-results]");
+      const lanes: WorkerLane[] = Array.from(this.querySelectorAll<HTMLElement>("[data-worker]")).map(element => ({ element, queue: [], job: null, done: 0, receivedId: null, claimDelay: 0 }));
+      let mode = "steal";
+      let finished: Job[] = [];
+      let nextId = 1;
+      let total = 0;
+      let paused = motion.matches;
+      let visible = false;
+      let timer: ReturnType<typeof setInterval> | undefined;
+      let readyAt = 0;
+      let animations: Animation[] = [];
+      const movementMs = 550;
+      const durations = [12000, 1200, 2000, 1000, 1600, 1200, 2200, 1000, 5200, 1600, 1200, 1800];
+      const chip = (job: Job) => {
+        const element = document.createElement("span");
+        element.className = `ws-task${job.duration >= 5000 ? " ws-long" : ""}${lanes.some(lane => lane.receivedId === job.id) ? " ws-stolen" : ""}`;
+        element.dataset.task = String(job.id);
+        element.textContent = `#${String(job.id).padStart(2, "0")}`;
+        element.title = `Task ${job.id}${job.duration >= 5000 ? " · long task" : ""}`;
+        return element;
+      };
+      const empty = (text: string) => {
+        const element = document.createElement("span");
+        element.className = "ws-empty";
+        element.textContent = text;
+        return element;
+      };
+      const waitingCount = () => lanes.reduce((sum, lane) => sum + lane.queue.length, 0);
+      const complete = () => waitingCount() === 0 && lanes.every(lane => !lane.job);
+
+      const render = (animate = true) => {
+        const before = new Map(Array.from(this.querySelectorAll<HTMLElement>("[data-task]")).map(element => [element.dataset.task!, element.getBoundingClientRect()]));
+        animations.forEach(animation => animation.cancel());
+        animations = [];
+        lanes.forEach((lane) => {
+          const localQueue = lane.element.querySelector<HTMLElement>("[data-private]")!;
+          localQueue.replaceChildren(...lane.queue.map(chip));
+          if (!lane.queue.length) localQueue.append(empty("Empty"));
+          lane.element.querySelector("[data-local-count]")!.textContent = `${lane.queue.length} waiting`;
+          lane.element.dataset.busy = String(!!lane.job);
+          lane.element.dataset.receiving = String(lane.claimDelay > 0);
+          const running = lane.element.querySelector<HTMLElement>("[data-running]")!;
+          running.replaceChildren(lane.job ? chip(lane.job) : empty("—"));
+          lane.element.querySelector("[data-state]")!.textContent = lane.job ? "Running" : lane.claimDelay ? "Stealing" : "Idle";
+          lane.element.querySelector("[data-count]")!.textContent = `${lane.done} done`;
+        });
+        results.replaceChildren(...finished.slice(-6).map(chip));
+        find("[data-total]").textContent = String(total);
+        find("[data-waiting]").textContent = `${waitingCount()} waiting`;
+        find<HTMLButtonElement>("[data-burst]").disabled = waitingCount() > 24;
+        if (animate && !motion.matches) {
+          this.querySelectorAll<HTMLElement>("[data-task]").forEach(element => {
+            const previous = before.get(element.dataset.task!);
+            if (!previous) return;
+            const current = element.getBoundingClientRect();
+            if (previous.x === current.x && previous.y === current.y) return;
+            animations.push(element.animate([
+              { transform: `translate(${previous.x - current.x}px, ${previous.y - current.y}px)`, zIndex: 5 },
+              { transform: "translate(0, 0)", zIndex: 5 },
+            ], { duration: movementMs, easing: "cubic-bezier(.22, .7, .3, 1)" }));
+          });
+        }
+        paintProgress();
+      };
+      const paintProgress = () => {
+        lanes.forEach(lane => {
+          const progress = lane.job ? 1 - lane.job.remaining / lane.job.duration : 0;
+          lane.element.querySelector<HTMLElement>("[data-progress]")!.style.transform = `scaleX(${progress})`;
+        });
+      };
+      const add = (count: number) => {
+        for (let i = 0; i < count; i++) {
+          const id = nextId++;
+          const duration = durations[(id - 1) % durations.length];
+          const job = { id, duration, remaining: duration };
+          // Deliberately uneven arrivals make stealing visible in both modes.
+          lanes[id % 12 === 2 || id % 12 === 4 ? 1 : 0].queue.push(job);
+        }
+      };
+      const tick = (delta = 100) => {
+        let changed = false;
+        const steals: string[] = [];
+        // Finish running tasks before any worker chooses its next task.
+        lanes.forEach(lane => {
+          lane.claimDelay = Math.max(0, lane.claimDelay - delta);
+          if (!lane.job) return;
+          lane.job.remaining = Math.max(0, lane.job.remaining - delta);
+          if (lane.job.remaining === 0) {
+            if (lane.receivedId === lane.job.id) lane.receivedId = null;
+            finished.push(lane.job);
+            lane.job = null;
+            lane.done++;
+            total++;
+            changed = true;
+          }
+        });
+        lanes.forEach((lane, index) => {
+          if (lane.job || lane.claimDelay) return;
+          if (lane.queue.length) {
+            lane.job = lane.queue.shift()!;
+            changed = true;
+          } else if (mode === "steal") {
+            const peer = lanes[1 - index];
+            const stolen = peer.claimDelay ? undefined : peer.queue.shift();
+            if (stolen) {
+              // Show the task arriving in the thief's queue before it starts.
+              lane.queue.push(stolen);
+              lane.claimDelay = 800;
+              lane.receivedId = stolen.id;
+              steals.push(`Worker ${index + 1} stole #${String(stolen.id).padStart(2, "0")} from the front of Worker ${2 - index}’s queue.`);
+              changed = true;
+            }
+          }
+        });
+        if (changed) {
+          if (complete()) {
+            find("[data-announcement]").textContent = `${total} tasks completed.`;
+            syncTimer();
+          } else if (steals.length) {
+            find("[data-announcement]").textContent = steals.join(" ");
+          }
+          render();
+        } else paintProgress();
+      };
+      const syncTimer = () => {
+        if (timer) clearInterval(timer);
+        timer = undefined;
+        play.textContent = paused ? "Play" : "Pause";
+        play.setAttribute("aria-label", paused ? "Play scheduling animation" : "Pause scheduling animation");
+        this.dataset.paused = String(paused);
+        if (!paused && visible && !document.hidden && !complete()) {
+          timer = setInterval(() => { if (performance.now() >= readyAt) tick(); }, 100);
+        }
+      };
+      const reset = () => {
+        finished = [];
+        nextId = 1;
+        total = 0;
+        lanes.forEach(lane => { lane.queue = []; lane.job = null; lane.done = 0; lane.receivedId = null; lane.claimDelay = 0; });
+        add(12);
+        find("[data-announcement]").textContent = `${mode === "steal" ? "Stealing on" : "Stealing off"} selected. 12 tasks ready.`;
+        readyAt = performance.now() + 1000;
+        render(false);
+        syncTimer();
+      };
+      this.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(button => button.addEventListener("click", () => {
+        mode = button.dataset.mode!;
+        this.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        reset();
+      }, options));
+      play.addEventListener("click", () => {
+        paused = !paused;
+        animations.forEach(animation => paused ? animation.pause() : animation.play());
+        syncTimer();
+      }, options);
+      find("[data-step]").addEventListener("click", () => { paused = true; syncTimer(); tick(1000); }, options);
+      find("[data-reset]").addEventListener("click", reset, options);
+      find("[data-burst]").addEventListener("click", () => {
+        add(8);
+        find("[data-announcement]").textContent = `Eight tasks added. ${waitingCount()} waiting.`;
+        render();
+        syncTimer();
+      }, options);
+      document.addEventListener("visibilitychange", syncTimer, options);
+      motion.addEventListener("change", () => { if (motion.matches) { paused = true; render(false); syncTimer(); } }, options);
+      const observer = new IntersectionObserver(entries => {
+        visible = entries[0].isIntersecting;
+        syncTimer();
+      }, { threshold: 0.15 });
+      observer.observe(this);
+      this.querySelectorAll<HTMLButtonElement>("button[hidden]").forEach(button => { button.hidden = false; });
+      reset();
+      this.cleanup = () => {
+        if (timer) clearInterval(timer);
+        observer.disconnect();
+        events.abort();
+        animations.forEach(animation => animation.cancel());
+      };
+    }
+
+    disconnectedCallback() { this.cleanup?.(); this.cleanup = undefined; }
+  }
+  if (!customElements.get("work-stealing")) customElements.define("work-stealing", WorkStealing);
+</script>
+
+<style is:global>
+  work-stealing { display: block; min-width: 0; }
+  .ws { margin: 0; color: var(--kh-paper, var(--sl-color-white)); border: 1px solid var(--kh-line, var(--sl-color-gray-5)); border-radius: 1rem; background: var(--kh-card, var(--sl-color-bg-sidebar)); }
+  .ws * { box-sizing: border-box; }
+  .ws button { cursor: pointer; font: inherit; font-size: 0.75rem; color: inherit; border: 1px solid var(--kh-line, var(--sl-color-gray-5)); border-radius: 0.35rem; background: transparent; padding: 0.45rem 0.7rem; }
+  .ws button:hover { background: color-mix(in srgb, var(--kh-accent, #ff7a1f) 12%, transparent); }
+  .ws button:focus-visible { outline: 2px solid var(--kh-accent, #ff7a1f); outline-offset: 3px; }
+  .ws button:disabled { opacity: 0.4; cursor: default; }
+  .ws [hidden] { display: none !important; }
+  .ws-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--kh-line); flex-wrap: wrap; }
+  .ws-modes, .ws-controls { display: flex; gap: 0.35rem; }
+  .ws-modes button { border-color: transparent; }
+  .ws-modes button[aria-pressed="true"] { background: var(--kh-accent, #ff7a1f); color: var(--kh-button-ink, #160c08); }
+  .ws-stage { padding: clamp(1rem, 2vw, 1.5rem); }
+  .ws-source { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding-bottom: 0.5rem; color: var(--kh-muted); font-size: 0.7rem; }
+  .ws-source button { margin-left: auto; }
+  .ws .ws-task { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 2.7rem; height: 1.85rem; border: 1px solid transparent; border-radius: 0.3rem; background: color-mix(in srgb, var(--kh-paper) 12%, var(--kh-card)); color: var(--kh-paper); font: 0.7rem var(--sl-font-mono, monospace); }
+  .ws .ws-long { border-color: var(--kh-accent, #ff7a1f); color: var(--kh-accent, #ff7a1f); }
+  .ws .ws-stolen { border-color: var(--kh-accent); background: color-mix(in srgb, var(--kh-accent) 22%, var(--kh-card)); box-shadow: 0 0 0 1px var(--kh-accent); }
+  .ws-worker[data-receiving="true"] { border-color: var(--kh-accent); }
+  .ws-workers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(0.75rem, 3vw, 2rem); }
+  .ws-worker { padding: 0.85rem; min-width: 0; border: 1px solid var(--kh-line); border-radius: 0.55rem; transition: border-color 200ms; }
+  .ws-worker[data-busy="true"] { border-color: color-mix(in srgb, var(--kh-accent) 55%, var(--kh-line)); }
+  .ws-worker-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; flex-wrap: wrap; }
+  .ws-worker-head strong { font-size: 0.8rem; font-weight: 550; }
+  .ws-worker-head > span { color: var(--kh-muted); font: 0.65rem var(--sl-font-mono, monospace); }
+  .ws-worker[data-busy="true"] .ws-worker-head > span { color: var(--kh-accent); }
+  .ws-running { display: flex; align-items: center; justify-content: center; min-height: 4.5rem; }
+  .ws-empty { font-size: 0.7rem; color: var(--kh-muted); }
+  .ws-meter { height: 3px; background: var(--kh-line); overflow: hidden; }
+  .ws-meter > span { display: block; height: 100%; background: var(--kh-accent, #ff7a1f); transform-origin: left; transform: scaleX(0); }
+  .ws-worker-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.65rem; font-size: 0.6rem; color: var(--kh-muted); }
+  .ws-worker-foot > :last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ws-private { display: flex; align-content: start; flex-wrap: wrap; gap: 0.3rem; min-height: 5.5rem; padding: 0.65rem; border: 1px dashed var(--kh-line); border-radius: 0.35rem; background: var(--kh-night); }
+  .ws-local-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.3rem; margin-block: 1rem 0.5rem; color: var(--kh-muted); font-size: 0.7rem; }
+  .ws-local-head small { display: block; margin-top: 0.25rem; color: var(--kh-muted); font-size: 0.6rem; font-weight: 400; }
+  .ws-results { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.7rem; min-height: 3rem; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--kh-line); }
+  .ws-results > span { color: var(--kh-muted); font-size: 0.75rem; }
+  .ws-results strong { color: var(--kh-paper); font-variant-numeric: tabular-nums; }
+  .ws-results > div { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .ws-results .ws-task { opacity: 0.7; }
+  .ws figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.25rem; border-top: 1px solid var(--kh-line); color: var(--kh-muted); font-size: 0.7rem; line-height: 1.6; }
+  .ws figcaption > span { max-width: 36rem; }
+  .ws figcaption a { color: var(--kh-accent); }
+  .ws-sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @media (max-width: 40rem) {
+    .ws-workers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ws-worker { padding: 0.65rem; }
+    .ws-private { min-height: 10.5rem; padding: 0.4rem; }
+    .ws-private .ws-task { width: 2.1rem; font-size: 0.65rem; }
+    .ws-toolbar { gap: 0.75rem; padding: 0.85rem; }
+    .ws button { font-size: 0.7rem; padding: 0.4rem 0.55rem; }
+    .ws-source { gap: 0.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ws-worker { transition: none; } }
+</style>

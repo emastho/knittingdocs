@@ -125,6 +125,12 @@ cancellation state. Adding threads beyond the available cores usually stops
 helping. See [Multi-threading](/guides/multi-threading/) for a server-focused
 selection process and timer configuration.
 
+Batch jobs that return large binary results can stop scaling sooner. The host
+receives and decodes every result on its own thread, so it can become the
+bottleneck before the workers do. If throughput levels off as you add workers,
+compare end-to-end time with the time spent in the task, and check host CPU
+before you tune the scheduler.
+
 ### Native work stealing
 
 Compatible multi-worker pools use native work stealing by default. The host
@@ -144,37 +150,17 @@ private-lane baseline, or tune `host.stealRegionLanes` for the workload:
 
 #### Why the default can look slower
 
-A benchmark that calls one function with one cost, over and over, is the worst
-case for stealing. Every call takes the same time, so private lanes can hand
-work out in strict rotation and never guess wrong, while the shared region pays
-for arbitration it gains nothing from. On that shape of workload we have
-measured a noticeably worse p99 with stealing on. If your workload really is
-that shape, numerical kernels and other evenly divided parallel math, turning
-stealing off is a fair thing to try.
+When tasks take similar amounts of time, private lanes can distribute work
+evenly without the shared queue's claim overhead. Compare `host.steal: false`
+with the default for numerical kernels or other evenly divided work.
 
-Most services are not that shape. As soon as calls differ in cost, whether it is
-one function with an uneven input or two functions with very different prices,
-private lanes start binding a cheap call to a worker that is midway through an
-expensive one. The cheap call waits for work it has nothing to do with. Stealing
-has no such thing as the wrong worker: whichever one frees up first takes the
-next call. In a mix of a quarter-millisecond function and a twenty-millisecond
-function, we have seen the median call settle several times faster with stealing
-on, and the gap widens as load rises.
+When task durations differ, a shared queue lets available workers claim waiting
+tasks. A worker can still hold a batch containing both slow and fast tasks;
+smaller claims or [adaptive ticket batches](/guides/work-stealing/#stealsingleclaimmicroseconds)
+can reduce that waiting.
 
-Two things follow from that, and both matter more than any single percentile:
-
-- **It holds up under load.** The advantage is small when workers are mostly
-  idle, since there is little queued work to move around. It grows as the pool
-  fills, and near saturation private lanes are the first to build a backlog they
-  cannot clear.
-- **It usually costs less CPU.** A worker with nothing to claim parks instead of
-  spinning, so the same work tends to finish for less total CPU time. The saving
-  is largest when the pool is only partly busy, which is where most services sit.
-
-The honest summary is that stealing trades a little uniform-workload speed for
-predictability everywhere else. Since the pools that benefit are the common ones,
-it is on by default, and a workload uniform enough to prefer private lanes is
-usually obvious from the code.
+Compare throughput, p99 latency, and CPU use under your expected load. Keep the
+task inputs, worker count, and doorbell settings fixed between runs.
 
 The host `doorbell` is a separate completion optimization. Node.js and Bun
 thread pools use `Atomics.waitAsync`; Deno can use a thread-safe FFI callback,

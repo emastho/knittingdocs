@@ -58,7 +58,7 @@ different worker is idle.
 With native stealing, the pool uses a shared-submit/private-return layout:
 
 1. The host publishes a request to one shared submit region.
-2. A worker claims waiting tasks when it can make progress on them.
+2. A worker claims tasks from that region and runs them on its own event loop.
 3. Each worker keeps a private return region for its responses.
 4. The worker that claims a task owns its response; the host's pending registry
    settles the corresponding promise.
@@ -66,6 +66,14 @@ With native stealing, the pool uses a shared-submit/private-return layout:
 This lets a worker that finishes early claim more available work without the
 host predicting which worker will be free next. Completion order remains task
 completion order, not submission order.
+
+An async task returns to the worker's event loop at its first `await`, and its
+continuation runs on the same worker. Without a limit, a worker whose tasks are
+waiting can look idle and claim more work; when those tasks resume, their
+CPU-heavy continuations can bunch up on that worker while peers sit idle. Set
+`worker.maxAwaitingTasks` to bound unresolved async tasks per worker. Once a
+worker reaches the cap, queued tasks remain available for other workers to
+claim.
 
 ### Automatic selection
 
@@ -225,6 +233,13 @@ Start with the defaults. Tune `stealRegionLanes` or opt into
 `stealSingleClaimMicroseconds` when task durations are highly uneven. Compare
 `host.doorbell: false` with the supported default when host CPU or completion
 latency matters.
+
+For tasks that await input and then do substantial CPU work, try
+`worker: { maxAwaitingTasks: 2 }`. It limits how many such tasks can be in
+flight on one worker, leaving more queued work for its peers. Bundlers and
+minifiers are common examples; see
+[Bundling and minifying](/examples/build_tools/bundling_and_minifying). Start
+at `2` and measure your workload.
 
 Keep the topology constant while benchmarking. Do not compare a polling
 private-lane pool with a doorbell stealing pool and attribute the entire

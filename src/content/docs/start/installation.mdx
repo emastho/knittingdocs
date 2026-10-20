@@ -30,7 +30,9 @@ walks through the setup.
 
 ## Install
 
-Knitting is published on npm as `knitting`. Latest release: `0.1.74`.
+Knitting is published on npm as `knitting`. Check your installed version and
+lockfile before using release-specific options; the documentation baseline is
+generated in [llms.txt](/llms.txt) from this site’s resolved dependency.
 
 <Tabs>
   <TabItem label="npm"><Code code="npm install knitting" lang="bash" title={"npm.sh"} /></TabItem>
@@ -44,19 +46,17 @@ scoped name. The npm package is the simplest path on every runtime, so prefer it
 unless you specifically need the JSR entry.
 :::
 
-## What's new in 0.1.74
+:::caution[Deno thread workers]
+On Deno, thread pools need the npm package. Knitting starts thread workers
+through `node:worker_threads`, which in Deno only accepts `file:` and `data:`
+URLs. Imported from JSR, Knitting's modules have `https:` URLs, so
+`createPool()` fails as soon as it starts a worker. Install it with
+`deno add --npm knitting` and set `nodeModulesDir` to `"auto"` in your
+project's root `deno.json`:
 
-- **Adaptive ticket batches:** when your workload mixes slow and fast tasks,
-  `host.stealSingleClaimMicroseconds` can help workers avoid holding up a fast
-  task behind a slow one. It's off by default. Try `20` µs, then measure how it
-  affects latency and throughput. See [Work stealing](/guides/work-stealing/#stealsingleclaimmicroseconds).
-- **Experimental Andromeda support:** bundle Knitting once, then keep your
-  tasks and helpers in separate files if you like. Each worker gets its own
-  request lane by default. Andromeda controls what workers can access, so
-  Knitting's `permission` option isn't available there. See
-  [Andromeda](/guides/andromeda/).
-
-This release uses `stealClaim: "ticket"` by default. You can still choose
-`"dekker"`, but the old `"cas-mask"` value and other unknown values cause pool
-creation to throw. If you're upgrading with custom scheduling settings, check
-[the available options](/guides/work-stealing/#stealclaim).
+```json
+{
+  "nodeModulesDir": "auto"
+}
+```
+:::

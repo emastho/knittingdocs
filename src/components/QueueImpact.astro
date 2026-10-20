@@ -1,27 +1,43 @@
-<figure class="queue-impact">
-  <div class="queue-layout" role="img" aria-label="Before: ping, rendering, and signing share the main thread. After: ping stays on the main thread; rendering and signing run in one worker. Schematic, not a timeline.">
-    <div class="queue-case">
-      <p class="queue-label">Before</p>
-      <div class="queue-lane">
-        <span>Main thread</span>
-        <div class="queue-tasks"><span>Render</span><span>Sign</span><code>/ping</code></div>
+---
+const cases = [
+  { label: "Before", lanes: [{ id: "shared", label: "Main thread", tasks: ["/sign", "/ping", "/ping", "/ping", "/ping", "/render", "/sign", "/ping"], running: "/render" }] },
+  { label: "With one worker", lanes: [
+    { id: "main", label: "Main thread", tasks: ["/ping", "/ping"], running: "/ping" },
+    { id: "worker", label: "Worker", tasks: ["/sign", "/render", "/sign"], running: "/render" },
+  ] },
+];
+---
+
+<queue-impact>
+<figure class="queue-impact not-content">
+  <div class="queue-heading">
+    <span>Request flow</span>
+    <button type="button" data-queue-toggle hidden>Pause animation</button>
+  </div>
+  <div class="queue-layout" role="img" aria-label="Requests enter from the left and are consumed on the right. Before: ping waits behind rendering and signing on the main thread. With one worker: rendering and signing queue in the worker while the main thread consumes ping independently.">
+    {cases.map((example) => (
+      <div class="queue-case">
+        <p class="queue-label">{example.label}<span data-completed={example.lanes[0].id}>Responses →</span></p>
+        {example.lanes.map((lane) => (
+          <div class="queue-lane" data-lane={lane.id}>
+            <div class="queue-lane-label"><span>{lane.label}</span><span data-waiting>{lane.tasks.length} waiting → running</span></div>
+            <div class="queue-flow">
+              <div class="queue-tasks">
+                {lane.tasks.map((task, index) => <code class:list={["queue-task", { "queue-ping": task === "/ping" }]} style={`--slot: ${index}`}>{task}</code>)}
+              </div>
+              <div class="queue-consumer" data-kind={lane.running === "/ping" ? "ping" : "cpu"}>
+                <code>{lane.running}</code>
+                <span class="queue-progress" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
-    <div class="queue-case">
-      <p class="queue-label">With one worker</p>
-      <div class="queue-lane">
-        <span>Main thread</span>
-        <div class="queue-tasks"><code>/ping</code></div>
-      </div>
-      <div class="queue-lane">
-        <span>Worker</span>
-        <div class="queue-tasks"><span>Render</span><span>Sign</span></div>
-      </div>
-    </div>
+    ))}
   </div>
 
   <div class="queue-result">
-    <p><code>/ping</code> response time <span>p99 · lower is better</span></p>
+    <p><code>/ping</code> response time <span>p99</span></p>
     <div class="queue-numbers">
       <div><strong>16.93 <small>ms</small></strong><span>Before</span></div>
       <span class="queue-arrow" aria-hidden="true">→</span>
@@ -30,10 +46,11 @@
   </div>
 
   <figcaption>
-    6,000 requests/sec in both runs.<br />
-    CPU per request: 180 µs before · 183 µs with one worker.
+    6,000 req/s · CPU/request: 180 → 183 µs.<br />
+    Animation is illustrative.
   </figcaption>
 </figure>
+</queue-impact>
 
 <style>
   .queue-impact {
@@ -46,46 +63,31 @@
     background: var(--kh-card);
   }
 
+  queue-impact { display: block; min-width: 0; }
   .queue-impact p { margin: 0; }
-
+  .queue-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.75rem; color: var(--kh-muted); }
+  .queue-heading button { padding: 0.3rem 0.5rem; border: 1px solid var(--kh-line); border-radius: 0.3rem; background: transparent; color: var(--kh-paper); font: inherit; cursor: pointer; }
+  .queue-heading button[hidden] { display: none; }
   .queue-layout, .queue-case { display: grid; gap: 0.75rem; }
   .queue-layout { gap: 1.5rem; }
-
-  .queue-label { font-size: 0.88rem; font-weight: 650; }
-
-  .queue-lane {
-    display: grid;
-    grid-template-columns: 6rem minmax(0, 1fr);
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.78rem;
-  }
-
-  .queue-lane > span { color: var(--kh-muted); }
-
-  .queue-tasks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    min-height: 2rem;
-    border-bottom: 1px solid var(--kh-line);
-    padding-bottom: 0.4rem;
-  }
-
-  .queue-tasks > * {
-    margin: 0;
-    padding: 0.2rem 0.45rem;
-    border: 1px solid var(--kh-line);
-    border-radius: 0.2rem;
-    font-size: inherit;
-    line-height: 1.5;
-  }
-
-  .queue-tasks > code {
-    color: var(--kh-accent);
-    border-color: var(--kh-accent);
-    background: transparent;
-  }
+  .queue-label { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.88rem; font-weight: 650; }
+  .queue-label > span { align-self: center; color: var(--kh-muted); font-size: 0.68rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .queue-lane { min-width: 0; }
+  .queue-lane-label { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.4rem; color: var(--kh-muted); font-size: 0.7rem; }
+  .queue-lane-label > :last-child { font-size: 0.62rem; }
+  .queue-flow { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem; gap: 0.65rem; align-items: center; }
+  .queue-tasks { position: relative; height: 2.5rem; overflow: hidden; border-bottom: 1px solid var(--kh-line); background: repeating-linear-gradient(90deg, transparent 0, transparent calc(4.5rem - 1px), var(--kh-line) 4.5rem); mask-image: linear-gradient(90deg, transparent, #000 0.75rem); }
+  .queue-impact :global(.queue-task) { position: absolute; top: 0.3rem; right: calc(var(--slot) * 4.5rem); box-sizing: border-box; width: 4.1rem; margin: 0; padding: 0.25rem 0.15rem; border: 1px solid var(--kh-line); border-radius: 0.25rem; background: var(--kh-card); color: var(--kh-paper); text-align: center; font-size: 0.67rem; line-height: 1.5; transition: right 300ms ease; animation: queue-arrive 300ms ease both; }
+  .queue-impact :global(.queue-ping) { border-color: var(--kh-accent); color: var(--kh-accent); }
+  .queue-consumer { position: relative; display: grid; place-items: center; height: 2.5rem; overflow: hidden; border: 1px solid var(--kh-line); border-radius: 0.35rem; background: color-mix(in srgb, var(--kh-paper) 5%, transparent); }
+  .queue-consumer::before { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--kh-paper) 6%, transparent); }
+  .queue-consumer[data-kind="ping"] { border-color: var(--kh-accent); color: var(--kh-accent); }
+  .queue-impact .queue-consumer code { padding: 0; background: transparent; color: inherit; font-size: 0.67rem; }
+  .queue-progress { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: var(--kh-accent); transform: scaleX(0.35); transform-origin: left; transition: transform 100ms linear; }
+  .queue-consumer[data-kind="idle"] { opacity: 0.45; }
+  .queue-consumer[data-kind="idle"] .queue-progress { visibility: hidden; }
+  @keyframes queue-arrive { from { opacity: 0; translate: -0.7rem 0; } to { opacity: 1; translate: 0 0; } }
+  @media (prefers-reduced-motion: reduce) { .queue-impact :global(.queue-task) { animation: none; transition: none; } .queue-progress { transition: none; } }
 
   .queue-result { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--kh-line); }
   .queue-result > p { font-size: 0.85rem; }
@@ -99,7 +101,125 @@
   .queue-arrow { color: var(--kh-muted); font-size: 1.4rem; }
   figcaption { margin-top: 1.25rem; color: var(--kh-muted); font-size: 0.75rem; line-height: 1.7; }
 
-  @media (max-width: 25rem) {
-    .queue-lane { grid-template-columns: 1fr; gap: 0.25rem; }
-  }
 </style>
+
+<script>
+  type Task = { id: number; route: string; duration: number };
+  type Lane = {
+    id: string;
+    element: HTMLElement;
+    waiting: Task[];
+    running: Task | null;
+    remaining: number;
+    replies: number;
+  };
+
+  class QueueImpact extends HTMLElement {
+    connectedCallback() {
+      const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const toggle = this.querySelector<HTMLButtonElement>("[data-queue-toggle]")!;
+      const lanes: Lane[] = Array.from(this.querySelectorAll<HTMLElement>("[data-lane]")).map((element) => ({
+        id: element.dataset.lane!, element, waiting: [], running: null, remaining: 0, replies: 0,
+      }));
+      // Identical arrivals in both examples. Durations are illustrative, not measurements.
+      const burst = [
+        { route: "/render", duration: 2400 },
+        { route: "/sign", duration: 1800 },
+        ...Array.from({ length: 4 }, () => ({ route: "/ping", duration: 300 })),
+      ];
+      const arrivals = [0, 2500].flatMap((start) =>
+        burst.map((task, index) => ({ ...task, at: start + index * 180 })),
+      );
+      let paused = false;
+      let visible = false;
+      let elapsed = -100;
+      let nextArrival = 0;
+      let previous = performance.now();
+      const render = () => {
+        for (const lane of lanes) {
+          lane.element.querySelector("[data-waiting]")!.textContent = `${lane.waiting.length} waiting → running`;
+          const track = lane.element.querySelector<HTMLElement>(".queue-tasks")!;
+          const ids = new Set(lane.waiting.map((task) => String(task.id)));
+          for (const chip of Array.from(track.children)) {
+            if (!ids.has((chip as HTMLElement).dataset.task!)) chip.remove();
+          }
+          lane.waiting.forEach((task, slot) => {
+            let chip = track.querySelector<HTMLElement>(`[data-task="${task.id}"]`);
+            if (!chip) {
+              chip = document.createElement("code");
+              chip.className = `queue-task${task.route === "/ping" ? " queue-ping" : ""}`;
+              chip.dataset.task = String(task.id);
+              chip.textContent = task.route;
+              track.append(chip);
+            }
+            chip.style.setProperty("--slot", String(slot));
+          });
+          const consumer = lane.element.querySelector<HTMLElement>(".queue-consumer")!;
+          consumer.dataset.kind = lane.running ? (lane.running.route === "/ping" ? "ping" : "cpu") : "idle";
+          consumer.querySelector("code")!.textContent = lane.running?.route ?? "idle";
+          consumer.querySelector<HTMLElement>(".queue-progress")!.style.transform = `scaleX(${lane.running ? 1 - lane.remaining / lane.running.duration : 0})`;
+          const counter = this.querySelector(`[data-completed="${lane.id}"]`);
+          if (counter) counter.textContent = `${lane.replies} /ping replies →`;
+        }
+      };
+      const reset = () => {
+        elapsed = -100;
+        nextArrival = 0;
+        for (const lane of lanes) {
+          lane.waiting = [];
+          lane.running = null;
+          lane.remaining = 0;
+          lane.replies = 0;
+        }
+      };
+      const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; });
+      observer.observe(this);
+      const updateToggle = () => {
+        toggle.hidden = motion.matches;
+        toggle.textContent = paused ? "Play animation" : "Pause animation";
+      };
+      toggle.addEventListener("click", () => { paused = !paused; updateToggle(); });
+      // Keep the server-rendered comparison as the reduced-motion fallback.
+      motion.addEventListener("change", updateToggle);
+      updateToggle();
+      const timer = window.setInterval(() => {
+        const now = performance.now();
+        const delta = Math.min(now - previous, 150);
+        previous = now;
+        if (paused || motion.matches || !visible || document.hidden) return;
+        elapsed += delta;
+        for (const lane of lanes) {
+          if (lane.running) {
+            lane.remaining -= delta;
+            if (lane.remaining <= 0) {
+              if (lane.running.route === "/ping") lane.replies++;
+              lane.running = null;
+            }
+          }
+        }
+        while (nextArrival < arrivals.length && arrivals[nextArrival].at <= elapsed) {
+          const task = { ...arrivals[nextArrival], id: nextArrival };
+          lanes.find((lane) => lane.id === "shared")!.waiting.push(task);
+          lanes.find((lane) => lane.id === (task.route === "/ping" ? "main" : "worker"))!.waiting.push(task);
+          nextArrival++;
+        }
+        for (const lane of lanes) {
+          if (!lane.running && lane.waiting.length) {
+            lane.running = lane.waiting.shift()!;
+            lane.remaining = lane.running.duration;
+          }
+        }
+        render();
+        if (elapsed > 14000 && lanes.every((lane) => !lane.running && !lane.waiting.length)) reset();
+      }, 100);
+      this.cleanup = () => {
+        window.clearInterval(timer);
+        observer.disconnect();
+        motion.removeEventListener("change", updateToggle);
+      };
+    }
+    cleanup?: () => void;
+    disconnectedCallback() { this.cleanup?.(); }
+  }
+  if (!customElements.get("queue-impact")) customElements.define("queue-impact", QueueImpact);
+</script>

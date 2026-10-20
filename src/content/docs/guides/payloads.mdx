@@ -27,6 +27,18 @@ The transport supports the following payloads:
 - native `Promise<supported>` values at the host call boundary
 
 If you need multiple values, pass a tuple or object as the single argument.
+
+:::caution[Keep binary values out of plain objects]
+Objects and arrays travel as JSON, and so does everything inside them. A
+`Uint8Array` nested in one arrives as a plain object with numeric keys
+(`{ "0": 1, "1": 2, ... }`), not as bytes, and nothing warns you in either
+direction. The JSON form is also several times larger than the bytes, so a big
+array can push the payload past
+[`payload.maxPayloadBytes`](/guides/creating-pools/#maxpayloadbytes). Pass the
+bytes as the top-level argument or return value, or pair them with metadata in
+an [`Envelope`](#envelope).
+:::
+
 These types are not supported directly:
 
 - `Map`, `Set`, `WeakMap`, and custom class instances
@@ -95,7 +107,9 @@ header.
 
 **Dynamic payload (allocator path):** `Object`, `Array` (JSON-serialized),
 `Error`, `Date`, and larger strings. These need allocation, serialization, and
-copying, which adds measurable overhead in hot loops.
+copying, which adds measurable overhead in hot loops. A typed array nested
+inside an object or array is serialized with its container, so it takes this
+path too and loses its binary form.
 
 See the [Performance guide](/guides/performance) for per-type benchmarks and
 batching guidance.

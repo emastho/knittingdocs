@@ -66,6 +66,17 @@ createPool({
     },
     bootstrap?: { href: string, name?: string, data?: unknown },
     resolveAfterFinishingAll?: true,
+    maxAwaitingTasks?: number | "auto",
+    unravel?: {
+      initialTasks?: number,
+      minTasks?: number,
+      maxTasks?: number,
+      growth?: number,
+      tickMs?: number,
+      epsilon?: number,
+      ceiling?: boolean,
+      floor?: boolean,
+    },
     timers?: {
       spinMicroseconds?: number,
       parkMs?: number,
@@ -295,6 +306,38 @@ so it cannot be combined with the inline lane.
 
 Set this to `true` and workers wait for every pending promise to settle before
 they exit.
+
+### maxAwaitingTasks
+
+The maximum number of unresolved async tasks a worker can have in flight. The
+default is unlimited; set a positive integer such as `2` for tasks that await
+something and then do CPU-heavy work. `Infinity` means unlimited, and
+synchronous tasks do not use a slot.
+
+With work stealing, a worker at its limit leaves more tasks in the shared queue
+for another worker to claim. Each async task's continuation after an `await`
+still runs on the worker that started it, so a cap prevents those continuations
+from piling up on one worker. A task holds its slot until it settles, including
+while waiting on another task or a long-lived promise. If every slot is held
+by tasks waiting for queued work, those queued tasks cannot start.
+
+For experimental automatic sizing on Node.js and supported Bun thread workers,
+set `maxAwaitingTasks: "auto"`. Use `unravel` to adjust the starting cap and
+bounds, for example:
+
+```ts
+worker: {
+  maxAwaitingTasks: "auto",
+  unravel: { initialTasks: 2, maxTasks: 256 },
+}
+```
+
+Each worker adjusts its cap using the pool's async population and measured
+waiting and CPU time. This mode requires a supported fine-grained busy clock;
+process workers, compiled workers, Deno, and Bun on Windows reject it. Tasks
+with configured `timeout` options are also rejected because the underlying
+execution can outlive its timeout wrapper. Enable `debug: { unravel: true }`
+to inspect cap changes, and disable debug output when benchmarking.
 
 ### timers
 

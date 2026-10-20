@@ -18,11 +18,15 @@ export const bench = getCode("rendering/react_ssr/bench_react_ssr.ts");
 export const component = getCode("rendering/react_ssr/render_user_card.tsx");
 export const utils = getCode("rendering/react_ssr/utils.ts");
 
-This example renders React components to HTML strings on workers using `renderToString`. If your server does SSR, this is probably the example closest to your real workload -- parse JSON input, normalize data, render a component, return HTML.
+This example parses JSON input, normalizes user data, and renders a React
+component to an HTML string in a worker using `renderToString`.
 
 ## How it works
 
-The host generates JSON payload strings. The host path calls `renderUserCardHost` directly (parse + normalize + `renderToString`). The worker path sends the same payloads through `createPool`. Byte totals are compared once to verify the host and worker produce identical output, then `mitata` benchmarks both paths.
+The host generates JSON payload strings. The host path calls `renderUserCardHost`
+directly; the worker path sends the same payloads through `createPool`. The
+benchmark checks that the total output lengths match before timing both paths
+with `mitata`.
 
 Three files:
 
@@ -52,8 +56,14 @@ Input:
 Minimal usage:
 
 ```ts
-using pool = createPool({ threads: 4 })({ renderUserCard });
-const html = await pool.call.renderUserCard(payloadJson);
+import { createPool, isMain } from "knitting";
+import { renderUserCard } from "./render_user_card.tsx";
+
+if (isMain) {
+  using pool = createPool({ threads: 4 })({ renderUserCard });
+  const html = await pool.call.renderUserCard(payloadJson);
+  console.log(html);
+}
 ```
 
 Result:
@@ -109,7 +119,8 @@ Rendering is CPU-bound, so workers can run it in parallel. The speedup depends
 on your component, payloads, available cores, and other work on the host.
 
 :::note
-The byte parity check runs once before benchmarking to confirm host and worker produce identical HTML. If it doesn't match, something is wrong with your setup.
+The check compares total output lengths. It can detect a size mismatch, but
+equal lengths do not prove that the HTML content is identical.
 :::
 
 <DontDoubleParseTip />
@@ -148,6 +159,6 @@ the right value depends on your component, your payloads, and what else the
 host is doing. Start at 2-4, measure, and only
 add the inliner if it earns its place on your workload.
 
-## Why SSR is a great fit for workers
+## Keeping rendering off the request thread
 
 `renderToString` is synchronous and CPU-bound -- it walks your component tree and builds an HTML string. For an individual request, it may be fast, but under load it blocks the event loop and everything else waits. Moving SSR to a worker pool means your main thread stays free to accept requests and handle I/O while rendering happens in parallel. The Hono server example shows what this looks like in a real HTTP server context.

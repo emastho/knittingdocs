@@ -266,6 +266,9 @@ permission policy applies to the import, so a strict pool can still load task
 modules but limit what they read, write, or reach. See
 [Permissions](/guides/permissions/).
 
+Each worker loads the target module the first time it runs the imported task.
+After that load, a synchronous export stays synchronous.
+
 :::caution
 The target export must be a **plain function** — pointing `importTask` at a
 `task()` wrapper throws `TypeError: importTask expected export "…" to be a

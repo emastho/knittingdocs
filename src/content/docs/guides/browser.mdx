@@ -13,15 +13,15 @@ This guide covers browser setup, unsupported features, and the errors you may
 encounter.
 
 <div class="browser-page-actions">
-  <a class="sl-link-button primary" href="/knitting.js" download="knitting.js">Download Latest Stable Browser Build</a>
+  <a class="sl-link-button primary" href={`${import.meta.env.BASE_URL}knitting.js`} download="knitting.js">Download browser build (0.1.77)</a>
   <br></br>
-  <a class="sl-link-button secondary" href="/start/quick-start/">Open Quick Start</a>
+  <a class="sl-link-button secondary" href={`${import.meta.env.BASE_URL}start/quick-start/`}>Open Quick Start</a>
 </div>
 
 :::danger
 Host your own copy of `/knitting.js`. This site serves the file with
 `Access-Control-Allow-Origin: *` for the smoke test; it is not a CDN. It is
-unversioned, it changes whenever these docs are rebuilt, and it carries no uptime,
+served at an unversioned URL, and it may change when the hosted bundle is updated. It carries no uptime,
 caching, or integrity guarantees. Download the file or install `knitting` from npm,
 then serve it from your own origin.
 :::
@@ -208,7 +208,7 @@ is not just good practice, it is the only way a task module can be found.
 ## How the build is produced
 
 `knitting/browser` ships as a single self-contained file. The copy hosted here is
-the published 0.1.74 browser build, about 119 KB on disk and 40 KB gzipped.
+the published 0.1.77 browser build, about 134 KB on disk and 47 KB gzipped.
 Install `knitting` from npm when you need a versioned local copy.
 
 Node-only subsystems are swapped for stubs at bundle time by
